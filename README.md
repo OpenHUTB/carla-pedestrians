@@ -1,22 +1,22 @@
-# CARLA Pedestrians
-Bringing more realistic pedestrians movements into CARLA.
+# CARLA 行人
+为 CARLA 带来更加逼真的行人运动。
 
-A part of [Adversarial Cases for Autonomous Vehicles (ARCANE) project](https://project-arcane.eu/).
+该项目是 [自动驾驶汽车对抗案例项目](https://project-arcane.eu/) 的一部分。
 
-## Cloning
-This project contains submodules when there was no other option of getting the code in (not pip-installable code). So to ensure that all models run correctly, clone with:
+## 克隆
+当没有其他选项获取代码（不是可通过 pip 安装的代码）时，此项目包含子模块。因此，为了确保所有模型都能正确运行，请使用以下命令进行克隆：
 
 ```sh
 git clone --recurse-submodules https://github.com/wielgosz-info/carla-pedestrians.git
 ```
 
-## Running Steps
+## 运行步骤
 
-### Step 0
-Copy `.env.template` to `.env` in the `openpose`, `pedestrians-common`, `pedestrians-video-2-carla`, `pedestrians-scenarios` folders and adjust the variables, especially the path to datasets (e.g. for dataset root `VIDEO2CARLA_DATASETS_PATH=/datasets` the expected structure would be `/datasets/JAAD`, `/datasets/PIE` etc.).
+### 第 0 步
+将`openpose`,`pedestrians-common`,`pedestrians-video-2-carla`,`pedestrians-scenarios`文件夹中的每个`.env.template`复制成一个新的文件`.env`，并调整变量，尤其是数据集的路径（例如，对于数据集根目录`VIDEO2CARLA_DATASETS_PATH=/datasets`，预期结构为`/datasets/JAAD`,`/datasets/PIE`等）。
 
-### Step 1
-Extract pedestrians skeletons from video clips with [OpenPose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) using container specified in `openpose/docker-compose.yml`:
+### 第 1 步
+使用 `openpose/docker-compose.yml` 中指定的容器通过 [OpenPose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) 从视频片段中提取行人骨架：
 
 ```sh
 cd openpose
@@ -24,42 +24,41 @@ docker-compose -f "docker-compose.yml" --env-file .env up -d --build
 docker exec -it carla-pedestrians_openpose_1 /bin/bash
 ```
 
-Inside container (after reviewing/modifying `extract_poses_from_dataset.sh`):
+容器内部（查看/修改 `extract_poses_from_dataset.sh` 之后）：
 ```sh
 cd /app
 ./extract_poses_from_dataset.sh
 ```
 
-The generated files will be saved in the `carla-pedestrians_outputs` Docker volume. By default the `extract_poses.sh` scripts tries to use `JAAD` dataset.
+生成的文件将保存在 `carla-pedestrians_outputs` Docker 卷中。默认情况下，`extract_poses.sh` 脚本会尝试使用 `JAAD` 数据集。
 
-### Step 2
-Run the CARLA server & the containers with our code. For convenience, there is a `compose-up.sh` script provided,
-that brings together the multiple `docker-compose.yml` files from submodules and sets the common env variables.
 
-When using NVIDIA GPU and some UNIX-like system, you can simply run:
+### 第 2 步
+使用我们的代码运行 CARLA 服务器和容器。为方便起见，提供了一个 `compose-up.sh` 脚本，它将来自子模块的多个 `docker-compose.yml` 文件汇集在一起​​并设置通用环境变量。
+
+当使用 NVIDIA GPU 和某些类 UNIX 系统时，您只需运行：
 ```sh
 ./compose-up.sh
 ```
 
-When using CPU, you need to specify `PLATFORM=cpu` or modify the script.
-Additionally, on MacOS when using Docker Desktop the default GROUP_ID and SHM_SIZE will not work,
-so they need to be set manually. The resulting example command to run on MacOS is:
+使用 CPU 时，需要指定 `PLATFORM=cpu` 或修改脚本。此外，在 MacOS 上使用 Docker Desktop 时，默认的 GROUP_ID 和 SHM_SIZE 将不起作用，因此需要手动设置。在 MacOS 上运行的结果示例命令是：
 ```sh
 PLATFORM=cpu GROUP_ID=1000 SHM_SIZE=2147483648 ./compose-up.sh
 ```
 
-For details about running each individual container, see the relevant `README.md` files:
+有关运行每个单独容器的详细信息，请参阅相关的 `README.md` 文件：
 - [pedestrians-video-2-carla](https://github.com/wielgosz-info/pedestrians-video-2-carla/blob/main/README.md)
 - [pedestrians-scenarios](https://github.com/wielgosz-info/pedestrians-scenarios/blob/main/README.md)
 
-To quickly bring down all the containers in the `carla-pedestrians` project, use:
+要快速关闭 `carla-pedestrians` 项目中的所有容器，请使用：
 
 ```sh
 docker-compose down --remove-orphans
 ```
 
-## Reference skeletons
-Reference skeleton data in `pedestrians-video-2-carla/src/pedestrians_video_2_carla/data/carla/files` are extracted form [CARLA project Walkers *.uasset files](https://bitbucket.org/carla-simulator/carla-content).
+## 参考骨架
+`pedestrians-video-2-carla/src/pedestrians_video_2_carla/data/carla/files` 中的参考骨架数​​据是从 [CARLA 项目 Walkers *.uasset 文件](https://bitbucket.org/carla-simulator/carla-content) 中提取的。
+
 
 ## Cite
 If you use this repo please cite:
