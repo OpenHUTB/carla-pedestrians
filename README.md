@@ -7,7 +7,7 @@
 当没有其他选项获取代码（不是可通过 pip 安装的代码）时，此项目包含子模块。因此，为了确保所有模型都能正确运行，请使用以下命令进行克隆：
 
 ```sh
-git clone --recurse-submodules https://github.com/wielgosz-info/carla-pedestrians.git
+git clone --recurse-submodules https://github.com/OpenHUTB/carla-pedestrians.git
 ```
 
 ## 运行步骤
