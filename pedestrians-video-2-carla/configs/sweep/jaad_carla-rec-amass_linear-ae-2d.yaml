@@ -1,0 +1,59 @@
+program: src/pedestrians_video_2_carla/modeling.py
+project: autoencoder
+entity: carla-pedestrians
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args}
+  - --skip_metadata
+  - --disable_lr_scheduler
+method: bayes
+metric:
+  goal: maximize
+  name: hp/PCKhn@01
+parameters:
+  limit_val_batches:
+    value: 5
+  mask_missing_joints:
+    value: True
+  mode:
+    value: train
+  flow:
+    value: autoencoder
+  data_module_name:
+    value: JAADCarlaRecAMASS
+  log_every_n_steps:
+    value: 10
+  num_sanity_val_steps:
+    value: 1
+  max_epochs:
+    value: 800
+  lr:
+    max: 0.01
+    min: 0.001
+    distribution: uniform
+  movements_model_name:
+    value: LinearAE2D
+  renderers:
+    value: none
+  clip_offset:
+    value: 15
+  clip_length:
+    value: 15
+  batch_size:
+    value: 256
+  model_scaling_factor:
+    max: 16
+    min: 1
+    distribution: int_uniform
+  transform:
+    value: hips_neck_bbox
+  missing_point_probability:
+    value: 0.1
+  noise_param:
+    value: 1.0
+  noise:
+    value: gaussian
+  num_workers:
+    value: 0

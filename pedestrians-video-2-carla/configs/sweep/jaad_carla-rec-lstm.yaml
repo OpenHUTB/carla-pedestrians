@@ -1,0 +1,67 @@
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args}
+  - --skip_metadata
+  - --disable_lr_scheduler
+entity: carla-pedestrians
+method: bayes
+metric:
+  goal: maximize
+  name: hp/PCKhn@01
+parameters:
+  mask_missing_joints:
+    value: True
+  strong_points:
+    value: 1
+  batch_size:
+    value: 256
+  clip_length:
+    value: 4
+  clip_offset:
+    value: 4
+  data_module_name:
+    value: JAADCarlaRec
+  flow:
+    value: autoencoder
+  hidden_size:
+    distribution: int_uniform
+    max: 512
+    min: 64
+  input_nodes:
+    value: CARLA_SKELETON
+  log_every_n_steps:
+    value: 10
+  lr:
+    distribution: uniform
+    max: 0.01
+    min: 0.001
+  max_epochs:
+    value: 500
+  missing_point_probability:
+    value: 0.1
+  mode:
+    value: train
+  movements_model_name:
+    value: LSTM
+  movements_output_type:
+    value: pose_2d
+  noise:
+    value: gaussian
+  noise_param:
+    value: 1
+  num_layers:
+    distribution: int_uniform
+    max: 4
+    min: 1
+  num_sanity_val_steps:
+    value: 1
+  output_nodes:
+    value: CARLA_SKELETON
+  renderers:
+    value: none
+  transform:
+    value: hips_neck_bbox
+program: src/pedestrians_video_2_carla/modeling.py
+project: autoencoder

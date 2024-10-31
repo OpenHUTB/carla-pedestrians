@@ -1,0 +1,47 @@
+program: src/pedestrians_video_2_carla/replacement_metric_flow.py
+project: replacement-metric
+entity: carla-pedestrians
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args}
+method: bayes
+metric:
+  goal: maximize
+  name: replacement/PCKhn@01
+parameters:
+  log_every_n_steps:
+    value: 10
+  num_sanity_val_steps:
+    value: 1
+  max_epochs:
+    value: 500
+  lr:
+    max: 0.01
+    min: 0.001
+    distribution: uniform
+  movements_model_name:
+    value: LinearAE2D
+  clip_offset:
+    value: 15
+  clip_length:
+    value: 15
+  batch_size:
+    value: 256
+  model_scaling_factor:
+    max: 16
+    min: 1
+    distribution: int_uniform
+  transform:
+    value: hips_neck_bbox
+  missing_point_probability:
+    min: 0
+    max: 0.5
+    distribution: uniform
+  noise_param:
+    min: 0.0
+    max: 10.0
+    distribution: uniform
+  noise:
+    value: gaussian

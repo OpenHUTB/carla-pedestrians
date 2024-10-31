@@ -1,0 +1,10 @@
+from pedestrians_video_2_carla.data import register_datamodule
+from .jaad_carlarec_datamodule import JAADCarlaRecDataModule
+from .jaad_carlarec_amass_datamodule import JAADCarlaRecAMASSDataModule
+from .carlarec_amass_datamodule import CarlaRecAMASSDataModule
+from .jaad_carlarec_benchmark_datamodule import JAADCarlaRecBenchmarkDataModule
+
+register_datamodule('JAADCarlaRec', JAADCarlaRecDataModule)
+register_datamodule('JAADCarlaRecAMASS', JAADCarlaRecAMASSDataModule)
+register_datamodule('CarlaRecAMASS', CarlaRecAMASSDataModule)
+register_datamodule('JAADCarlaRecBenchmark', JAADCarlaRecBenchmarkDataModule)

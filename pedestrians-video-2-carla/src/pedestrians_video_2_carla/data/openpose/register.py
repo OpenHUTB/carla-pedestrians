@@ -1,0 +1,11 @@
+from pedestrians_video_2_carla.data import register_datamodule
+from .datamodules.jaad_openpose_datamodule import JAADOpenPoseDataModule
+from .datamodules.pie_openpose_datamodule import PIEOpenPoseDataModule
+from .datamodules.jaad_benchmark_datamodule import JAADBenchmarkDataModule
+from .datamodules.pie_benchmark_datamodule import PIEBenchmarkDataModule
+
+
+register_datamodule("JAADOpenPose", JAADOpenPoseDataModule)
+register_datamodule("PIEOpenPose", PIEOpenPoseDataModule)
+register_datamodule("JAADBenchmark", JAADBenchmarkDataModule)
+register_datamodule("PIEBenchmark", PIEBenchmarkDataModule)

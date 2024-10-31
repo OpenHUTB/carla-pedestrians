@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  scenarios:
+    build:
+      context: ${SCENARIOS_DIR:-.}
+      dockerfile: Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USERNAME: carla
+        COMMIT: ${COMMIT}
+        PLATFORM: ${PLATFORM:-nvidia}
+    image: wielgoszinfo/pedestrians-scenarios:${PLATFORM:-nvidia}-latest
+    user: ${USER_ID}:${GROUP_ID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${SCENARIOS_DIR:-PWD}:/app
+      - vscode:/home/carla/.vscode-server
+      - vscode-insiders:/home/carla/.vscode-server-insiders
+      - ${SCENARIOS_OUTPUTS_DIR_OR_VOLUME}:/outputs
+    environment:
+      COMMIT: ${COMMIT}
+      CARLA_SERVER_START_PERIOD: ${CARLA_SERVER_START_PERIOD:-30}
+    shm_size: ${SHM_SIZE:-2gb}

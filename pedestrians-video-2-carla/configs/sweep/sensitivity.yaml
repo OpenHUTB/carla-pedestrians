@@ -1,0 +1,158 @@
+program: src/pedestrians_video_2_carla/modeling.py
+project: sensitivity
+entity: carla-pedestrians
+method: bayes
+metric:
+  goal: maximize
+  name: hp/F1Score
+parameters:
+  flow:
+    value: classification
+  classification_targets_key:
+    value: frame.pedestrian.is_crossing
+  classification_model_name:
+    value: LSTM
+  classification_average:
+    value: macro
+  classification_lr:
+    value: 0.0001
+  carla_rec_set_name:
+    value: WideCameraPedestrians
+  data_module_name:
+    value: CarlaRecorded
+  embeddings_size:
+    value: 0
+  label_frames:
+    value: 0.1
+  num_classes:
+    value: 2
+  input_nodes:
+    value: CARLA_SKELETON
+  hidden_size:
+    value: 64
+  clip_offset:
+    value: 60
+  clip_length:
+    value: 60
+  num_layers:
+    value: 1
+  data_nodes:
+    value: CARLA_SKELETON
+  batch_size:
+    value: 256
+  max_epochs:
+    value: 100
+  log_every_n_steps:
+    value: 1
+  num_workers:
+    value: 0
+  transform:
+    value: hips_neck_bbox
+  p_dropout:
+    value: 0.35
+  noise:
+    value: zero
+  missing_joint_probabilities_0:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_1:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_2:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_3:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_4:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_5:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_6:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_7:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_8:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_9:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_10:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_11:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_12:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_13:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_14:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_15:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_16:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_17:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_18:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_19:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_20:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_21:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_22:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_23:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_24:
+    values:
+      - 0.0
+      - 1.0
+  missing_joint_probabilities_25:
+    values:
+      - 0.0
+      - 1.0
