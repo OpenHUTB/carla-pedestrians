@@ -15,6 +15,8 @@ git clone --recurse-submodules https://github.com/OpenHUTB/carla-pedestrians.git
 ### 第 0 步
 将`openpose`,`pedestrians-common`,`pedestrians-video-2-carla`,`pedestrians-scenarios`文件夹中的每个`.env.template`复制成一个新的文件`.env`，并调整变量，尤其是数据集的路径（例如，对于数据集根目录`VIDEO2CARLA_DATASETS_PATH=/datasets`，预期结构为`/datasets/JAAD`,`/datasets/PIE`等）。
 
+注意：用默认的目录会报错，需要把`.env`中的路径都改成`./datasets`，否则会报错：`ERROR: Named volume "datasets:/datasets:ro" is used in service "openpose" but no declaration was found in the volumes section.`。
+
 ### 第 1 步
 使用 `openpose/docker-compose.yml` 中指定的容器通过 [OpenPose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) 从视频片段中提取行人骨架：
 
@@ -23,6 +25,8 @@ cd openpose
 docker-compose -f "docker-compose.yml" --env-file .env up -d --build
 docker exec -it carla-pedestrians_openpose_1 /bin/bash
 ```
+
+下载 [行人意图估计PIE数据集](https://data.nvision2.eecs.yorku.ca/PIE_dataset/) 。
 
 容器内部（查看/修改 `extract_poses_from_dataset.sh` 之后）：
 ```sh
