@@ -37,8 +37,9 @@ cd /app
 生成的文件将保存在 `carla-pedestrians_outputs` Docker 卷中。默认情况下，`extract_poses.sh` 脚本会尝试使用 `JAAD` 数据集。
 
 
+
 ### 第 2 步
-使用我们的代码运行 CARLA 服务器和容器。为方便起见，提供了一个 `compose-up.sh` 脚本，它将来自子模块的多个 `docker-compose.yml` 文件汇集在一起​​并设置通用环境变量。
+使用我们的代码运行 CARLA 服务器和容器。为方便起见，提供了一个 `compose-up.sh` 脚本，它将来自子模块的多个 `docker-compose.yml` 文件汇集在一起并设置通用环境变量。
 
 当使用 NVIDIA GPU 和某些类 UNIX 系统时，您只需运行：
 ```sh
@@ -60,8 +61,22 @@ PLATFORM=cpu GROUP_ID=1000 SHM_SIZE=2147483648 ./compose-up.sh
 docker-compose down --remove-orphans
 ```
 
+## Windows平台运行步骤
+
+1.从 [仓库](https://github.com/CMU-Perceptual-Computing-Lab/openpose/releases) 中下载 [openpose-1.7.0-binaries-win64-gpu-python3.7-flir-3d_recommended.zip](https://github.com/CMU-Perceptual-Computing-Lab/openpose/releases/download/v1.7.0/openpose-1.7.0-binaries-win64-gpu-python3.7-flir-3d_recommended.zip) 并解压到当前工程的`data`目录下。
+
+2.下载 [pose_iter_584000.caffemodel](https://www.dropbox.com/s/3x0xambj2rkyrap/pose_iter_584000.caffemodel?dl=0) 到`data\openpose\models\pose\body_25\`目录下。
+
+```shell
+:: Windows - Portable Demo
+bin\OpenPoseDemo.exe --video examples\media\video.avi
+```
+
+
+
+
 ## 参考骨架
-`pedestrians-video-2-carla/src/pedestrians_video_2_carla/data/carla/files` 中的参考骨架数​​据是从 [CARLA 项目 Walkers *.uasset 文件](https://bitbucket.org/carla-simulator/carla-content) 中提取的。
+`pedestrians-video-2-carla/src/pedestrians_video_2_carla/data/carla/files` 中的参考骨架数据是从 [CARLA 项目 Walkers *.uasset 文件](https://bitbucket.org/carla-simulator/carla-content) 中提取的。
 
 
 ## Cite
