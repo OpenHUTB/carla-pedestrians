@@ -22,7 +22,7 @@ from pedestrians_scenarios.karma.pose.types import PoseDict
 class Pose(object):
     def __init__(self, structure=None, *args, **kwargs):
         """
-        Base class for keeping and manipulating the pose.
+        保持和操纵姿态的基类。
         """
         super().__init__()
 
@@ -52,11 +52,10 @@ class Pose(object):
                                 substructure: Dict[str, Any],
                                 prev_transform: 'carla.Transform'
                                 ):
-        # we shouldn't have more than one item here
+        # 这里不应该有多个项目 item
         (bone_name, subsubstructures) = list(substructure.items())[0]
 
-        # we need to manually copy the carla.Location
-        # since it seems to be modified in place
+        # 我们需要手动复制 carla.Location，因为它似乎已被修改
         absolute_pose[bone_name] = carla.Transform(
             location=prev_transform.transform(relative_pose[bone_name].location),
             rotation=mul_carla_rotations(
@@ -76,7 +75,7 @@ class Pose(object):
         pose_dict = OrderedDict()
         for bone_name, transform in orig_pose_dict.items():
             if transform is not None:
-                # carla.Transform cannot be deepcopied, so we do it manually
+                # carla.Transform 无法进行深度复制，因此我们手动进行
                 pose_dict[bone_name] = deepcopy_transform(transform)
             else:
                 pose_dict[bone_name] = None
@@ -107,11 +106,10 @@ class Pose(object):
     @property
     def relative(self) -> PoseDict:
         """
-        Returns the pose of the actor with transforms based on the bone parent.
-        This is analogous to CARLA 0.9.13 carla.WalkerBoneControlOut 'relative' transforms.
+        返回基于骨骼父级的参与者的姿态和变换。这类似于 CARLA 0.9.13 carla.WalkerBoneControlOut“相对”变换。
         See https://carla.readthedocs.io/en/0.9.13/python_api/#carla.Walker.get_bones for more info.
 
-        :return: Pose dictionary with bone names as keys and relative transforms as values.
+        :return: 以骨骼名称作为键、以相对变换作为值的姿势词典。
         :rtype: PoseDict
         """
         return self._deepcopy_pose_dict(self.__relative_pose)

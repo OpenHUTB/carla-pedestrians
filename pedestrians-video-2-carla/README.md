@@ -1,19 +1,18 @@
 # Pedestrians Video2CARLA
 
-This is a part of the bigger project to bring the more realistic pedestrian movements to CARLA.
-It isn't intended for fully standalone use. Please see the [main project README.md](https://github.com/wielgosz-info/carla-pedestrians/blob/main/README.md) or [Adversarial Cases for Autonomous Vehicles (ARCANE) project website](https://project-arcane.eu/) for details.
+这是更大项目的一部分，旨在为 CARLA 带来更逼真的行人运动。它不适用于完全独立使用。有关详细信息，请参阅 [主项目 README.md](https://github.com/wielgosz-info/carla-pedestrians/blob/main/README.md) 或  [自动驾驶汽车对抗案例 (ARCANE) 项目网站](https://project-arcane.eu/) 。
 
-## Setup
+## 配置
 
 Copy the `.env.template` file to `.env` and edit the values as required.
 
-Run the CARLA server (optional) & the containers with our code as described in [Step 2 of main project README.md](https://github.com/wielgosz-info/carla-pedestrians/blob/main/README.md#Step 2). This should result in the `carla-pedestrians_video2carla_1` container running.
+Run the CARLA server (optional) & the containers with our code as described in [Step 2 of main project README.md](https://github.com/wielgosz-info/carla-pedestrians/blob/main/README.md#Step 2) . This should result in the `carla-pedestrians_video2carla_1` container running.
 
 If you don't have the Nvidia GPU, there is CPU-only version available `docker-compose.cpu.yml`.
 Please note that currently running CARLA server requires GPU, so without it the `source_carla`
 `carla` renderers shouldn't be used, since it would result in errors.
 
-### Using JAAD dataset
+### 使用 JAAD 数据集
 
 If needed (you want to use `JAADOpenPoseDataModule`), inside the container run the
 ```sh
@@ -27,32 +26,32 @@ script to convert the JAAD annotations from XML to CSV. The output will be in `/
 
 The preferred way of running is via Docker. If conda is used, in addition to creating the env from the provided `environment.yml` file, following steps need to be done:
 
-1. Create and activate conda environment with the following command:
+1. 使用以下命令创建并激活 conda 环境：
    
     ```sh
-    conda create -f environment.yml
+    conda create -n pedestrians -f environment.yml
     conda activate pedestrians
     ```
     
-2. Install the `pedestrians_video_2_carla` package with:
+2. 使用以下命令安装该`pedestrians_video_2_carla`包：
 
     ```sh
     COMMIT=$(git rev-parse --short HEAD) SETUPTOOLS_SCM_PRETEND_VERSION="0.0.post0.dev38+${COMMIT}.dirty" pip install -e .
     ```
 
-3. Run `pytest tests` to see if everything is working.
+3. 运行`pytest tests`看看一切是否正常。
 
-**Please note that conda env is not actively maintained.**
+**请注意，conda env 并未得到积极维护。**
 
-## Running
+## 运行
 
-Full list of options is available by running inside the container:
+通过在容器内运行可以获得完整的选项列表：
 
 ```sh
 python -m pedestrians_video_2_carla --help
 ```
 
-Please note that data module and model specific options may change if you switch the DataModule or Model.
+请注意，如果您切换 DataModule 或 Model，数据模块和模型特定选项可能会发生变化。
 
 ### Example 'start training' command
 
@@ -74,8 +73,9 @@ python -m pedestrians_video_2_carla \
   --gpus=0,1 \
   --accelerator=ddp
 ```
+参数`-m`表示将库中的python模块用作脚本去运行。
 
-### Example run with rendering
+### 带渲染的示例运行
 
 ```sh
 python -m pedestrians_video_2_carla \
@@ -101,10 +101,10 @@ python -m pedestrians_video_2_carla \
   --clip_length=16
 ```
 
-## Reference skeletons
+## 参考骨架
 Reference skeleton data in `src/pedestrians_video_2_carla/data/carla/files` are extracted form [CARLA project Walkers *.uasset files](https://bitbucket.org/carla-simulator/carla-content).
 
-## Cite
+## 引用
 If you use this repo please cite:
 
 ```

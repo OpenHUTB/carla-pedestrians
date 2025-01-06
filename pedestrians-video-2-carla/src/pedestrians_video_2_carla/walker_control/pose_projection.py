@@ -17,7 +17,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 class RGBCameraMock(object):
     """
-    Mocks up the default CARLA camera.
+    模拟默认的 CARLA 相机。
     """
 
     def __init__(self, pedestrian: 'ControlledPedestrian' = None, x: int = 800, y: int = 600, **kwargs):
@@ -57,7 +57,7 @@ class PoseProjection(object):
     @property
     def image_size(self) -> Tuple:
         """
-        Returns projection image size.
+        返回投影图像大小。
 
         :return: (width, height)
         :rtype: Tuple
@@ -75,8 +75,7 @@ class PoseProjection(object):
         return distance, elevation
 
     def _setup_camera(self, camera_rgb: 'carla.Sensor'):
-        # basic transform is in UE world coords, axes of which are different
-        # additionally, we need to correct spawn shift error
+        # 基本变换是在 UE 世界坐标中，其轴是不同的，此外，我们需要纠正生成偏移错误
         distance, elevation = self._calculate_distance_and_elevation(camera_rgb)
 
         camera_ct = ct.Camera(
@@ -99,7 +98,7 @@ class PoseProjection(object):
 
     def update_camera(self, camera_position: Tuple[float, float, float]):
         """
-        Updates camera position.
+        更新相机位置。
 
         :param camera_position: new camera position (x, y, z)
         :type camera_position: List[Tuple[float, float, float]]
@@ -114,7 +113,7 @@ class PoseProjection(object):
         )
 
     def current_pose_to_points(self):
-        # switch from UE world coords, axes of which are different
+        # 从 UE 世界坐标切换，其轴不同
         root_transform = carla.Transform(location=carla.Location(
             x=self._pedestrian.transform.location.y,
             y=self._pedestrian.transform.location.x,

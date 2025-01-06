@@ -1,7 +1,7 @@
 # CARLA 行人
 为 CARLA 带来更加逼真的行人运动。
 
-该项目是 [自动驾驶汽车对抗案例项目](https://project-arcane.eu/) 的一部分。
+该项目是 [自动驾驶汽车对抗案例项目](https://project-arcane.eu/) 的一部分，支持 Carla 0.9.13、Python 3.8。
 
 ## 克隆
 当没有其他选项获取代码（不是可通过 pip 安装的代码）时，此项目包含子模块。因此，为了确保所有模型都能正确运行，请使用以下命令进行克隆：
@@ -72,6 +72,12 @@ docker-compose down --remove-orphans
 bin\OpenPoseDemo.exe --video examples\media\video.avi
 ```
 
+从 [链接](https://github.com/CMU-Perceptual-Computing-Lab/openpose/issues/1567) 中下载 `pose_iter_116000.caffemodel` 到`data\openpose\models\face\body_25\`目录中，下载`pose_iter_102000.caffemodel` 到 `data\openpose\models\hand\body_25\`
+还可以按任意顺序添加任何可用标志。例如，以下示例在视频上运行 ( --video {PATH})，启用面部 ( --face) 和手部 ( --hand)，并将输出关键点保存在磁盘上的 JSON 文件中 ( --write_json {PATH})。
+```shell
+:: Windows - Portable Demo
+bin\OpenPoseDemo.exe --video examples\media\video.avi --face --hand --write_json output_json_folder/
+```
 
 
 

@@ -70,7 +70,7 @@ class P3dPoseProjection(PoseProjection, torch.nn.Module):
 
     def update_camera(self, camera_position: Tuple[float, float, float]):
         """
-        Updates camera position.
+        更新相机位置。
 
         :param camera_position: new camera position as (x, y, z) tuple
         :type camera_position: Tuple[float, float, float]
