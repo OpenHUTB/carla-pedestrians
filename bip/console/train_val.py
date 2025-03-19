@@ -110,9 +110,11 @@ def execute(gpus_list, exp_batch, exp_name):
         None
 
     """
-    import resource
-    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
+    system = os.name
+    if system == 'posix':  # resource 只有在Unix平台下才有，windows 下没有
+        import resource
+        rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
     print(torch.cuda.device_count(), 'GPUs to be used: ', gpus_list)
     merge_with_yaml(os.path.join('configs', exp_batch, exp_name + '.yaml'))
     shutil.copyfile(os.path.join('configs', exp_batch, exp_name + '.yaml'),

@@ -86,6 +86,8 @@ Cuda 版本： 11.6
         pip install -r requirements.txt
         pip install opencv-python
         pip install tensorflow-gpu==2.11.0
+        # windows
+        pip install tensorflow-gpu=2.10.1
 
 -------------------------------------------------------------
 ### 对训练好的 CIL++ 进行基准测试
@@ -154,7 +156,7 @@ Cuda 版本： 11.6
 
 * 运行 main.py 文件：
 
-        python main.py --process-type train_val --gpus 0 --folder CILv2 --exp CILv2_3cam_smalltest
+        python main.py --process-type train_val --gpus 0 --folder CILv2 --exp CILv2_3cam_smalltest --training_results_root result  --dataset_path F:\data
 
         python main.py --process-type train_val --gpus 0 --folder CILv2 --exp CILv2_3cam_single_lane
 
@@ -200,6 +202,17 @@ Cuda 版本： 11.6
 -------------------------------------------------------------
 
 ### 问题
+
+- Windows 下执行main.py报错：`ModuleNotFoundError: No module named 'resource'`
+
+因为 [resource](https://docs.python.org/2/library/resource.html) 是Unix平台下的包
+
+
+- 运行main.py报错：`TypeError: load() missing 1 required positional argument: 'Loader'`
+
+需要把pyyaml回退到5.4.1
+
+
 - 执行`docker pull`报找不到服务器的错：Error response from daemon: Get "https://registry-1.docker.io/v2/": net/http:
 
 解决办法：

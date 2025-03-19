@@ -37,7 +37,31 @@ if __name__ == "__main__":
         help='The experiment name of the configuration file'
     )
 
+    argparser.add_argument(
+        '--training_results_root',
+        default=None,
+        type=str,
+        required=True
+    )
+
+    argparser.add_argument(
+        '--dataset_path',
+        default=None,
+        type=str,
+        required=True
+    )
+
     args = argparser.parse_args()
+
+    if args.training_results_root is not None:
+        os.environ.setdefault('TRAINING_RESULTS_ROOT', args.training_results_root)
+    else:
+        raise Exception("TRAINING_RESULTS_ROOT is required")
+
+    if args.dataset_path is not None:
+        os.environ.setdefault('DATASET_PATH', args.dataset_path)
+    else:
+        raise Exception("DATASET_PATH is required")
 
     if args.gpus:
         # 检查传递的 GPU 向量是否有效。
