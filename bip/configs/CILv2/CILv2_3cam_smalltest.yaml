@@ -1,0 +1,91 @@
+
+#### 模型相关的参数 ####
+#### 训练相关的参数 ####
+MAGICAL_SEED: 1314520
+DATA_PARALLEL: True
+BATCH_SIZE: 60
+NUM_WORKER: 10
+NUMBER_EPOCH: 30
+TARGETS: ['steer', 'acceleration']  # 网络应该估计的目标：转向、加速度
+ACCELERATION_AS_ACTION: True
+OTHER_INPUTS: ['speed', 'direction'] # 神经网络的额外输入：速度、方向（高层的导航命令）
+TRAIN_DATASET_NAME: ['Roach_carla0913_fps10/smalltrain1', 'Roach_carla0913_fps10/smalltrain2'] # 所用训练数据集的文件夹（暂时使用小测试数据集）。应位于 DATASET_PATH 文件夹内
+VALID_DATASET_NAME: ['Roach_carla0913_fps10/smallval1'] # 使用的离线评估数据集的文件夹。应位于 DATASET_PATH 文件夹内
+ENCODER_INPUT_FRAMES_NUM: 1  # 编码器输入帧数（已经变平合并成1帧？）
+ENCODER_STEP_INTERVAL: 1  # 编码器步长间隔
+ENCODER_OUTPUT_STEP_DELAY: 0  # 编码器输出步长没有延迟
+DECODER_OUTPUT_FRAMES_NUM: 1  # 解码器输出帧数目
+IMG_NORMALIZATION:     # ImageNet 正则化
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+IMAGE_SHAPE: [3, 300, 300]  # 输入图像形状
+DATA_USED: ['rgb_left', 'rgb_central', 'rgb_right']  # 多视角相机，它需要按照这个顺序设置
+DATA_COMMAND_ONE_HOT: True   # 将高层命令编码为独热
+DATA_COMMAND_CLASS_NUM: 4    # 4 代表单车道小镇，6 代表多车道小镇（向右/向左变换车道）
+# 数据正则化：可能会根据数据集而改变
+DATA_NORMALIZATION:
+  steer: [-1.0, 1.0]
+  acceleration: [-1.0, 1.0]
+  speed: [-1.0, 11.0]     # m/s
+
+# 损失参数 #
+LOSS: 'Action_nospeed_L1'  # no speed L1 loss
+LOSS_WEIGHT:
+  actions:
+    steer: 0.50
+    acceleration: 0.50
+
+# 优化器参数 #
+LEARNING_RATE: 0.0001
+LEARNING_RATE_MINIMUM: 0.00001
+LEARNING_RATE_DECAY_EPOCHES: [10, 20]
+LEARNING_RATE_POLICY:
+  name: 'normal'
+  level: 0.5
+
+#### 验证相关参数 ####
+EVAL_SAVE_LAST_Conv_ACTIVATIONS: True
+EVAL_BATCH_SIZE: 30
+EVAL_SAVE_EPOCHES: [1, 5, 10, 15, 20, 25, 30]
+EARLY_STOPPING: False
+EVAL_IMAGE_WRITING_NUMBER: 100
+EVAL_DRAW_OFFLINE_RESULTS_GRAPHS: ['MAE_steer', 'MAE_acceleration', 'MAE']
+
+### 网络参数 ####
+# 编码器部分 #
+IMAGENET_PRE_TRAINED: True
+MODEL_TYPE: 'CILv2_multiview_attention'
+# 基于模型类型 MODEL_TYPE，我们指定结构
+MODEL_CONFIGURATION:
+  encoder_embedding:
+    perception:
+      res:
+        name: 'resnet34'
+        layer_id: 4
+
+  # Transformer 编码器
+  TxEncoder:
+    d_model: 512
+    n_head: 4
+    num_layers: 4
+    norm_first: True
+    learnable_pe: True
+
+  # 命令
+  command:
+    fc:
+      neurons: [512]
+      dropouts: [0.0]
+
+  # 速度
+  speed:
+    fc:  # 全连接层
+      neurons: [512]
+      dropouts: [0.0]
+
+  # 动作输出
+  action_output:
+    fc:
+      neurons: [512, 256]
+      dropouts: [0.0, 0.0]
+
