@@ -156,7 +156,7 @@ Cuda 版本： 11.6
 
 * 运行 main.py 文件：
 
-        python main.py --process-type train_val --gpus 0 --folder CILv2 --exp CILv2_3cam_smalltest --training_results_root result  --dataset_path F:\data
+        python main.py --process-type train_val --gpus 0 --folder CILv2 --exp CILv2_3cam_smalltest --training_results_root result  --dataset_path D:\work\workspace\carla-pedestrians\bip\data\smallval1\RouteScenario_0099
 
         python main.py --process-type train_val --gpus 0 --folder CILv2 --exp CILv2_3cam_single_lane
 
@@ -281,14 +281,10 @@ For a commercial license, please contact the authors. Portions of source code ta
 are annotated with links to original files and their corresponding licenses.
 
 -------------------------------------------------------------
-### Acknowledgements
- <img src="logo.png" height="100">
+### 参考
 
- This research is supported as a part of the project TED2021-132802B-I00 funded by MCIN/AEI/10.13039/501100011033 and the European Union NextGenerationEU/PRTR.
+* [俱身仿真器](https://aihabitat.org/)
 
- Yi Xiao acknowledges the support to her PhD study provided by the Chinese Scholarship Council (CSC), Grant No.201808390010. Diego Porres acknowledges the support to his PhD study provided by Grant PRE2018-083417 funded by MCIN/AEI /10.13039/501100011033 and FSE invierte en tu futuro. Antonio M. López acknowledges the financial support to his general research activities given by ICREA under the ICREA Academia Program. Antonio thanks the synergies, in terms of research ideas, arising from the project PID2020-115734RB-C21 funded by MCIN/AEI/10.13039/501100011033.
-
- The authors acknowledge the support of the Generalitat de Catalunya CERCA Program and its ACCIO agency to CVC’s general activities.
 
 
 
