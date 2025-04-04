@@ -25,6 +25,7 @@
 
 clear workspace
 
+% 视觉里程计初始化
 visual_odo_initial( ...
     'ODO_IMG_TRANS_Y_RANGE', 1:270, ...
     'ODO_IMG_TRANS_X_RANGE', 1:480, ...
@@ -122,6 +123,7 @@ SynPerDataFile = fullfile (imageFolderPath, '');
 gtDataFolderPath = '';
 gtDataFile = fullfile(gtDataFolderPath, '');
 
+% 停车场数据
 experiDataPath = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\QUTCarparData';
 expMapFile  = fullfile(experiDataPath, '01_exp_map_ml.txt');
 odoMapFile  = fullfile(experiDataPath, '02_odo_map_ml.txt');

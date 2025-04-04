@@ -1,6 +1,7 @@
 function [transV, yawRotV, heightV] = visual_odometry(rawImg)
 %     NeuroSLAM System Copyright (C) 2018-2019 
 %     NeuroSLAM: A Brain inspired SLAM System for 3D Environments
+%     视觉里程计用IMU里程计代替
 %
 %     Fangwen Yu (www.yufangwen.com), Jianga Shang, Youjian Hu, Michael Milford(www.michaelmilford.com) 
 %
@@ -24,64 +25,57 @@ function [transV, yawRotV, heightV] = visual_odometry(rawImg)
 %     You should have received a copy of the GNU General Public License
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
    
-    % The simple visual odometry with scanline intensity profile algorithm.
-    % the input is a raw image
-    % the output including horizontal translational velocity, rotational velocity,
-    % vertical translational velocity (vertical)
+    % 简单的视觉里程计与扫描线强度轮廓 scanline intensity profile 算法
+    % 输入是原始图像
+    % 输出包括水平平移速度、旋转速度、垂直平移速度（垂直）
+    % 尝试用加速度（前庭系统）、速度（速度细胞）、位置（位置细胞）
 
 
-    %% start to set up the visual odometry 
+    %% 开始设置视觉里程计
 
-    % define the veriable for drawing sub images used by estimating translational, 
-    % rotational, and pitch velocity 
+    % 定义用于绘制估计平移、旋转和俯仰速度的子图像的变量
     global SUB_TRANS_IMG;
     global SUB_YAW_ROT_IMG;
     global SUB_HEIGHT_V_IMG;
 
           
-    % definition the Y (vertical) range of images for odomentry, including image for
-    % translational velocity, image for rotational velocity, and image for
-    % height change velocity
+    % 定义输入图像的 Y（垂直）范围，包括平移速度图像、旋转速度图像和高度变化速度图像
     global ODO_IMG_HEIGHT_V_Y_RANGE;
     global ODO_IMG_YAW_ROT_Y_RANGE;
 
-    % definition of X (horizontal) range of the image for odometry
+    % 定义用于里程计的图像的 X（水平）范围
     global ODO_IMG_YAW_ROT_X_RANGE;
     global ODO_IMG_HEIGHT_V_X_RANGE;
 
     global ODO_IMG_TRANS_Y_RANGE;
     global ODO_IMG_TRANS_X_RANGE;
     
-    % define the size of resized images for odo
+    % 为 里程计odo 定义调整大小的图像的大小
     global ODO_IMG_YAW_ROT_RESIZE_RANGE;
     global ODO_IMG_HEIGHT_V_RESIZE_RANGE;
     global ODO_IMG_TRANS_RESIZE_RANGE;
    
-    % define the scale of translational velocity, rotational velocity, and pitch velocity 
+    % 定义平移速度、旋转速度和俯仰速度的比例
     global ODO_TRANS_V_SCALE;
     
     global ODO_YAW_ROT_V_SCALE;
     global ODO_HEIGHT_V_SCALE;
      
-    % difine the maximum threshold of translational velocity, rotational velocity and pitch velocity
+    % 定义平移速度、旋转速度和俯仰速度的最大阈值
     global MAX_TRANS_V_THRESHOLD;
     global MAX_YAW_ROT_V_THRESHOLD;
     global MAX_HEIGHT_V_THRESHOLD;
        
-    % define the veriable for visual odometry shift match in vertical and
-    % horizontal 
+    % 定义视觉里程计在垂直和水平方向上位移匹配的变量
     global ODO_SHIFT_MATCH_VERT;
     global ODO_SHIFT_MATCH_HORI;
     
-    % define the degree of the field of view in horizontal and vertical. 
-    % Field of View (FOV), Degree (DEG) the horizontal, vertical, and diagonal
-    % degrees for all FOVs
+    % 在水平和垂直方向上定义视场的角度。视场（Field of View, FOV），度（Degree, DEG）所有FOV的水平，垂直和对角度
     global FOV_HORI_DEGREE;
     global FOV_VERT_DEGREE;
           
-    % x_sums, sum each column of intensity in the current image and previous
-    % image perspectively.
-    % form one dimensional vector, 1*N array
+    % x_sum，将当前图像和前一图像中的每列强度分别相加。
+    % 形成一维向量, 1*N array
     global PREV_TRANS_V_IMG_X_SUMS;
     global PREV_YAW_ROT_V_IMG_X_SUMS;
     global PREV_HEIGHT_V_IMG_Y_SUMS;
@@ -98,9 +92,9 @@ function [transV, yawRotV, heightV] = visual_odometry(rawImg)
     global OFFSET_YAW_ROT;
     global OFFSET_HEIGHT_V;
     
-    %% start to compute the horizontal rotational velocity (yaw)
+    %% 开始计算水平旋转速度（偏航）
 
-    % get the sub_image for rotational velocity from raw image with range constrait
+    % 从具有范围限制的原始图像中获取旋转速度的sub_image
     subRawImg = rawImg(ODO_IMG_YAW_ROT_Y_RANGE, ODO_IMG_YAW_ROT_X_RANGE);
     subRawImg = imresize(subRawImg, ODO_IMG_YAW_ROT_RESIZE_RANGE); 
     horiDegPerPixel = FOV_HORI_DEGREE / size(subRawImg, 2);
@@ -108,7 +102,7 @@ function [transV, yawRotV, heightV] = visual_odometry(rawImg)
     SUB_YAW_ROT_IMG = subRawImg;
     SUB_TRANS_IMG = subRawImg;
     
-%     % get the size of template image after resized 
+%     % 获取调整大小后的模板图像的大小
 %     ySizeODOImg = ODO_IMG_YAW_ROT_RESIZE_RANGE(1);
 %     xSizeODOImg = ODO_IMG_YAW_ROT_RESIZE_RANGE(2);
 %     ySizeNormImg = ySizeODOImg;
@@ -146,13 +140,13 @@ function [transV, yawRotV, heightV] = visual_odometry(rawImg)
 %     SUB_YAW_ROT_IMG = normODOImg;
 %     SUB_TRANS_IMG = normODOImg;
     
-    % get the x_sum of average sum intensity values in every column of image
+    % 得到图像每列平均总和强度值的x_sum
     imgXSums = sum(subRawImg);
     avgIntensity = sum(imgXSums) / size(imgXSums, 2);
     imgXSums = imgXSums / avgIntensity;
 
-    % compare the current image with the previous image
-    % get the minimum offset and minimum difference of intensity between two images 
+    % 将当前图像与之前的图像进行比较
+    % 得到两幅图像之间最小的偏移量和最小的强度差
     [minOffsetYawRot, minDiffIntensityRot] = compare_segments(imgXSums, PREV_YAW_ROT_V_IMG_X_SUMS, ODO_SHIFT_MATCH_HORI, size(imgXSums, 2));  
 
     OFFSET_YAW_ROT = minOffsetYawRot;
@@ -169,10 +163,10 @@ function [transV, yawRotV, heightV] = visual_odometry(rawImg)
     %%% end up to compute the translational velocity
     
    
-    %% start to compute total translational velocity
+    %% 开始计算总平移速度（前庭系统怎么做？）
 
-    % principle
-    % speeds are estimates based on the rate of image change. 
+    % 原理
+    % 速度是根据图像变化的速率估计的。
     % the speed measure v is obtained from the filtered average absolute
     % intensity difference between consecutive scanline intensity profiles at
     % the best match for rotation with best offest in yaw and pitch shift
@@ -187,9 +181,9 @@ function [transV, yawRotV, heightV] = visual_odometry(rawImg)
     end
     
     
-    %% start to compute the height change velocity
+    %% 开始计算高度改变速度
 
-    % get the sub_image for pitch velocity from raw image with range constrait
+    % 从具有范围约束的原始图像中获取 俯仰 速度的子图像
     subRawImg = rawImg(ODO_IMG_HEIGHT_V_Y_RANGE, ODO_IMG_HEIGHT_V_X_RANGE);
     subRawImg = imresize(subRawImg, ODO_IMG_HEIGHT_V_RESIZE_RANGE); 
     vertDegPerPixel = FOV_VERT_DEGREE / size(subRawImg, 1);
@@ -216,8 +210,7 @@ function [transV, yawRotV, heightV] = visual_odometry(rawImg)
     
     OFFSET_HEIGHT_V = minOffsetHeightV;
 
-    % covert the perceptual speed into a physical speed with an empirically
-    % determined constant TRANSLATIONAL_VELOCITY_SCALE
+    % 使用经验确定的常数 TRANSLATIONAL_VELOCITY_SCALE 将感知速度转换为物理速度
 
 %     if abs(minOffsetYawRot) < 2
 %         heightV = ODO_HEIGHT_V_SCALE * minDiffIntensityHeight;
@@ -255,12 +248,10 @@ function [transV, yawRotV, heightV] = visual_odometry(rawImg)
 %         heightV = 0;
 %     end
     
-    % to detect excessively large translational velocity
-    % the threshold Vmax ensured that spuriously high image differences were
-    % not used. Large image differences could be caused by sudden illumination
-    % changes such as when travelling uphill facing directly into the sun.
+    % 为了检测过大的平移速度，阈值 Vmax 确保不会使用虚假的高图像差异。
+    % 突然的照明变化（例如上坡时直面太阳）可能会导致较大的图像差异。
 
-    % define a maximum velocity threshold according to the average motion speed
+    % 根据平均运动速度定义最大速度阈值
 
     if abs(heightV) > MAX_HEIGHT_V_THRESHOLD
         heightV = PREV_HEIGHT_V;

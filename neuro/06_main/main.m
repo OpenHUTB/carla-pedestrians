@@ -32,14 +32,14 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     global DEGREE_TO_RADIAN;
     DEGREE_TO_RADIAN = pi / 180;
    
-    % Transform the angle from radian to degree 
+    % 将角度从弧度转换为角度
     global RADIAN_TO_DEGREE;
     RADIAN_TO_DEGREE = 180 / pi;  
     
-    % define the size of block in reading video
+    % 定义读取视频块的大小
     global BLOCK_READ;
     
-    % define the render rate for dyawing vo 
+    % 定义绘制 视觉里程计vo 的渲染速率
     global RENDER_RATE;
     
     global GT_ODO_X_SCALING;
@@ -56,7 +56,7 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     global EXP_MAP_Y_SCALING;
     global EXP_MAP_Z_SCALING;
     
-    % Process the parameters
+    % 处理参数
     for i=1:(nargin - 8)
         if ischar(varargin{i})
             switch varargin{i}
@@ -78,15 +78,15 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
         end
     end
     
-    %% vt
+    %% 视觉模板 vt
     global PREV_VT_ID;
     global SUB_VT_IMG;
     global VT_HISTORY;
     global IMG_TYPE;
     global VT_STEP;
     
-    %% vo
-    % for drawing images for estimating pitch and yaw
+    %% 视觉里程计 vo
+    % 绘制用于估计俯仰和偏航的图像
     global SUB_HORI_TRANS_IMG;
     global SUB_ROT_IMG;
     global SUB_VERT_TRANS_IMG;
@@ -95,12 +95,12 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     global ODO_STEP;
     
     %% yaw_height_hdc
-    global YAW_HEIGHT_HDC;  
+    global YAW_HEIGHT_HDC;
         
-    % The dimension of yaw in yaw_height_hdc network
+    % yaw_height_hdc 网络中偏航的维度
     global YAW_HEIGHT_HDC_Y_DIM;
     
-    % The dimension of pitch in yaw_height_hdc network
+    % yaw_height_hdc 网络中俯仰的维度
     global YAW_HEIGHT_HDC_H_DIM;
     
     % The yaw theta size of each unit in radian, 2*pi/ YAW_HEIGHT_HDC_Y_DIM
@@ -110,14 +110,14 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     
    [curYawTheta, curHeightValue] = get_hdc_initial_value();
     
-    %% 3D gridcells
+    %%  3D 网格细胞 gridcells（内嗅皮层）
     global GRIDCELLS;
     
     global GC_X_DIM;
     global GC_Y_DIM;
     global GC_Z_DIM;
     
-    % set the initial position in the grid cell network
+    % 在网格细胞网络中设置初始的位置
     [gcX, gcY, gcZ] = get_gc_initial_pos();
    
     global MAX_ACTIVE_XYZ_PATH;
@@ -125,21 +125,21 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     %% 3D EM
     global EXPERIENCES;
         
-    % Experience history
+    % 历史经验
     global EXP_HISTORY;
     
-    % The namber of total experiences
+    % 全部经验的数目
     global NUM_EXPS;
     
     global EXP_CORRECTION;
     global EXP_LOOPS;
     
-    %% read imgs as VT input
+    %% 读取图片作为视觉模板VT输入
 
-    % get the visual data info
+    % 获得视觉数据信息
     [subFoldersPathSet, numSubFolders] = get_images_data_info(visualDataFile);
 
-    % initial some variables for drawing pitch and yaw 
+    % 初始化一些用于绘制俯仰和偏航的变量
     odoHeightValue = [0 0 0];
     Theta = [0 0 0 0 0 0];
     Rho = [0 0 0 0 0 0];
@@ -170,7 +170,7 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     if isempty(groundTruthFile) == 1
         gtHasValue = 0;
     else
-        % load ground truth data
+        % 加载真值数据
         [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz] = load_ground_truth_data(groundTruthFile);
         gtHasValue = 1;
     end
@@ -198,11 +198,11 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
               for indFrame = startFrame :ODO_STEP: numImgs -1
                 [curImg] = read_current_image(curFolderPath, imgFilesPathList, indFrame);
                                 
-                % visual templates and visual odo uses intensity so convert to grayscale
+                % 可视化模板和可视化odo使用强度使其转换为灰度
                 curGrayImg = rgb2gray(curImg);
                 curGrayImg = im2double(curGrayImg);
                 
-                %% step2: processing vo
+                %% step2: 处理视觉里程计 vo
                 % get the odometry from the video
                 % computing the 3d odometry based on the current image.
                 % yawRotV in degree
@@ -234,11 +234,11 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
                     end
                 end
                 
-                yawRotV = yawRotV * DEGREE_TO_RADIAN;  % in radian
+                yawRotV = yawRotV * DEGREE_TO_RADIAN;  % 以弧度表示
                 
                       
-                %% step3: processing vt
-                % get the most active view template
+                %% step3: 处理视觉模板 vt
+                % 获得最活跃的视觉模板 view template
                 curFrame = curFrame + 1;
                 if VT_STEP == 1
                     vtcurGrayImg = curGrayImg; 
@@ -254,7 +254,7 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
                 [vt_id] = visual_template(vtcurGrayImg, gcX, gcY,gcZ, curYawTheta, curHeightValue);
    
                 
-                %% step4: processing the integration of yaw_height_hdc 
+                %% step4: 处理 俯仰高度 yaw_height_hdc 的积分
                 yaw_height_hdc_iteration(vt_id, yawRotV, heightV);
 
                 [curYawTheta, curHeightValue] = get_current_yaw_height_value();

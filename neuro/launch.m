@@ -5,7 +5,7 @@ addpath(genpath('.'))
 
 %% test_3d_mapping
 
-% QUTCarparkData
+% QUTCarparkData：QUT 停车场数据
 test_mapping_QUTCarparkData
 
 % SynPanData

@@ -1,5 +1,13 @@
 # 类脑导航
 
+模拟 背侧视觉通路，感知运动
+
+模拟网格细胞(x,y,z)、头部朝向细胞(半规管监测头部旋转角加速度、yaw)、耳石器官（线性运动）。
+
+前庭系统（加速度） -> 内嗅皮层（速度细胞） -> 海马体（位置细胞）
+
+[内嗅皮层](https://zhuanlan.zhihu.com/p/71551904) 分为内侧内嗅皮层MEC和外侧内嗅皮层LEC。MEC更多地接收来自枕叶、压后皮层、顶叶的输入，LEC更多地接收来自额叶、梨状皮层、脑岛皮层、嗅觉皮层（olfactory cortex）、颞叶的输入。
+
 ## 环境配置
 1.从 [链接](https://drive.google.com/drive/folders/1AisK9ZlGhv8eCPYeAYtd-GzTHtQxz5NC?usp=sharing) 下载数据，解压并放到`C:\NeuroSLAM_Datasets`目录下；
 
@@ -19,6 +27,18 @@ or (Baidu Cloud) https://pan.baidu.com/s/19g8V179SWwvWLPcaoe6jHg code：slam
 https://www.neuroslam.net/?page_id=45
 or https://drive.google.com/drive/folders/1AisK9ZlGhv8eCPYeAYtd-GzTHtQxz5NC?usp=sharing
 
-Paper
+论文
 
 Yu, Fangwen, Jianga Shang, Youjian Hu, and Michael Milford. "NeuroSLAM: a brain-inspired SLAM system for 3D environments." Biological Cybernetics (2019): 1-31. https://link.springer.com/article/10.1007/s00422-019-00806-9
+
+神经科学原理 
+
+5.1.3 可以解码海马体的空间认知地图来推断位置
+
+27.3.8 前庭信号对于空间定向和空间导航至关重要
+
+54.5 海马体形成外部世界的空间映射
+
+* [论文解析](https://blog.csdn.net/weixin_38262663/article/details/120004213)
+* [代码解析](https://blog.csdn.net/weixin_38262663/article/details/120075175#comments_30727517)
+* [用于机器人位置识别的脑启发多模态混合神经网络](https://github.com/cognav/NeuroGPR)
