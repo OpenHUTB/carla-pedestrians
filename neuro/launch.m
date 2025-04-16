@@ -13,6 +13,7 @@ data_dir = 'D:\work\workspace\carla-pedestrians\neuro\data';
 test_mapping_CarlaData
 
 % QUTCarparkData：QUT 停车场数据
+% 480 x 270
 test_mapping_QUTCarparkData
 
 % 全景(Panoramic)相机：SynPanData
