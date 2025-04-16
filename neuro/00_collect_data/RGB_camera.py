@@ -120,7 +120,7 @@ while True:
         cv2.imshow('RGB Camera', cur_img)
 
         img_idx = img_idx + 1
-        if img_idx % 20 == 0:
+        if img_idx % 5 == 0:
             save_idx = save_idx + 1
             save_image_with_resolution_cv(cur_img, f"{output_dir}{save_idx:04d}.png", 160, 120)
 
