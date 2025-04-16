@@ -24,33 +24,32 @@ function gc_initial(varargin)
 %     You should have received a copy of the GNU General Public License
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-    %% define some variables of 3d gc
-    % The 3D Grid Cells Network
+    %% 定义 3d gc 的一些变量
+    % 3D 网格细胞网络（3D Grid Cells Network）
     global GRIDCELLS;
     
-    % The x, y, z dimension of 3D Grid Cells Model (3D CAN) 
+    % 3D 网格细胞的 x,y,z 维度 (3D CAN) 
     global GC_X_DIM;
     global GC_Y_DIM;
     global GC_Z_DIM;
     
-    % The dimension of local excitation weight matrix for x, y, z
+    % 对于 x, y, z 中局部激活权重矩阵的维度
     global GC_EXCIT_X_DIM;
     global GC_EXCIT_Y_DIM;
     global GC_EXCIT_Z_DIM;
     
-    % The dimension of local excitation weight matrix for x, y, z
+    % 对于 x, y, z 中局部抑制权重矩阵的维度
     global GC_INHIB_X_DIM;
     global GC_INHIB_Y_DIM;
     global GC_INHIB_Z_DIM;
     
-    % The global inhibition value
+    % 全局抑制值
     global GC_GLOBAL_INHIB;   
     
-    % The amount of energy injected when a view template is re-seen
+    % 重新看到视图模板时注入的能量
     global GC_VT_INJECT_ENERGY;
 
-    
-    % Variance of Excitation and Inhibition in XY and THETA respectively
+    % XY 和 THETA 中的兴奋和抑制的方差
     global GC_EXCIT_X_VAR;
     global GC_EXCIT_Y_VAR;
     global GC_EXCIT_Z_VAR;
@@ -60,17 +59,16 @@ function gc_initial(varargin)
     global GC_INHIB_Z_VAR;
 
       
-    % The scale of horizontal translational velocity
+    % 水平平移速度的尺度
     global GC_HORI_TRANS_V_SCALE;
     
-    % The scale of vertical translational velocity
+    % 垂直平移速度的尺度
     global GC_VERT_TRANS_V_SCALE;
     
-    % packet size for wrap, the left and right activity cells near
-    % center of best activity packet, eg. = 5
+    % 包装的数据包大小，最佳激活数据包中心附近的左侧和右侧激活单元，例如 = 5
     global GC_PACKET_SIZE;
 
-    % Process the parameters
+    % 处理参数
     for i=1:(nargin-1)
         if ischar(varargin{i})
             switch varargin{i}
@@ -107,23 +105,23 @@ function gc_initial(varargin)
         end
     end
    
-    % The weight of excitation in 3D grid cell network
+    % 3D网格细胞网络兴奋权重
     global GC_EXCIT_WEIGHT;
     GC_EXCIT_WEIGHT = create_gc_weights(GC_EXCIT_X_DIM, ...
         GC_EXCIT_Y_DIM, GC_EXCIT_Z_DIM, GC_EXCIT_X_VAR, GC_EXCIT_Y_VAR, GC_EXCIT_Z_VAR);
     
-    % The weight of inhibition in 3D grid cell network
+    % 3D网格细胞网络抑制权重
     global GC_INHIB_WEIGHT;
     GC_INHIB_WEIGHT = create_gc_weights(GC_INHIB_X_DIM, ...
         GC_INHIB_Y_DIM, GC_INHIB_Z_DIM, GC_INHIB_X_VAR, GC_INHIB_X_VAR, GC_INHIB_Z_VAR);
 
-    % convienience constants
-    % The half dimension of local excitation weight matrix for x, y, z
+    % 便利参数
+    % x、y、z 局部激活权重矩阵的半维数
     global GC_EXCIT_X_DIM_HALF;
     global GC_EXCIT_Y_DIM_HALF;
     global GC_EXCIT_Z_DIM_HALF;
     
-    % The half dimension of local inhibition weight matrix for x, y, z
+    % x、y、z 局部抑制权重矩阵的半维数
     global GC_INHIB_X_DIM_HALF;
     global GC_INHIB_Y_DIM_HALF;
     global GC_INHIB_Z_DIM_HALF;
@@ -136,7 +134,7 @@ function gc_initial(varargin)
     GC_INHIB_Y_DIM_HALF = floor(GC_INHIB_Y_DIM / 2);
     GC_INHIB_Z_DIM_HALF = floor(GC_INHIB_Z_DIM / 2);
     
-     % The excit wrap of x,y,z in 3D grid cell network
+     % 三维网格细胞网络中 x,y,z 的激活包裹
     global GC_EXCIT_X_WRAP;
     global GC_EXCIT_Y_WRAP;
     global GC_EXCIT_Z_WRAP;
@@ -145,7 +143,7 @@ function gc_initial(varargin)
     GC_EXCIT_Y_WRAP = [(GC_Y_DIM - GC_EXCIT_Y_DIM_HALF + 1) : GC_Y_DIM  1 : GC_Y_DIM  1 : GC_EXCIT_Y_DIM_HALF];
     GC_EXCIT_Z_WRAP = [(GC_Z_DIM - GC_EXCIT_Z_DIM_HALF + 1) : GC_Z_DIM  1 : GC_Z_DIM  1 : GC_EXCIT_Z_DIM_HALF];
     
-    % The inhibit wrap of x,y,z in 3D grid cell network
+    % 三维网格单元网络中 x,y,z 的抑制包裹
     global GC_INHIB_X_WRAP;
     global GC_INHIB_Y_WRAP;
     global GC_INHIB_Z_WRAP;
@@ -154,7 +152,7 @@ function gc_initial(varargin)
     GC_INHIB_Z_WRAP = [(GC_Z_DIM - GC_INHIB_Z_DIM_HALF + 1) : GC_Z_DIM  1 : GC_Z_DIM  1 : GC_INHIB_Z_DIM_HALF];
     
         
-    % The x, y, z cell size of each unit in meter or unit
+    % 每个单元的 x、y、z 单元大小（以米或单位为单位）
     global GC_X_TH_SIZE;   
     global GC_Y_TH_SIZE;   
     global GC_Z_TH_SIZE;   
@@ -164,8 +162,7 @@ function gc_initial(varargin)
     GC_Z_TH_SIZE = 2*pi / GC_Y_DIM;
 
    
-    % these are the lookups for finding the centre of the gccell in GRIDCELLS by
-    % get_gc_xyz()
+    % 这些是通过 get_gc_xyz() 查找 GRIDCELLS 中 gccell 中心的查找
 
     global GC_X_SUM_SIN_LOOKUP;
     global GC_X_SUM_COS_LOOKUP;
@@ -183,7 +180,7 @@ function gc_initial(varargin)
     GC_Z_SUM_SIN_LOOKUP = sin((1 : GC_Z_DIM) .* GC_Z_TH_SIZE);
     GC_Z_SUM_COS_LOOKUP = cos((1 : GC_Z_DIM) .* GC_Z_TH_SIZE);
    
-    % The wrap for finding maximum activity packet 
+    % 寻找最大激活包的包装
     global GC_MAX_X_WRAP;
     global GC_MAX_Y_WRAP;
     global GC_MAX_Z_WRAP;
@@ -193,7 +190,7 @@ function gc_initial(varargin)
     GC_MAX_Z_WRAP = [(GC_Y_DIM - GC_PACKET_SIZE + 1) : GC_Y_DIM  1 : GC_Y_DIM  1 : GC_PACKET_SIZE];
 
 
-    % set the initial position in the grid cell network
+    % 设置网格单元网络中的初始位置
     [gcX, gcY, gcZ] = get_gc_initial_pos();
     
     GRIDCELLS = zeros(GC_X_DIM, GC_Y_DIM, GC_Z_DIM);

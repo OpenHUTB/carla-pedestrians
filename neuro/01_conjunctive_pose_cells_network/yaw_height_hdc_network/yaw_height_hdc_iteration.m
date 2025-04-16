@@ -105,7 +105,7 @@ function yaw_height_hdc_iteration(vt_id, yawRotV, heightV)
     end
 
 
-    % Local excitation: yaw_height_hdc_local_excitation = yaw_height_hdc elements * yaw_height_hdc weights
+    % 局部激活：yaw_height_hdc_local_excitation = yaw_height_hdc elements * yaw_height_hdc weights
     yaw_height_hdc_local_excit_new = zeros(YAW_HEIGHT_HDC_Y_DIM, YAW_HEIGHT_HDC_H_DIM);
     for h = 1 : YAW_HEIGHT_HDC_H_DIM
         for y = 1 : YAW_HEIGHT_HDC_Y_DIM
@@ -139,7 +139,7 @@ function yaw_height_hdc_iteration(vt_id, yawRotV, heightV)
     YAW_HEIGHT_HDC = YAW_HEIGHT_HDC./total;
     
     if yawRotV ~= 0
-        % mod to work out the partial shift amount
+        % mod 计算出部分移位量
         weight = mod(abs(yawRotV) / YAW_HEIGHT_HDC_Y_TH_SIZE, 1);
         if weight == 0
             weight = 1.0;
@@ -151,7 +151,7 @@ function yaw_height_hdc_iteration(vt_id, yawRotV, heightV)
     end
     
     if heightV ~= 0
-        % mod to work out the partial shift amount
+        % mod 计算出部分移位量
         weight = mod(abs(heightV) / YAW_HEIGHT_HDC_H_SIZE, 1);
         if weight == 0
             weight = 1.0;

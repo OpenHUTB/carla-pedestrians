@@ -24,13 +24,13 @@ function gc_iteration(vt_id, transV, curYawThetaInRadian,heightV)
 %     You should have received a copy of the GNU General Public License
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
     
-    % 3D grid cell update steps
-    % 1. Add view template energy
-    % 2. Local excitation
-    % 3. Local inhibition
-    % 4. Global inhibition
-    % 5. Normalisation
-    % 6. Path Integration (vtrans then vheight)
+    % 3D 网格细胞更新步
+    % 1. 添加视图模板能量
+    % 2. 局部激活
+    % 3. 局部抑制
+    % 4. 全局抑制
+    % 5. 正则化
+    % 6. 路径积分 (视图平移？ vtrans，然后 视图高度 vheight)
     
     %% define some variables of 3d gc
     % The 3D Grid Cells Network
@@ -82,26 +82,25 @@ function gc_iteration(vt_id, transV, curYawThetaInRadian,heightV)
     global GC_Z_TH_SIZE;   
  
     
-    %% vt add energy
-    % if this isn't a new visual template then add the energy at its associated gridcell location
+    %% 视图模板 (view template, vt) 添加能量
+    % 如果这不是一个新的视觉模板，则在其关联的网格单元位置添加能量
     if VT(vt_id).first ~= 1
         actX = min([max([round(VT(vt_id).gc_x), 1]), GC_X_DIM]);
         actY = min([max([round(VT(vt_id).gc_y), 1]), GC_Y_DIM]);
         actZ = min([max([round(VT(vt_id).gc_z), 1]), GC_Z_DIM]);
 
-        % this decays the amount of energy that is injected at the visual template's gridcell location
-        % this is important as the gridcell gridcells will errounously snap 
-        % for bad visual template matches that occur over long periods (eg a bad matches that
-        % occur while the agent is stationary). This means that multiple visual template's
-        % need to be recognised for a snap to happen
+        % 这会衰减注入视觉模板网格单元位置的能量，
+        % 这很重要，因为网格单元会因长时间发生的不良视觉模板匹配而错误地捕捉
+        % （例如，在代理静止时发生的不良匹配）。
+        % 这意味着需要识别多个视觉模板才能发生捕捉
         energy = GC_VT_INJECT_ENERGY * 1/30 * (30 - exp(1.2 * VT(vt_id).decay));
         if energy > 0
             GRIDCELLS(actX, actY, actZ) = GRIDCELLS(actX, actY, actZ) + energy;
         end
     end
 
-    %% local excitation
-    % local excitation GC_local_excitation = GC elements * GC weights
+    %% 局部抑制
+    % 局部抑制 GC_local_excitation = GC elements * GC weights
     gridcell_local_excit_new = zeros(GC_X_DIM, GC_X_DIM, GC_Z_DIM);
     for z = 1:GC_Z_DIM
         for x = 1:GC_X_DIM
@@ -140,17 +139,17 @@ function gc_iteration(vt_id, transV, curYawThetaInRadian,heightV)
     end
     GRIDCELLS = GRIDCELLS - gridcell_local_inhib_new;
 
-    %% global inhibition
+    %% 全局抑制
     % global inhibition - gc_gi = GC_li elements - inhibition
     GRIDCELLS = (GRIDCELLS >= GC_GLOBAL_INHIB) .* (GRIDCELLS - GC_GLOBAL_INHIB);
 
-    %% normalisation
+    %% 正则化
     % normalisation
     total = sum(sum(sum(GRIDCELLS)));
     GRIDCELLS = GRIDCELLS./total;
 
     
-    %% path integration
+    %% 路径积分
     
     % pi in x-y plane
     for indZ = 1 : GC_Z_DIM

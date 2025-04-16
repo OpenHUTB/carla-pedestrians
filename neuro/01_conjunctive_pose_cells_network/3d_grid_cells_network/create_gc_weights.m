@@ -25,7 +25,7 @@ function [weight] = create_gc_weights(xDim, yDim, zDim, xVar, yVar, zVar)
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-    % Creates a 3D normalised distributio of size dimension^3 with a variance of var.
+    % 创建大小为维度^3、方差为 var 的 3D 正则化分布
 
     xDimCentre = floor(xDim / 2) + 1;
     yDimCentre = floor(yDim / 2) + 1;
@@ -33,18 +33,19 @@ function [weight] = create_gc_weights(xDim, yDim, zDim, xVar, yVar, zVar)
 
     weight = zeros(xDim, yDim, zDim);
     
-    for z = 1 : zDim  
+    for z = 1 : zDim
         for x = 1 : xDim
             for y = 1 : yDim
+               % 使用3D高斯分布创建"兴奋权重矩阵"
                weight(x,y,z) = 1/(xVar*sqrt(2*pi))*exp((-(x - xDimCentre) ^ 2) / (2 * xVar ^ 2)) ...
                    * 1/(yVar*sqrt(2*pi))*exp((-(y - yDimCentre) ^ 2) / (2 * yVar ^ 2)) ...
-                   * 1/(zVar*sqrt(2*pi))*exp((-(z - zDimCentre) ^ 2) / (2 * zVar ^ 2)); 
+                   * 1/(zVar*sqrt(2*pi))*exp((-(z - zDimCentre) ^ 2) / (2 * zVar ^ 2));
             end
         end
     end
 
-    % ensure that it is normalised
+    % 确保其正则化
     total = sum(sum(sum(weight)));
-    weight = weight./total;       
+    weight = weight./total;
 
 end
