@@ -117,14 +117,14 @@ exp_initial( ...
 % main process 
 % file path: visualDataFile, expMapHistoryFile, odoMapHistoryFile, groundTruthFile,vtHistoryFile, emHistoryFile, varargin
 
-imageFolderPath = 'C:\NeuroSLAM_Datasets\01_NeuroSLAM_Datasets\03_QUTCarparkData';
+imageFolderPath = fullfile(data_dir, '01_NeuroSLAM_Datasets\03_QUTCarparkData');
 SynPerDataFile = fullfile (imageFolderPath, '');
 
 gtDataFolderPath = '';
 gtDataFile = fullfile(gtDataFolderPath, '');
 
 % 停车场数据
-experiDataPath = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\QUTCarparData';
+experiDataPath = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\QUTCarparData');
 expMapFile  = fullfile(experiDataPath, '01_exp_map_ml.txt');
 odoMapFile  = fullfile(experiDataPath, '02_odo_map_ml.txt');
 emHisFile   = fullfile(experiDataPath, '03_em_history_ml.txt');

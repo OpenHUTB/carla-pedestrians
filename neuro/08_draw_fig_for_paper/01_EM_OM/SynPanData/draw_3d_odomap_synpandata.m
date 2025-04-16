@@ -24,7 +24,7 @@
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 % Jan 3, 2019
-groundTruthFile = 'C:\NeuroSLAM_Datasets\02_NeuroSLAM_Groudtruth\02_SynPanData_GT.txt';
-odoMapFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\SynPanData\02_odo_map_ml.txt';
+groundTruthFile = fullfile(data_dir, '02_NeuroSLAM_Groudtruth\02_SynPanData_GT.txt');
+odoMapFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPanData\02_odo_map_ml.txt');
 
 plot_3d_odomap(groundTruthFile, odoMapFile, 0.3, -0.32, 0.213, 0.2, 0, 0, 20,20,20);

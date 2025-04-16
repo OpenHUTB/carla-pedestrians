@@ -443,18 +443,21 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
 %                     view(40,20)
                     
 %                     figure(3)
-                    % draw the history of visual templates
+                    % 绘制视觉模板的历史（history of visual templates）
                     subplot(8, 9, [7 27], 'replace');
                     hold on
                     plot3((expTrajectory(:,2)) * EXP_MAP_X_SCALING, ...
                         (expTrajectory(:,1) ) * EXP_MAP_Y_SCALING, ...
                         expTrajectory(:,3) * EXP_MAP_Z_SCALING, '.b', 'MarkerSize',10);
                     
-%                     if gtHasValue == 1 
-%                         plot3((gt_x(startFrame:curFrame * ODO_STEP)-gt_x(startFrame)) * GT_EXP_X_SCALING, ...
-%                         (gt_y(startFrame:curFrame * ODO_STEP)-gt_y(startFrame)) * GT_EXP_Y_SCALING, ...
-%                         (gt_z(startFrame:curFrame * ODO_STEP)-gt_z(startFrame)) * GT_EXP_Z_SCALING, '.r');
-%                     end
+                    % 是否在多层经验图中绘制红色的真值
+                    % if gtHasValue == 1
+                    %     % 会报错：索引超过数组元素的数量。索引不能超过 2781。
+                    %     plot3((gt_x(startFrame:curFrame * ODO_STEP)-gt_x(startFrame)) * GT_EXP_X_SCALING, ...
+                    %     (gt_y(startFrame:curFrame * ODO_STEP)-gt_y(startFrame)) * GT_EXP_Y_SCALING, ...
+                    %     (gt_z(startFrame:curFrame * ODO_STEP)-gt_z(startFrame)) * GT_EXP_Z_SCALING, '.r');
+                    % end
+
                     hold off;
                     grid on
                     view(3)

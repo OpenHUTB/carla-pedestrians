@@ -9,7 +9,7 @@
 [内嗅皮层](https://zhuanlan.zhihu.com/p/71551904) 分为内侧内嗅皮层MEC和外侧内嗅皮层LEC。MEC更多地接收来自枕叶、压后皮层、顶叶的输入，LEC更多地接收来自额叶、梨状皮层、脑岛皮层、嗅觉皮层（olfactory cortex）、颞叶的输入。
 
 ## 环境配置
-1.从 [链接](https://drive.google.com/drive/folders/1AisK9ZlGhv8eCPYeAYtd-GzTHtQxz5NC?usp=sharing) 下载数据，解压并放到`C:\NeuroSLAM_Datasets`目录下；
+1.从 [链接](https://drive.google.com/drive/folders/1AisK9ZlGhv8eCPYeAYtd-GzTHtQxz5NC?usp=sharing) 或 [百度网盘](https://pan.baidu.com/s/1BpIYE4gGPDWPSY5lkhM6qg?pwd=hutb) 下载数据，解压并放到`C:\NeuroSLAM_Datasets`目录下；
 
 2.运行当前目录下的`launch.m`（包括比如：`07_test\test_3d_mapping\QUTCarparkData`目录下的脚本：`test_mapping_QUTCarparkData.m`）。
 

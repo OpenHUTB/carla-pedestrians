@@ -25,6 +25,6 @@
 
 % Jan 2, 2019
 groundTruthFile = '';
-expMapFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\QUTCarparData\01_exp_map_ml.txt';
+expMapFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\QUTCarparData\01_exp_map_ml.txt');
 % plot_3d_multilayer_experience_map(groundTruthFile, expMapFile, xExpMapScaling, yExpMapScaling, zExpMapScaling, xExpMapTrans, yExpMapTrans, zExpMapTrans, xGtScaling, yGtScaling, zGtScaling)
 plot_3d_multilayer_experience_map_qut(groundTruthFile, expMapFile, 0.8, 0.8, 0.1, 0, 0.5, 0, 20,20, 20);

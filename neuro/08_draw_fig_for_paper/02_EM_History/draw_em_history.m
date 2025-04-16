@@ -24,12 +24,12 @@
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 % SynPerData
-% emHistoryFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\SynPerData\03_em_history_ml.txt';
+% emHistoryFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPerData\03_em_history_ml.txt');
 
 % SynPanData
-% emHistoryFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\SynPanData\03_em_history_ml.txt';
+% emHistoryFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPanData\03_em_history_ml.txt');
 
 % QUTCarparkData
-emHistoryFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\QUTCarparData\03_em_history_ml.txt';
+emHistoryFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\QUTCarparData\03_em_history_ml.txt');
 
 plot_em_history(emHistoryFile);

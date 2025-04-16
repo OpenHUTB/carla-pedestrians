@@ -2,6 +2,10 @@
 % add all function path
 addpath(genpath('.'))
 
+% 数据目录
+global data_dir;
+data_dir = 'D:\work\workspace\carla-pedestrians\neuro\data';
+
 
 %% 测试3D建图 test_3d_mapping
 

@@ -24,7 +24,7 @@
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 % Feb 6, 2019
-groundTruthFile = 'C:\NeuroSLAM_Datasets\02_NeuroSLAM_Groudtruth\01_SynPerData_GT.txt';
-expMapFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\SynPerData\01_exp_map_ml.txt';
+groundTruthFile = fullfile(data_dir, '02_NeuroSLAM_Groudtruth\01_SynPerData_GT.txt');
+expMapFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPerData\01_exp_map_ml.txt');
 % plot_3d_multilayer_experience_map(groundTruthFile, expMapFile, xExpMapScaling, yExpMapScaling, zExpMapScaling, xExpMapTrans, yExpMapTrans, zExpMapTrans, xGtScaling, yGtScaling, zGtScaling)
 plot_3d_multilayer_experience_map(groundTruthFile, expMapFile, 0.1, 0.1, 0.1, 1.2, 1.3, 0, 21.5,23, 23);

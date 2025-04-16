@@ -25,14 +25,14 @@
 
 
 % % SynPerData
-gcTrajFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\SynPerData\05_gc_trajectory.txt';
+gcTrajFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPerData\05_gc_trajectory.txt');
 % 
 % 
 % % SynPanData
-% gcTrajFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\SynPanData\05_gc_trajectory.txt';
+% gcTrajFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPanData\05_gc_trajectory.txt');
 
 % QUTCarparkData
-% gcTrajFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\QUTCarparData\05_gc_trajectory.txt';
+% gcTrajFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\QUTCarparData\05_gc_trajectory.txt');
 
 
 plot_gc_traj_main(gcTrajFile);

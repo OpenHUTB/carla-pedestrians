@@ -112,17 +112,20 @@ gc_initial( ...
 exp_initial( ...
     'DELTA_EXP_GC_HDC_THRESHOLD', 40, ...
     'EXP_LOOPS', 1, ...
-    'EXP_CORRECTION', 0.5 ); 
+    'EXP_CORRECTION', 0.5 );
 
-% main process 
-% file path: visualDataFile, expMapHistoryFile, odoMapHistoryFile, groundTruthFile,vtHistoryFile, emHistoryFile, varargin
-imageFolderPath = 'C:\NeuroSLAM_Datasets\01_NeuroSLAM_Datasets\01_SynPerData';
+% 主函数处理
+% 文件路径: visualDataFile, expMapHistoryFile, odoMapHistoryFile, groundTruthFile,vtHistoryFile, emHistoryFile, varargin
+% 合成透视数据：包含4994个png图片（标号到5000）
+imageFolderPath = fullfile(data_dir, '01_NeuroSLAM_Datasets\01_SynPerData');
 SynPerDataFile = fullfile (imageFolderPath, '');
 
-gtDataFolderPath = 'C:\NeuroSLAM_Datasets\02_NeuroSLAM_Groudtruth\';
+% 真值，每一行表示：图片序列号, 
+% [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz]
+gtDataFolderPath = fullfile(data_dir, '02_NeuroSLAM_Groudtruth\');
 gtDataFile = fullfile(gtDataFolderPath, '01_SynPerData_GT.txt');
 
-experiDataPath = 'C:NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\SynPerData';
+experiDataPath = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPerData');
 expMapFile  = fullfile(experiDataPath, '01_exp_map_ml.txt');
 odoMapFile  = fullfile(experiDataPath, '02_odo_map_ml.txt');
 emHisFile   = fullfile(experiDataPath, '03_em_history_ml.txt');

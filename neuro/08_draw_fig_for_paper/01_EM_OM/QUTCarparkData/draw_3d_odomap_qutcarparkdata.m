@@ -26,7 +26,7 @@
 
 % Jan 3, 2019
 % groundTruthFile = 'C:\Dataset\3dratslam_groud_truth\01_ground_truth_data\03_3d_ground_truth_same_view_perspective_0918.txt';
-odoMapFile = 'C:\NeuroSLAM_Datasets\03_NeuroSLAM_Experiments_Results\QUTCarparData\02_odo_map_ml.txt';
+odoMapFile = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\QUTCarparData\02_odo_map_ml.txt');
 %     plot3(odomap_y*1*(-1), odomap_x*1+3, odomap_z*(1), '.b');
 %     plot3((gt_x - gt_x(1))*17,(gt_y - gt_y(1))*23, (gt_z - gt_z(1))*(10), '.r');            
 
