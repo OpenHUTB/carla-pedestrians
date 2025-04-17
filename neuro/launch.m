@@ -30,11 +30,11 @@ test_vo_QUTCarparkData
 % SynPanData
 test_vo_ov_SynPanData
 
-% SynPerData
+% 在透视相机上测试视觉里程计 SynPerData
 test_vo_SynPerData
 
 
-%% test_vt
+%% 测试视觉模板 test_vt
 test_vt_SynPanData
 
 

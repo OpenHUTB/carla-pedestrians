@@ -24,52 +24,50 @@ function visual_odo_initial(varargin)
 %     You should have received a copy of the GNU General Public License
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-    %% Initial some global variables
+    %% 初始化一些全局变量
 
-    % definition the Y (vertical) range of images for odomentry, including image for
-    % translational velocity, image for rotational velocity, and image for
-    % picth velocity
+    % 定义里程计图像的 Y（垂直）范围，包括平移速度图像、旋转速度图像和俯仰速度图像
 
+    % 里程计图像平移范围（x, y）
     global ODO_IMG_TRANS_Y_RANGE;
     global ODO_IMG_TRANS_X_RANGE;
         
+    % 里程计图像高度（俯仰）垂直范围(x, y)
     global ODO_IMG_HEIGHT_V_Y_RANGE;
     global ODO_IMG_HEIGHT_V_X_RANGE;  
     
-    global ODO_IMG_YAW_ROT_Y_RANGE;     
+    % 里程计图像偏航（旋转）范围(x, y)
+    global ODO_IMG_YAW_ROT_Y_RANGE;
     global ODO_IMG_YAW_ROT_X_RANGE;
    
-    % define the size of resized images for odo
+    % 定义里程计调整大小后的图像尺寸
     global ODO_IMG_TRANS_RESIZE_RANGE;
     global ODO_IMG_YAW_ROT_RESIZE_RANGE;
     global ODO_IMG_HEIGHT_V_RESIZE_RANGE;
    
-    % define the scale of translational velocity, rotational velocity, and pitch velocity 
+    % 定义平移速度、旋转速度和俯仰速度的尺度
     global ODO_TRANS_V_SCALE;
-    
     global ODO_YAW_ROT_V_SCALE;
     global ODO_HEIGHT_V_SCALE;
 
-    % difine the maximum threshold of translational velocity, rotational velocity and pitch velocity
+    % 定义平移速度、旋转速度和俯仰速度的最大阈值
     global MAX_TRANS_V_THRESHOLD;
     global MAX_YAW_ROT_V_THRESHOLD;
     global MAX_HEIGHT_V_THRESHOLD;
     
-    % define the veriable for visual odometry shift match in vertical and
-    % horizontal 
+    % 定义垂直和水平方向的视觉里程计位移匹配变量
     global ODO_SHIFT_MATCH_VERT;
     global ODO_SHIFT_MATCH_HORI;
 
-    % define the degree of the field of view in horizontal and vertical. 
-    % Field of View (FOV), Degree (DEG) the horizontal, vertical, and diagonal
-    % degrees for all FOVs
+    % 定义水平和垂直方向的视野角度。
+    % 视野 (Field of View, FOV)，角度 (degree, DEG) 所有 FOV 的水平、垂直和对角线角度
     global FOV_HORI_DEGREE;
     global FOV_VERT_DEGREE;
      
     global KEY_POINT_SET;
     global ODO_STEP;
 
-    %%% Process the parameters
+    %%% 处理参数
 
     for i=1:(nargin-1)
         if ischar(varargin{i})
@@ -106,9 +104,7 @@ function visual_odo_initial(varargin)
         end
     end
     
-    % x_sums, sum each column of intensity in the current image and previous
-    % image perspectively.
-    % form one dimensional vector, 1*N array
+    % x_sums, 分别对当前图像和前一图像中每一列强度求和。形成一维向量 1*N 数组
 
     global PREV_TRANS_V_IMG_X_SUMS;
     global PREV_YAW_ROT_V_IMG_X_SUMS;
@@ -118,7 +114,7 @@ function visual_odo_initial(varargin)
     PREV_HEIGHT_V_IMG_Y_SUMS = zeros(ODO_IMG_HEIGHT_V_RESIZE_RANGE(1), 1);
     PREV_TRANS_V_IMG_X_SUMS = zeros(1,ODO_IMG_TRANS_RESIZE_RANGE(2) - ODO_SHIFT_MATCH_HORI);
     
-    % define the previous velocity for keeping stable speed
+    % 定义先前的速率以保持稳定的速度
     global PREV_TRANS_V;
     global PREV_YAW_ROT_V;
     global PREV_HEIGHT_V;
@@ -126,6 +122,6 @@ function visual_odo_initial(varargin)
     PREV_YAW_ROT_V = 0;
     PREV_HEIGHT_V = 0;
     
-    %%% End up for setting up the visual odometry 
+    %%% 完成视觉里程计的设置
    
 end

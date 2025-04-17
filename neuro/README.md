@@ -42,3 +42,5 @@ Yu, Fangwen, Jianga Shang, Youjian Hu, and Michael Milford. "NeuroSLAM: a brain-
 * [论文解析](https://blog.csdn.net/weixin_38262663/article/details/120004213)
 * [代码解析](https://blog.csdn.net/weixin_38262663/article/details/120075175#comments_30727517)
 * [用于机器人位置识别的脑启发多模态混合神经网络](https://github.com/cognav/NeuroGPR)
+* [视觉惯性导航融合算法研究进展](https://m.chinaaet.com/article/3000159386) 
+* [不变卡尔曼滤波的视觉惯性 SLAM 代码](https://github.com/mbrossar/FUSION2018) 
