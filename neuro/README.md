@@ -44,3 +44,8 @@ Yu, Fangwen, Jianga Shang, Youjian Hu, and Michael Milford. "NeuroSLAM: a brain-
 * [用于机器人位置识别的脑启发多模态混合神经网络](https://github.com/cognav/NeuroGPR)
 * [视觉惯性导航融合算法研究进展](https://m.chinaaet.com/article/3000159386) 
 * [不变卡尔曼滤波的视觉惯性 SLAM 代码](https://github.com/mbrossar/FUSION2018) 
+
+Matlab示例
+* [单目视觉-惯性SLAM](https://ww2.mathworks.cn/help/vision/ug/monocular-visual-inertial-slam.html) 
+* [使用合成数据的视觉惯性里程计](https://ww2.mathworks.cn/help/fusion/ug/visual-inertial-odometry-using-synthetic-data.html)
+* [使用因子图的单目视觉惯性里程计（VIO ）](https://ww2.mathworks.cn/help/nav/ug/monocular-visual-inertial-odometry-using-factor-graph.html)
