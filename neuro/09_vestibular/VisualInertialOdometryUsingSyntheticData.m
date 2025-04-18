@@ -97,14 +97,15 @@ helperInitialize(filt, traj);
 % 其他参数将视觉里程计读数的漂移建模为白噪声和一阶高斯-马尔可夫过程的组合。
 
 % 标志 useVO 决定是否使用视觉里程计
-% useVO = false; % 仅使用 IMU
-useVO = true; % 同时使用IMU 和视觉里程计。
+% useVO = false; % 仅使用 IMU（轨迹会飘很远）
+useVO = true; % 同时使用 IMU 和视觉里程计（仅使用视觉里程计的轨迹形状相似，但尺度变大）。
 
 paramsVO.scale = 2;
 paramsVO.sigmaN = 0.139;
 paramsVO.tau = 232;
 paramsVO.sigmaB = sqrt(1.34);
 paramsVO.driftBias = [0 0 0];
+
 
 %% 指定 IMU 传感器
 % 使用 System 对象定义包含加速度计和陀螺仪的 IMU 传感器模型 imuSensor。
