@@ -1,0 +1,115 @@
+\section{Related Work}
+
+In this section, we briefly review the conventional visual SLAM and brain-inspired SLAM for 3D environments. 
+A 3D SLAM system enables a robot to explore in an unknown 3D environment from an arbitrary initial 3D location. 
+Meanwhile, it can build a 3D spatial map incrementally. 
+The 3D spatial map is also used to compute the robot’s 3D pose simultaneously (Dissanayake et al., 2001; Thrun and Leonard, 2008). 
+Approaches to solve the problem of 3D SLAM broadly fall into two classes. 
+The primary set of approaches is typically geometric in nature and is driven by optimization or probabilistic filters, for instance graph optimization, Particle Filters or Extended Kalman Filters (EKF) (Cadena et al., 2016). 
+A second set of approaches to SLAM has been based on inspiration from biological mapping and localization systems. 
+These biologically inspired methods also fall into two classes. 
+One set of approaches is based on the navigational behaviour strategies of ants, bees and insects (Sabo et al., 2016, 2017; Stone et al., 2016; Dupeyroux et al., 2019). 
+Another set of approaches is based on neural navigational mechanisms. 
+In this paper, we mainly focus on the approaches based on 3D neural navigational mechanisms. 
+In the following sections we review both conventional 3D visual SLAM and prior brain-inspired SLAM systems.
+
+
+\subsection{Conventional 3D visual SLAM}
+\hspace{1pc}The robot must build up a 3D spatial map to navigate effectively in 3D environments. 
+Generally, four classes of spatial representation, including geometrical, topological, semantic and hybrid maps, are used in modelling spaces. 
+In recent years, a popular and essential topic has been 3D visual SLAM due to the decreasing cost of cameras and the similarity to mammalian 3D visual perception (Milford, 2013; Welchman, 2016; Naseer et al., 2018). 
+Monocular, stereo, omnidirectional, RGB-D cameras and 3D laser range finders are among the well-known sensors used for 3D SLAM (Faessler et al., 2016; Saputra et al., 2018). 
+Some advanced approaches to 3D visual SLAM and 3D visual odometry are shown in Table 1 and 2. Noticeable approaches include ORB-SLAM (Mur-Artal and Tardos, 2017; Mur-Artal et al., ´ 2015), PTAM (Klein and Murray, 2007), LSD-SLAM (Engel et al., 2014), SVO (Forster et al., 2014, 2017), and DSO (Engel et al., 2018). 
+Recently, some novel approaches have been proposed based on biologically analogous event cameras, such as EVO (Rebecq et al., 2017) and event camera based SLAM (Vidal et al., 2018).
+
+
+In addition, some approaches have focused on the loop closure component of the SLAM problem, such as FrameSLAM (Konolige and Agrawal, 2008), FAB-MAP (Cummins and Newman, 2008; Paul and Newman, 2010), SeqSLAM (Milford and Wyeth, 2012), and CAT-SLAM (Maddern et al., 2012). 
+More details about place recognition and loop closure can be found in the survey paper by Lowry et al. (2016).
+
+
+Many state-of-the-art SLAM solutions for building spatial maps work well in static, structured and 3D environments (Cadena et al., 2016). 
+In order to estimate 3D pose of the robot in large 3D environments, many optimization and filter algorithms have been proposed. 
+However, many of these algorithms require significant computational resources, costly sensors, and the assumption of static environments. 
+Furthermore, bad data association often impairs their application to complex 3D environments (Cadena et al., 2016; Bellingham et al., 2018). 
+Overall, the SLAM in unstructured, large scale and 3D open environments is still an open challenging problem. We investigate the feasibility of a bioinspired, hybrid spatial representation approach combining topological and metric information for 3D environments in this study.
+
+
+
+
+\subsection{Brain-inspired SLAM}
+\hspace{1pc}Mammalian animals can find food, return to their nest, and find social mates by using their navigation capabilities. 
+With the discovery of and improvements in our understanding of neural mechanisms in the brain, some navigational neural network models have been developed and applied into the robot navigation in 2D areas. 
+For instance, a navigational computational model of head-direction cells and place cells was developed, which was deployed on Khepera robot operating in a small 2D area (Arleo and Gerstner, 2000). 
+In addition, a robot architecture with the capability of spatial navigation was developed by Barrera and Weitzenfeld (2008). 
+In order to support large scale persistent navigation and mapping, a bio-inspired SLAM model, called RatSLAM, was developed (Milford et al., 2004; Milford and Wyeth, 2008, 2010). 
+The model loosely imitates parts of the rodent brain. RatSLAM has successfully mapped an entire suburb in a 2D map, and navigated in a 2D office environment over two weeks.
+
+
+Most recent expansional approaches based on the RatSLAM model have been developed, such as BatSLAM (Steckel and Peremans, 2013) using the sonar sensing modality. 
+Tang et al. (2018) integrated an episodic memory module for processing the context in navigational tasks. 
+Furthermore, Milford et al. (2011a) and Milford et al. (2011b) improved the vision system to solve SLAM problem in 2.5D environments without changing the core model of RatSLAM. 
+Silveira et al. (2013) and Silveira et al. (2015) explored the SLAM problem in a 3D underwater environment by expanding the RatSLAM model using a 3D place cell model, but they do not represent metric and directional information.
+
+
+In addition, some novel models and approaches have been developed based on place cells (PC), head direction cells (HDC) and grid cells (GC) with various types of neural networks, such as continuous attractor neural networks (CANN), deep neural networks (DNN) and spiking neural networks (SNN), as shown in Table 3. 
+Several approaches have used novel sensors, such as event-based camera and RGB-D sensors, as well as neuromorphic hardware, such as Kreiser et al. (2018a) and Kreiser et al. (2018b).
+
+
+Many approaches inspired by the spatial representation in the brain have been developed for 2D SLAM in robots. 
+However, few if any have tackled the challenging problem of 3D SLAM in challenging real-world environments based on the 3D spatial neural representation in the mammalian brain. 
+Until relatively recently, this focus on 2D has surely been in part due to relatively little being known about the neural substrates underlying 3D navigation. 
+However, recent discoveries of 3D navigational neural representation in flying bats and the human brain have provided some new sources of inspiration for modellers and roboticists. 
+In this paper, we focus on developing a neural model for 3D spatial representation in order to provide a bio-inspired SLAM capability in 3D environments.
+
+
+\section{3D spatial representation in the mammalian brain}
+
+In this section, we describe the current understanding of 3D spatial neural representation in the brain and provide some background context for the NeuroSLAM model. 
+After brief review of some key navigational neural cells in the brain, we mainly describe the properties of the 3D grid cells and the head direction cells. 
+We then describe the multidimensional attractor neural network we have developed to model the 3D grid cells and the multilayered head direction cells.
+
+
+Neuroscientists have discovered some neural basis of neural spatial representation in the mammalian brain which can support 2D navigation (Moser et al., 2017). 
+However, many animals are able to navigate in 3D space, but until recently, we still knew very little about 3D spatial representation in the mammalian brain. 
+In recent years, neuroscientists have found some neural basis of 3D navigational neural representation in freely flying bats and rats, including 3D place cells (Yartsev and Ulanovsky, 2013; Wohlge muth et al., 2018), 3D head direction cells (Finkelstein et al., 2015; Laurens et al., 2016; Page et al., 2018; Shinder and Taube, 2019) and 3D grid cells (Finkelstein et al., 2016; Casali et al., 2019). 
+In addition, the latest investigations have shown that 3D place cells, 3D head direction cells and 3D grid cells exist in the human brain (Kim et al., 2017; Kim and Maguire, 2018a,b, 2019). 
+The 3D place cells discharge selectively when mammals pass through a certain 3D spatial location, which form a metric map in all three dimensions (Yartsev and Ulanovsky, 2013; Finkelstein et al., 2016). 
+The 3D head direction cells respond to a particular combination of azimuth x pitch thus representing the direction of the head vector in 3D space (Finkelstein et al., 2015, 2016). 
+The 3D grid cells would exhibit regular 3D lattice pattern, which represent 3D position, direction and metric information for 3D path integration (Finkelstein et al., 2016; Jeffery et al., 2015). 
+Jeffery et al. (2015) and Hayman et al. (2015) presented several mathematical models of these 3D spatial neural cells and analyzed the properties and constraints in representing 3D space. 
+Page et al. (2018) proposed a 3D rotation rule with dual-axis for representing 3D head direction. Casali et al. (2019) found the spatial encoding properties of the grid cells in vertical space. 
+Soman et al. (2018) modeled the 3D spatial neural cells based on a hierarchical network. In this paper, we represent the 4DoF pose by combining models of 3D grid cells and head direction cells. 
+The properties of these cells are described in the following section.
+
+
+\subsection{3D grid cells}
+
+Grid cells are a type of neurons in the mammalian brain which have a periodic hexagonal pattern of firing fields. 
+This property is independent of the direction and speed of a moving animal (Hafting et al., 2005). 
+Neuroscientists thereby thought that grid cells can provide a metric spatial representation for navigation. 
+Furthermore, some investigation revealed that the grid cell network may perform a path integration based on self-motion cumulatively (Hafting et al., 2005; Burak and Fiete, 2009). 
+Recently, Finkelstein et al. (2016) predicted that 3D grid cells existing in the bat brain. Kim and Maguire (2019) provided some key evidence for the existence of 3D grid cells in the human brain. 
+The models of the hexagonal close packing (HCP) and the face-centred cubic lattice (FCC) are proposed to organize 3D grid cells (Jeffery et al., 2013, 2015; Horiuchi and Moss, 2015; Laurens and Angelaki, 2018; Kim and Maguire, 2019). 
+In this paper, we use the 3D grid cell model to represent 3D position and metric information for 3D path integration.
+
+
+\subsection{Head direction cells}
+
+Head direction cells are a type of neurons in the mammalian brain. 
+They can discharge when the animal is oriented in a particular direction (Taube et al., 1990). 
+Additionally, the latest study revealed that 3D head direction cells can represent the direction of the animal with yaw, pitch, roll or their combination in 3D space (Finkelstein et al., 2015, 2018; Kim and Maguire, 2018b). 
+Some experiments (Stackman et al., 2000) have shown that the head direction cells can represent global direction information during 3D navigation in distinct floors. 
+In this paper, we only take azimuth into consideration for representing a 4DoF pose, and a multilayered head direction cell model is used to represent the robotic orientation.
+
+
+\subsection{Multidimensional continuous attractor network}
+
+Multidimensional continuous attractor network (MD-CAN) is a significant approach to modeling spatial neural cells (Samsonovich and McNaughton, 1997; Burak and Fiete, 2009; Mulas et al., 2016; Jeffery et al., 2016; Laurens and Angelaki, 2018). 
+The MD-CAN is a type of neural network with weighted excitatory and inhibitory connections (ShipstonSharman et al., 2016). 
+The MD-CAN has many recurrent connections which cause the network to converge over time to certain stable states (attractors, activity packets or bumps) in the absence of external input (Milford and Wyeth, 2008). 
+The MD-CAN operates by updating the neural activity. Unlike most neural networks, it does not change the value of the weighted connections (Milford and Wyeth, 2010). 
+Each neural unit in the MD-CAN has a continuous activation value between zero and one. 
+When the robot approaches a spatial location, the activation value of the associated neural unit increases. 
+Their properties are significantly different from the usual probabilistic representations found in conventional SLAM algorithms. 
+In this study, the 2D MD-CAN and 3D MD-CAN are used to represent the multilayered head direction cell model and 3D grid cell model respectively.
+
