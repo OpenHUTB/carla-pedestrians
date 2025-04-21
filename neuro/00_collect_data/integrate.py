@@ -24,6 +24,7 @@
 
 import numpy as np
 
+
 class imu_integrate:
     # State : A column vector with [x_pos, y_pos, yaw, x_vel, y_vel]    
     def __init__(self, init_state, init_time):

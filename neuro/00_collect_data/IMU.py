@@ -39,7 +39,7 @@ d = a.world.debug
 # 生成车辆和传感器
 a.spawn_vehicle(1)
 
-# Sometimes autopilot is not engaged
+# 有时自动驾驶仪未启动
 a.vehicle.set_autopilot(True)
 
 # 为传感器重置数据内存
@@ -48,14 +48,17 @@ gnss_list = []
 real_pos = []
 
 
+# IMU 数据监听
 def imu_listener(data):
     if (len(imu_list) < imu_len):
         accel = data.accelerometer
         gyro = data.gyroscope
 
         imu_list.append(((accel.x, accel.y, accel.z), (gyro.x, gyro.y, gyro.z), data.timestamp))
+        print(accel)
 
 
+# 全球导航卫星系统 数据监听
 def gnss_listener(data):
     if (len(gnss_list) < gnss_len):
         x, y, z = a.gnss_to_xyz(data)
@@ -65,12 +68,13 @@ def gnss_listener(data):
         real_pos.append(((rpos.x, rpos.y, rpos.z), data.timestamp))
 
 
-# Spawn sensors and set autopilot
+# 生成传感器
 a.spawn_imu(imu_per, imu_std_dev_a, imu_std_dev_g)
 a.imu_reg_callback(imu_listener)
 a.spawn_gnss(gnss_per, gnss_std_dev_geo)
 a.gnss_reg_callback(gnss_listener)
 
+# 设置自动驾驶模式
 a.vehicle.set_autopilot(True)
 
 init_vel = a.vehicle.get_velocity()

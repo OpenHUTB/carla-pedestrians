@@ -66,6 +66,53 @@ image_h = rgb_camera_bp.get_attribute("image_size_y").as_int()
 rgb_image_queue = queue.Queue()
 camera.listen(lambda image: camera_callback(image, rgb_image_queue))
 
+
+## IMU 数据获取
+# 定义 IMU 刷新速率和对应等待时间（两次数据的最小间隔时间）
+imu_rate  = 60  # 采样率
+imu_per   = 1 / imu_rate  # IMU period
+
+# 保存结果的时间
+save_time = 100
+
+# 保存数据所需的列表长度
+imu_len   = save_time * imu_rate
+
+imu_std_dev_a     = 0.1      # IMU 加速度计 accel 标准差： 0.1
+imu_std_dev_g     = 0.001    # gyro 陀螺仪
+
+# 为传感器重置数据内存
+imu_list = []
+real_pos = []
+
+
+# IMU 数据监听
+def imu_listener(data):
+    if (len(imu_list) < imu_len):
+        accel = data.accelerometer
+        gyro = data.gyroscope
+
+        imu_list.append(((accel.x, accel.y, accel.z), (gyro.x, gyro.y, gyro.z), data.timestamp))
+        print(accel)
+
+
+# 生成 1 个 IMU 传感器
+imu_bp = world.get_blueprint_library().find("sensor.other.imu")
+imu_bp.set_attribute('sensor_tick', '0.1')
+imu_bp.set_attribute('noise_accel_stddev_y', str(imu_std_dev_a))
+imu_bp.set_attribute('noise_accel_stddev_x', str(imu_std_dev_a))
+imu_bp.set_attribute('noise_accel_stddev_z', str(imu_std_dev_a))
+imu_bp.set_attribute('noise_gyro_stddev_y',  str(imu_std_dev_g))
+imu_bp.set_attribute('noise_gyro_stddev_x',  str(imu_std_dev_g))
+imu_bp.set_attribute('noise_gyro_stddev_z',  str(imu_std_dev_g))
+# imu_tf = carla.Transform(carla.Location(0,0,0), carla.Rotation(0,0,0))
+
+# 生成传感器 Spawning the sensor and appending to list
+imu_sensor = world.spawn_actor(imu_bp, camera_init_trans, attach_to=vehicle)
+imu_sensor.listen(imu_listener)
+
+
+
 # 为了渲染的 OpenCV 命名窗口
 cv2.namedWindow('RGB Camera', cv2.WINDOW_AUTOSIZE)
 
