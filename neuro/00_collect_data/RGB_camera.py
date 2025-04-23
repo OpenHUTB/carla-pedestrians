@@ -6,6 +6,7 @@ import carla
 
 import random
 import queue
+import time
 
 import cv2
 import numpy as np
@@ -17,11 +18,17 @@ import numpy as np
 client = carla.Client('localhost', 2000)
 world = client.get_world()
 
+# 设置仿真器到同步模式
+# settings = world.get_settings()
+# settings.synchronous_mode = True  # 启用同步模式
+# settings.fixed_delta_seconds = 0.05
+# world.apply_settings(settings)
+
 
 # 获取世界中所有交通灯
 traffic_lights = world.get_actors().filter('traffic.traffic_light*')
 
-# 将所有交通灯设置为绿灯
+# 将所有交通灯设置为绿灯（为了防止在收集数据过程中车辆的停顿）
 for tl in traffic_lights:
     tl.set_state(carla.TrafficLightState.Green)
     tl.freeze(True)  # 冻结状态，防止自动变化
@@ -38,7 +45,7 @@ spawn_points = world.get_map().get_spawn_points()
 vehicle = world.try_spawn_actor(vehicle_bp, random.choice(spawn_points))
 
 # 自动驾驶
-vehicle.set_autopilot(True) 
+vehicle.set_autopilot(True)
 
 # 获得世界的观察者
 spectator = world.get_spectator() 
@@ -73,7 +80,7 @@ imu_rate  = 60  # 采样率
 imu_per   = 1 / imu_rate  # IMU period
 
 # 保存结果的时间
-save_time = 100
+save_time = 100000
 
 # 保存数据所需的列表长度
 imu_len   = save_time * imu_rate
@@ -87,13 +94,14 @@ real_pos = []
 
 
 # IMU 数据监听
-def imu_listener(data):
+def imu_listener(data, imu_queue):
     if (len(imu_list) < imu_len):
         accel = data.accelerometer
         gyro = data.gyroscope
 
         imu_list.append(((accel.x, accel.y, accel.z), (gyro.x, gyro.y, gyro.z), data.timestamp))
-        print(accel)
+        imu_queue.put(data)
+        # print(accel)
 
 
 # 生成 1 个 IMU 传感器
@@ -107,10 +115,15 @@ imu_bp.set_attribute('noise_gyro_stddev_x',  str(imu_std_dev_g))
 imu_bp.set_attribute('noise_gyro_stddev_z',  str(imu_std_dev_g))
 # imu_tf = carla.Transform(carla.Location(0,0,0), carla.Rotation(0,0,0))
 
+
 # 生成传感器 Spawning the sensor and appending to list
 imu_sensor = world.spawn_actor(imu_bp, camera_init_trans, attach_to=vehicle)
-imu_sensor.listen(imu_listener)
 
+# 开始IMU记录
+imu_queue = queue.Queue()
+# imu_sensor.listen(lambda image: camera_callback(image, rgb_image_queue))
+imu_sensor.listen(lambda imu: imu_listener(imu, imu_queue))
+# imu_sensor.listen(imu_listener)
 
 
 # 为了渲染的 OpenCV 命名窗口
@@ -162,14 +175,19 @@ while True:
         transform = carla.Transform(vehicle.get_transform().transform(carla.Location(x=-4, z=50)), carla.Rotation(yaw=-180, pitch=-90))
         spectator.set_transform(transform)
 
-        cur_img = rgb_image_queue.get()
+        if not rgb_image_queue.empty():
+            cur_img = rgb_image_queue.get()
         # 显示 RGB 相机图像
-        cv2.imshow('RGB Camera', cur_img)
+            cv2.imshow('RGB Camera', cur_img)
 
-        img_idx = img_idx + 1
-        if img_idx % 5 == 0:
-            save_idx = save_idx + 1
-            save_image_with_resolution_cv(cur_img, f"{output_dir}{save_idx:04d}.png", 160, 120)
+            img_idx = img_idx + 1
+            if img_idx % 5 == 0:
+                save_idx = save_idx + 1
+                save_image_with_resolution_cv(cur_img, f"{output_dir}{save_idx:04d}.png", 160, 120)
+
+        if not imu_queue.empty():
+            cur_imu = imu_queue.get()
+            print(cur_imu)
 
         if save_idx >= 5000:
             break
@@ -178,7 +196,14 @@ while True:
         if cv2.waitKey(1) == ord('q'):
             clear()
             break
+        # time.sleep(0.005)
+        # world.tick()
 
     except KeyboardInterrupt as e:
+        settings = world.get_settings()
+        settings.synchronous_mode = False  # 禁用异步模式
+        settings.fixed_delta_seconds = None
+        world.apply_settings(settings)
+
         clear()
         break
