@@ -24,15 +24,15 @@ function [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz] = load_ground_truth_da
 %     You should have received a copy of the GNU General Public License
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-%% Import data from text file.
+%% 从文本文件中导入数据
     % Script for importing data from the following text file:
 
 
-    %% Initialize variables.
+    %% 初始变量
     delimiter = ',';
     startRow = 1;
 
-    %% Format string for each line of text:
+    %% 每一行文档的字符串格式：
     %   column1: double (%d)
     %	column2: double (%f)
     %   column3: double (%f)

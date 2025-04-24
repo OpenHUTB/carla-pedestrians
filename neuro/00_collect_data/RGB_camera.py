@@ -154,6 +154,12 @@ def save_image_with_resolution_cv(input_img, output_path, target_width, target_h
     print(f"图片已保存为 {target_width}x{target_height} 分辨率到 {output_path}")
 
 
+def save_IMU_to_file(file_name, contents):
+    with open(file_name, 'a+') as fh:
+        fh.write(contents)
+        fh.close()
+
+
 # 经过多少帧的id
 img_idx = 0
 # 保存图片的id
@@ -188,6 +194,10 @@ while True:
         if not imu_queue.empty():
             cur_imu = imu_queue.get()
             print(cur_imu)
+            save_IMU_to_file(f"{output_dir}IMU.txt", "%d, %5f, %5f, %5f, %5f, %5f, %5f, %5f\n" % (cur_imu.frame, cur_imu.timestamp,
+                cur_imu.accelerometer.x, cur_imu.accelerometer.y, cur_imu.accelerometer.z,
+                cur_imu.gyroscope.x, cur_imu.gyroscope.y, cur_imu.gyroscope.z)
+                             )
 
         if save_idx >= 5000:
             break

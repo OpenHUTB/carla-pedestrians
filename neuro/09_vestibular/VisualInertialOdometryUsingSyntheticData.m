@@ -23,7 +23,7 @@
 % 车辆的真实姿态显示为实心蓝色长方体。估计姿态显示为透明蓝色长方体。
 % 请注意，由于真实姿态和估计姿态存在重叠，因此估计姿态未出现在初始可视化中。
 %
-% 使用 System object 生成地面车辆的基线轨迹waypointTrajectory。
+% 使用 System object 生成地面车辆的基线轨迹 waypointTrajectory。
 % 注意，由于需要车辆的加速度，因此使用 waypointTrajectory 代替 drivingScenario/trajectory。
 % 该轨迹使用一组航路点、到达时间和速度，以指定的采样率生成。
 
@@ -85,7 +85,7 @@ helperPopulateScene(scene, groundTruthVehicle);
 % 然后，使用新的误差状态更新状态，并重置误差状态。
 
 filt = insfilterErrorState('IMUSampleRate', sampleRate, ...
-    'ReferenceFrame', 'ENU')
+    'ReferenceFrame', 'ENU');
 % 设置初始状态和错误状态协方差。
 helperInitialize(filt, traj);
 
@@ -146,7 +146,7 @@ numCameraSamples = ceil(numIMUSamples / imuSamplesPerCamera);
     posEst, orientEst, velEst] ...
     = helperPreallocateData(numIMUSamples, numCameraSamples);
 
-% 为视觉里程计融合设置测量噪声参数。
+% 为视觉里程计融合设置测量噪声参数
 RposVO = 0.1;
 RorientVO = 0.1;
 
@@ -256,10 +256,10 @@ end
 %%
 % *|helperInitialize|*
 %
-% 设置融合滤波器的初始状态和协方差值。
+% 设置融合滤波器的初始状态和协方差值
 function helperInitialize(filt, traj)
 
-% 从轨迹对象中检索初始位置、方向和速度并重置内部状态。
+% 从轨迹对象中检索初始位置、方向和速度并重置内部状态
 [pos, orient, vel] = traj();
 reset(traj);
 
@@ -268,8 +268,8 @@ filt.State(1:4) = compact(orient(1)).';
 filt.State(5:7) = pos(1,:).';
 filt.State(8:10) = vel(1,:).';
 
-% 将陀螺仪偏差和视觉里程计尺度因子协方差设置为对应于低置信度的大值。
-filt.StateCovariance(10:12,10:12) = 1e6;
+% 将陀螺仪方差和视觉里程计尺度因子协方差设置为对应于低置信度的大值。
+filt.StateCovariance(10:12, 10:12) = 1e6;
 filt.StateCovariance(end) = 2e2;
 end
 
