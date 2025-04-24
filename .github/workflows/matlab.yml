@@ -16,4 +16,4 @@ jobs:
       - name: Run script
         uses: matlab-actions/run-command@v2
         with:
-          command: test_action.m
+          command: test_action
