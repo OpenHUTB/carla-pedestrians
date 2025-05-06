@@ -595,7 +595,7 @@ We can determine the $\sigma^h$ empirically.
 \end{equation}
 
 
-\textbf{Estimating translational velocity}
+\noindent \textbf{Estimating translational velocity}
 
 Translational velocity is calculated by comparing profile difference in column dimension using a set of consecutive sub-images.
 \begin{equation}
@@ -603,9 +603,9 @@ Translational velocity is calculated by comparing profile difference in column d
 \end{equation}
 where the constant $\mu$ is determined empirically for scaling physical speed. 
 In order to reduce the estimation error of translational velocity, we set a maximum threshold vmax for filtering unusual values of profile difference.
+\\
 
-
-\textbf{Estimating height change velocity}
+\noindent \textbf{Estimating height change velocity}
 
 The height change velocity is estimated based on a set of consecutive sub-images by comparing their profile difference in row dimension. 
 Firstly, the current image is cropped with the offset $s_m^h$ at the best match of yaw estimate in order to reduce the effects of yaw rotation. 
@@ -613,6 +613,38 @@ As shown in Fig. 8, the red dotted rectangle area should be cropped.
 
 
 The intensity difference $d()$ between $I^i$ and $I^{i+1}$ is calculated by
+\begin{equation}
+	\begin{aligned}
+		& d(I^i, I^{i+1}, s_m^h, s^v) \\
+		& = \frac{1}{h - |s^v|}
+			( \sum_{m=1}^{h-|s^v|} | I_{m+\text{max}(s^v,0)}^{i+1} - I_{m - \text{min}(s^v, 0)} ^i | ) \\
+		& I = \sum_{j=1}^{w-|s_m^h|} I_j'
+	\end{aligned}
+\end{equation}
+where $ s_m^h $ and $ s^v $ are offsets in column and row dimension respectively.
+$ h $ is the height of the sub-image.
+$ w $ is the width of the sub-image.
+The $ d_m $ is the intensity difference in a set of consecutive images images at the minimum offset.
+
+\begin{equation}
+	\begin{aligned}
+		& d_m = \min\limits_{s_m^h \in [\rho^h - w, w - \rho^h] \atop s^v \in [ \rho^v - h, h - \rho^v ] } \\
+		& v_h = \min [\mu d_m, v_{\max}^h]
+	\end{aligned}
+\end{equation}
+where the constant, $ \mu $, is calculated empirically for scaling physical speed.
+\\
+
+\noindent \textbf{Local view cell calculation}
+
+Each local view is paired with a visual template.
+When seeing a familiar scene, the local view cell associated with that view is activated.
+The visual templates are calculated and sotred using the scanline intensity profile, as shown in Fig.9.
+We set a threshold to control the generation of the templates.
+If the profile difference is less than the threshold, the current profile is matched to the templated.
+Otherwise a new template is created.
+For more details about visual template matching algorithm see.
+
 
 
 

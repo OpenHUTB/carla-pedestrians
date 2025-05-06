@@ -116,7 +116,7 @@ imu_bp.set_attribute('noise_gyro_stddev_z',  str(imu_std_dev_g))
 # imu_tf = carla.Transform(carla.Location(0,0,0), carla.Rotation(0,0,0))
 
 
-# 生成传感器 Spawning the sensor and appending to list
+# 生成传感器并添加到列表
 imu_sensor = world.spawn_actor(imu_bp, camera_init_trans, attach_to=vehicle)
 
 # 开始IMU记录
@@ -183,7 +183,7 @@ while True:
 
         if not rgb_image_queue.empty():
             cur_img = rgb_image_queue.get()
-        # 显示 RGB 相机图像
+            # 显示 RGB 相机图像
             cv2.imshow('RGB Camera', cur_img)
 
             img_idx = img_idx + 1

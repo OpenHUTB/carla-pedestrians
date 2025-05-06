@@ -1,87 +1,150 @@
-\section{Experiment}
-%\begin{figure}[t]
-%	\centering
-%	%\fbox{\rule{0pt}{2in} \rule{0.9\linewidth}{0pt}}
-%	\includegraphics[width=0.8\linewidth]{experiment.png}
-%	
-%	\caption{Assessing the Similarity Between Network Activation and Brain Activation.}
-%	\label{fig:fig3}
-%\end{figure}
-%\label{sec:experiment}
+\section{Experiment setup}
 
-\subsection{Datasets} \label{sec:Dataset}
-
-\hspace{1pc}We conduct training and testing on Carla~\cite{Dosovitskiy:2017},
-and assess the proposed BID model using existing standard datasets\cite{codevilla2019exploring}. 
-Each dataset specifies its own training scenes and weather conditions for data collection, 
-and tests the BID's performance in scenes never seen before. 
-In behavior cloning dataset\cite{codevilla2019exploring}, they focuses on transfer ability from Town01, a small scene with numerous T junctions and a variety of buildings, to Town02, a variant of Town01 with a mixture of residential and commercial buildings.
-The offical test suit presents a challenging transfer problem across 6 scenes with various scenarios, including stop signs, lane changes, US-style junctions and roundabouts.
-Based on the behavior cloning dataset~\cite{codevilla2019exploring}, we test the transfer ability between different weather conditions, though only two training weather types are evaluated to save computational resources. 
-The behavior cloning benchmark includes three actor amount levels for each scene from less to more. 
-A crowded configuration in behavior cloning is utilized, which uses a suitable number of actors to prevent typical jam with a large number of actors. 
-In the offical test suit, we adjust actor number to meet the requirement of configuration. 
+In this section, we describe the four groups of datasets and the experimental parameters for evaluating the NeuroSLAM performance.
+To evaluate the system performance in various conditions, we constructed two groups of synthetic datasets, named SynPerData and SynPanData, using perspective camera and panoramic camera respectively in synthetic 3D urban environments.
+We also collected a group of real-world datasets in a 3D carpark, named QUTCarparkData, for evaluating the system in real-world environments.
+In addition, in order to demonstrate 3D mapping performance, we use one of maplab datasets (cla-floor-f).
+This dataset was collected in a multi-level building.
+It contains consecutive images collected by monocular camera and IMU sensor data.
+The properties of the datasets are shown in Table 4.
+The datasets and code available at \href{https://github.com/OpenHUTB/carla-pedestrians}{https://github.com/OpenHUTB/carla-pedestrians}.
+The key parameters of each module are described in the following.
+At the end of this section, we analyzed the effects of these parameters on the system performance.
 
 
-% CILv2
-As with the newest state-of-art model, we use the driving expert driver referred to reinforcement learning imitation~\cite{Zhang:2021} using online dataset with simulator.
-This end-to-end method with reinforced feature exhibits very real action compared to a well-designed model in traffic scene. 
-It is important to notice that the hoiminine driving demonstration will be used as training data in real world tests.
-The standard configuration in~\cite{Zhang:2021} is used, which means that it is similar to the student driver in RL-Coach\cite{Zhang:2021} and MBI~\cite{Hu:2022}, the driving agent is the model found in simulator.
-The frame from all the 3 horizontally concatenated vehicle-based RGB image sensors is 900 wide and 300 high, with a field of view of $180^{\circ}$.
-The cameras are arranged without overlap, collectively covering a total filed of field.
+\subsection{Synthetic datasets acquisition} \label{sec:Dataset}
+
+\hspace{1pc}To generate photorealistic synthetic images, we use the Cycles raytracing engine implemented in Blender.
+Furthermore, in order to get wide-angle images, we used a panoramic camera model implemented in Blender by Zhang et al.(2016).
+We generated two groups of datasets where the camera traversed at least two circles across trajectories with the same or opposite (direction) viewpoint in 3D urban environments.
+The SynPerData was produced with a perspective camera model for testing the system performance with monocular camera.
+The SynPanData was used for testing the system performance with a panoramic camera.
+The snapshots of 3D trajectory and scenes are shown in Fig.10.
+All datasets include 8000 consecutive scene images.
+We extracted the 4DoF poses of camera from the ground truth trajectories for evaluating the performance of mapping.
 
 
-Using the experienced agent, vehicle-based cameras and hero vehicle, driving data is collected in progressively more crowed scenarios.
-Firstly, data is collected in Carla's Town01, a small scene that allows contains one lane merely, meaning we can't change lanes.
-% 中午、傍晚、大雨的中午、潮湿的中午
-Specifically, 1620K frames approximately at 10 fps from vehicle-based RGB sensor is utilized on 4 different learning weather types.
-%: ClearNoon, ClearSunset, HardRainNoon, and WetNoon. 
-% 测试：Town02 细雨的傍晚、潮湿的傍晚
-For generalization testing, we use Carla's Town02, evaluating the agent under SoftRainSunset and WetSunset weather conditions. 
-Next, the benchmark is collected on several simulator scene to capture crowed driving scenes, such as T junctions, highway entrances, exits, and crossing the intersections. 
-To maintain consistency with setup in MBI~\cite{Hu:2022}, Town05 is reserved for testing, and totaling approximately 2,100K image per sensor is gathered at 10 fps in Town01 to Town06. 
-%In Town01 and Town02, both training and testing weather conditions remain the same.
+\subsection{Real-world dataset acquisition}
+
+In order to evaluate the NeuroSLAM performance in a real-world 3D environment, we collected the QUTCarParkData over a two level carpak consisting of indoor and outdoor parts on a university campus, as shown in Fig.11.
+A smooth slope connects these two levels.
+We gathered the image dataset using a commodity smartphone camera in the carpark.
+The smartphone was deployed in the front of the bike.
+We drove the bike through the car park for over 2 laps. 
+The total distance traversed was approximately 600m.
+There are 12583 480$ \times $270 pixel images, comprising about 2.1GB of imagery.
+
+
+\subsection{Experimental parameter setting}
+Table 5-9 give the parameters and their values in the NeuroSLAM system.
+The principles and rules of tuning parameters in our system based on Ball et al.(2013).
+
+
+The NeuroSLAM system performance is dependent on the tuning of serveral parameters of local view cells, the 3D grid cells, and the multilayered head direction cells.
+The energy input of visual calibration and the tuning of inhibition for these conjunctive cells also have an effect on 3D mapping performance.
+If the energy input from familiar visual calibration or the value of inhibition is too high, the attractor network dynamics may be unstable.
+In our experiments, the values of excitation, inhibition and visual calibration are given in Table 5 and Table 6.
+These parameters enable the system operating robustly in various environments.
+
+
+In addition, the maximum visual template distance threshold $ d_m $ is essential to affect the performance of visual template matching.
+If the threshold is too high, it will cause too many false visual template matches.
+The visual template parameters are given in Table 7.
+
+
+The 3D mapping performance is also affected by some other parameters.
+An appropriate correction rate is important for reliable loop closure in the multilayered experience map correction process.
+The experience threshold is essential to affect experience matching performance.
+The experience map parameters are given in Table 8.
+In addition, the maximum yaw rotational velocity, translational velocity, and height change velocity were used to reduce the error of velocity estimation.
+Table 9 gives the 3D visual odometry parameters.
+
+
+In the experiments based on the cla-floor-f dataset, most of the key parameters of the 3D grid cell network, the multilayered head direction cell network, the local view cells and the multilayered experience map are same as the parameters based on the SynPerData except the threshold of local view and experience map.
+The $ d_m $ of local view cell is 0.28.
+The $ S_{max} $ of the multilayered experience map is 40.
 
 
 
-\subsection{Implementation}
+\subsection{Trajectory evaluation metrics}
 
-\hspace{1pc}The AdamW optimizer with a step size of $2 \times 10^{-4}$ at each iteration and weight decay of $0.02$ is utilized to training the BID model. 
-We reduce the learning rate by half at 25, 45, and 70 epochs.
-The batch size is 100, 
-and model training is performed for 100 epochs on a single NVIDIA RTX A6000 GPU.
-
-
-% Cornet详细信息
-In ventral stream, after the input is processed by V2$_\text{COR}$ once, the resulting output is inputted back to V2$_\text{COR}$.
-This process forms a recurrent connection.
-We run V2$_\text{COR}$ and IT$_\text{COR}$ two times, and execute V4$_\text{COR}$ four times repeatedly, respectively.
-This configuration yielded a best model performance based on our evaluation scores.
-Similar to ResNet-50, a convolutional operation is accompanied by layer normalization and a rectified linear unit.
-Layer normalization is unique to each time step.
-The existing description of the ventral pathway does not include the connection that span across different regions, and retinal and lateral geniculate nucleus processing are not explicitly modeled.
+In order to evaluate the mapping performance of our methods quantiatively, we use Absolute Trajectory Error (ATE) and Relative Error (RE) as metrics by computing Root-Mean-Square-Error (RMSE).
+They are commonly used to evaluate the accuracy of odometry or SLAM.
+The ATE can give a single number metric for the position or rotation estimation.
+However, the RE can measure the relative error between sub-trajectories.
+Therefore, we can evaluate the SLAM quality from different aspects by combining the ATE and the RE.
 
 
-% 各种环境下的场景说明
-% Roach_carla0913_fps10_dense_normalcamera_NoCrash_3cam/RouteScenario_0000/rgb_central001215.png
-%\begin{figure}[t]
-%	\centering
-%	\includegraphics[width=1.0\linewidth]{fig/dataset_examples.pdf}
-%	\caption{Top: When the ego-vehicle is driving on the road, even though the triffic light is green, the vehicle in front has stopped, but the ego-vehicle still brakes.
-%		Bottom: When the vehicle is moving and encounters a traffic jam in front, it will automaitcally brake and stop.
-%		The brake command in the figure is displayed in \textcolor{red}{red}.}
-%	\label{fig:command_ambiguous}
-%\end{figure}
+We need to align and match different estimated trajectories with the ground truth trajectory before computing tranlation errors.
+However, trajectory alignment and pose node matching are difficult because there are different numbers of pose nodes in trajectories generated by several types of SLAM systems.
+These pose nodes are not evenly distributed with respect to distance travelled.
+In order to build pose correspondence between the estimated trajectory and the ground truth trajectory correctly, we utilize an approach to key position matching.
+As shown in Fig.S1, we extract specified number of key positions randomly at the turns in order.
+Then, the mean of each group of key positions is calculated.
+Finally, we calculate the ATE and the RE based on the mean of each group of key positions.
+Additionally, we evaluate the accuracy of each pair of key positions by computing translation error.
 
-%\begin{figure}[ht!]
-%	\centering
-%	\includegraphics[width=\linewidth]{fig/structure_analysis.pdf}
-%	\caption{BID architecture analysis. 
-%		We analyse four main factors including the initial step size in ventral pathway, the number of recurrent step in dorsal pathway, the position feature dimension in VPC and the vector embedding dimension in DPC. 
-%		Each row presents how \emph{SR} and \emph{TL} score change based on BID when the hyperparameter changes. }
-%	\label{fig:structure_analysis}
-%\end{figure}
+
+The ATE of key positions is estimated by
+\begin{equation}
+	ATE_{pos} = \sqrt{ \frac{1}{n} \sum_{i=1}^{n} (\Delta p_i)^2 }
+\end{equation}
+where $ \Delta p_i $ represents the difference of 3D distance.
+
+
+The RE of key positions is estimated by
+\begin{equation}
+	RE_{pos} = \sqrt{
+					\frac{1}{m-k+1}
+					\sum_{i=k}^{m}
+					(\Delta p_i)^2
+				}
+\end{equation}
+
+
+
+
+
+\subsection{Results}
+
+In this section, we present the overall 3D mapping results and performance of each module of our system including multilayered experience map, local view cell activity, active experiences, 3D grid cell activity, multilayered head direction cell activity, and visual odometry.
+In addition, we provide the quantitative evaluation by comparing NeuroSLAM with the state-of-the-art 3D visual SLAM system, ORB-SLAM and LDSO.
+Finally, we show the mapping results by integrating NeuroSLAM with VINS-mono, which is a visual inertial odometry based on the monocular camera.
+The videos of the experimental results are available at \href{https://github.com/OpenHUTB/carla-pedestrians}{https://github.com/OpenHUTB/carla-pedestrians}.
+
+
+\subsection{NeuroSLAM results}
+
+Firstly, we show the topologically 3D experience maps produced by the NeuroSLAM system with the three groups of datasets including SynPerData, SynPanData and QUTCarparkData.
+The quantitative comparison between experience map, odometry map and ground truth map for each group of experiment is presented.
+We also analyze the learning and recall results of visual templates and experiences.
+Then, some exemplar snapshots of activity packets in the 3D grid cell network and the multilayered head direction cell network are presented for demonstrating the operational process of the networks.
+At the end of this section, we show some key snapshots of the 3D visual odometry process.
+
+
+\subsubsection{Multilayered experience map}
+
+
+\noindent \textbf{3D mapping results based on the SynPerData}
+
+
+\noindent \textbf{3D mapping results based on the SynPanData}
+
+\noindent \textbf{3D mapping results based on the QUTCarparkData}
+
+
+\subsubsection{Local view cell activity}
+
+
+\subsubsection{3D grid cell activity}
+
+
+
+
+
+
+
+
 
 % 驾驶评估的3个不同数据集（不包含实验结果）
 \subsection{Driving Evaluation}
