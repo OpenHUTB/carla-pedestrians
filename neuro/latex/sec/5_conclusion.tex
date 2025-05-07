@@ -1,6 +1,92 @@
-\section{Conclusion}
+\section{Discussion and conclusion}
 \label{sec:conclusion}
-\hspace{1pc}This paper explores the application of the BID model in brain-inspired autonomous driving. 
-The model is designed to replicate the way information is processed along the brain's visual and decision-making pathways, with the goal of improving the interpretability and robustness of autonomous driving systems by mimicking neural processes. 
-In addition to visual cue perception, the BID model emphasizes optimizing decision-making strategies by simulating the decision-making process of the prefrontal cortex. 
-This approach of mimicking human decision-making helps autonomous driving systems strike a balance between interpretability and precision, particularly in complex traffic scenarios, ultimately enhancing safety and system robustness.
+\hspace{1pc}This paper has presented a novel neuro-inspired mapping system with 4 degrees of freedom for 3D environments known as NeuroSLAM.
+In this system, we modeled the 3D grid cells and the multilayered head direction cells representing the robot's 4DoF pose in 3D environments.
+Similar to the mamalian vision perception capability, the system is noly coupled with a lightweight vision system that provides external visual cues and self-motion cues.
+The system built multilayered experience maps with synthetic and real-world datasets consisting by indoor and outdoor parts.
+The relocalization and loop closure are driven by the multilayered experience map through sequences of familiar visual cues.
+The experimental results demonstrated the system's capability to generate coherent 3D experience maps with consistent topology in simulated and real-world 3D environments, and to process loop closure with significant errors in path integration.
+
+
+The conjunctive pose cell model combines both 3D grid cells and head direction cells, enabling it to represent a robot's 4DoF pose at an arbitrary 3D location in 3D environments.
+It is distinctive from the RatSLAM model which uses pose cells to represent 2D pose $ (x, y, \theta) $.
+We modeled the 3D grid cells and multilayered head direction cell respectively rather than using a type of combined cell model.
+Our conjunctive pose cell model can represent a robot's pose when moving through horizontal and vertical space.
+Comparing with other research (see section 2.2), our model is distinctive and can represent 4DoF pose in 3D space.
+To the best of our knowledge, the novel discovery of head direction cells and 3D grid cells have not been modeled for 3D SLAM so far.
+The NeuroSLAM systems has some explorary value in investigating how 5DoF or 6DoF biologically-plausible SLAM systems could be implemented.
+
+
+In mammals, the functional relationship between head directions cells and 3D grid cells is still not entirely clear.
+In our model, we modeled these two types of cells separately.
+But a speculative connection between 3D grid cells and head direction cells was also proposed.
+The system processed the path integration in a 3D grid cell network using the direction information decoded from the multilayered head direction cell network.
+In order to improve computing efficiency and reduce the complexity of the system, we simplified the neural model.
+We don't build the 3D place cell model.
+However, we represent the functional properties of place cells in the 3D grid cell netwrok and the 3D experience map.
+This model may be helpful to neuroscientists in suggesting experiments for interpreting the neural mechanisms of 3D spatial representation supported by head direction cells and 3D grid cells.
+As shown in the experimental results of 3D grid cells activity and multilayered head direction cells activity, the trajectory of active cells in the 3D grid cell network has similar characters of a regular 3D lattice pattern compared with the 3D FCC model.
+The simplified model of multilayered head direction cells worked well enough for representing 4DoF pose in 3D environment though we didn't take incorporate the 3D head direction cells found in mammals into consideration.
+The 3D head direction cells respond to a particular combination of azimuth x pitch thus representing the direction of the head vector in 3D space.
+Finkelstein et al. proposed a toroidal model for modeling 3D head direction cells.
+The model can only represent yaw and pitch.
+We are looking to expand our model to represent 6DoF pose with complex 3D head direction cells, e.g. a 3D cube head direction network or conjunctive 3D head direction cell network consisting of a toroidal network and a ring network in future work.
+
+
+NeuroSLAM has some advantages over the conventional SLAM methods from the perspective of 3D space encoding, 3D path integration, 3D pose representation, and the performance.
+Firstly, we encode the experience map with the conjunctive code of 3D grid cells, head direction cells, and local view cells, which not only can encode experience robustly but also can keep biological plausibility.
+This encoding method can also reduce false positives and repeately correct loop closure even facing accumulative odometry error.
+When matching familiar places, we use both the threshold of scene similarity and the distance threshold of conjunctive codes of experiences.
+In contrast, the conventional methods encode places only by geometric coordinates and implement familiar place recognition only based on feature matching which are not robust in featureless or dynamic environments particularly.
+Furthermore, NeuroSLAM can reuse existed experiences and add little new experiences when revisiting familiar scenes like humans do.
+However, the conventional methods, e.g. ORB-SLAM and LDSO, generate a lot of pose nodes continuously along trajectories which increases the computational complexity and power cosumption in large environments.
+% 航迹推算
+Secondly, the 3D state estimation by path integration (dead reckoning) is also one of key modules in SLAM systems.
+The conventional SLAM methods are often implemented based on filters or optimization, e.g. ORB-SLAM and LDSO, which assume that the functions of state transition and measurement are linear and the noises and Gaussian noises.
+The performance of the SLAM system based on optimization or based on the Filters, e.g. Kalman Filter, extended Kalman Filter and Particle Filter, also suffers when increasing the number of landmarks.
+All previous landmark estimations are affected with every new added landmark.
+This can be difficult or even infeasible for long term task in large complex environments, where the robot faces a huge amount of landmarks.
+Due to these restrictions, these methods can not capable of performing mapping in real-time, unpredictable environments.
+However, the NeuroSLAM system could enable robots to locate and map their surrounding environments robustly compared to the conventional SLAM methods, since the 3D grid cell model based on the attractor neural network is capable of processing non-linear state estimation by path integration using neural dynamics in extreme unpredictable environments, e.g., light or scenes change, quick motion change.
+The neural dynamics of excitation and inhibition is able to estimate the robot's pose state by combining self-motion and local view cues reliably.
+Thirdly, NeuroSLAM represents a balance between limited 2D RatSLAM type implementations and full 6DoF implementations like ORB-SLAM, NeuroSLAM is in the middle, and exploits constraints that are reasonable (e.g. no roll) for a range of applications that ORB-SLAM doesnt.
+Finally, the NeuroSLAM model can potentially be built based on brain-inspired neuromorphic chip with advantages of low power consumption, high computational efficiency in future work.
+NeuroSLAMs origins in biological inspiration means that it also has the potential to incorporate further discoveries and mechanisms as they are discovered in the mammalian brain.
+For instance, we can integrate the NeuroSLAM system with an episodic memory module to improve the adaptivity in unpredictable environments like human do.
+Overall, these properties enable NeuroSLAM to have competitive performance with conventional methods.
+The brain-inspired methods show the potential to push SLAM to a new level in large, unstructured, unpredictable environments.
+
+
+Although we use a lightweight visual odometry system here that is only capable of generating relatively coarse estimates of motion with 4 degrees of greedom, there is the potential to integrate this model with a full 6DoF visual odometry system from the conventional robotics literature such as LIBVISO2 and a multitude of other equivalent techniques.
+While this may reduce the biological relevance of the results, it will also increase the metric accuracy of the experience maps generated by NeuroSLAM, making it more useful for applications where metric accuracy, especially global metric accuracy, is critical.
+Likewise, future work could improve loop closure robustness to varying environmental conditions and camera viewpoints by incorporating a mroe sophisticated visual place recognition process, for example utilizing semantics and state-of-the-art learnt features.
+
+
+The 3D multilayered experience map generated by the NeuroSLAM system can be learned and generated when the robot visits unknown environments.
+It can also be maintained and updated based on the learning and recalling mechanism incrementally.
+The 3D spatial experience nodes represent 4DoF pose in specific 3D location, and the links contain distance and direction between nodes.
+This metric and topology information can be used for 3D path planning and guidance control in 3D environments.
+It's likely that map maintenance routines, as implemented in prior work could also be deployed here to ensure long-term map stability as well as computation and storage visbility.
+We are looking to test the utility of these experience maps for real robot navigation in future work.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
