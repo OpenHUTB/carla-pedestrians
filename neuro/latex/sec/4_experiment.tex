@@ -123,29 +123,172 @@ At the end of this section, we show some key snapshots of the 3D visual odometry
 
 
 \subsubsection{Multilayered experience map}
+NeuroSLAM, like RatSLAM, does not generate a strictly metric 3D Cartesian spatial map.
+In contrast, it creates a topologically consistent 3D spatial representation with some locally metric information.
+% 拓扑一致性
+Consequently, the typical 3D mapping performance indicator is topological consistency rather than geometric accuracy.
+In order to first analyze the topology consistency of the experience map on a global scale, we have adjusted the scale of experience maps according to the ground truth map without changing their topology.
+
+
+The following shows three groups of multilayered experience maps created by the NeuroSLAM system based on the SynPerData, SynPanData and QUTCarparkData.
+The 3D view and top view of each group of map are shown in the following figures.
+By comparing the odometry map, experience map and ground truth map, the topological consistency is shown more clearly.
+In addition, we quantiatively analyzed the Root-Mean-Square Error (RMSE) of the map by the Absolute Trajectory Error (ATE) and the Relative Error (RE) introduced in Section 5.4.
 
 
 \noindent \textbf{3D mapping results based on the SynPerData}
 
+As shown in Fig.12, the correct and consistent map topology is revealed by comparing the multilayered experience map and the odometry map with the ground truth map.
+After the robot comes back to the familiar lower level from the upper level after completing several loops, the topology is still consistent with the ground truth map due to loop closure and map relaxation processes.
+However, the topological error in the odometry map increases with the distance traversed, due to the odometric drift error, which is shown in Fig.12(b).
+
+
+Though the key performance indicator of NeuroSLAM is topological consistency, we add several new quantitative analyses of geometric accuracy for providing more informative evaluation.
+We provide the quntitative evaluation by computing the ATE and RE.
+Firstly, we extract 19 groups of key positions at the turns in order.
+Each group consists of 5 key positions through 5 trials randomly.
+The mean of each group of key positions is estimated, as shown in Fig.S2.
+We can see from Fig.S2, the majority of the key positions in the NeuroSLAM trajectory are near to the key positions in the ground truth trajectory.
+
+
+Fig.13 shown the translation error of each group of key positions between the multilayered experience map, the odometry map and the ground truth map respectively.
+Both the experience map error and the odometry map error are similar in some key positions because the experience pose is estimated based on the odometry.
+The translation error of the aidvo becomes larger with the increasing distance traversed due to the accumulate error of odometry.
+However, NeuroSLAM is more accurate in the key position set from 15 to 20 because of loop closure and map relaxation processing when revisiting familiar scenes.
+The quantiative results are consistent with the qualitative results in Fig.12 and Fig.S2.
+In order to evaluate the accuracy in overall trajectory, we estimate the ATE of each set of key positions between the NeuroSLAM map, the aidvo map and the ground truth map respectively based on the SynPerData, as shown in Fig.14(a).
+Each box represents the RMSE in a set of key positions, which indicates the translation error through each trajectory.
+NeuroSLAM has higher accuracy than the aidvo in the majority of key positions.
+In the set (1-16) and the set (1-19), the median of NeuroSLAM is also lower than the aidvo.
+The results are consistent with Fig.S2 and Fig.13.
+In addition, we evaluate the RE of each sub-trajectory between the estimated map and the ground truth map based on the SynPerData.
+Fig.14(b) shows the RE of key positions in each sub-trajectory between the NeuroSLAM map, the aidvo map and the ground truth map respectively.
+The NeuroSLAM system has better performance than the aidvo in the majority of the key positions.
+
+
 
 \noindent \textbf{3D mapping results based on the SynPanData}
 
+As shown in Fig.15, the 3D mapping results are presented based on the SynPanData.
+The topology in the multilayered experience map is consistent with the ground truth map.
+The topological error is smaller in the lower level than in the upper level.
+The main reason is that the drift error from visual odometry becomes large in the visually sky-dominated regions;
+the scenes captured by the panoramas camera change minimally with movement.
+Thus the velocity estimation is not accurate.
+The loop closure and relaxation in the multilayered experience map work well when revisiting the familiar scenes from opposing viewpoints, as shown in Fig.15(a) and (b).
+In addition, we also provide the quantitative evaluation by computing the ATE and the RE based on the SynPanData.
+Firstly, we extract 19 groups of key positions at the turns in order.
+Each group consists of 5 key positions through 5 trials randomly.
+The mean of each group of key positions is estimated, as shown in Fig.S3.
+We can see from Fig.S3, the majority of the key positions in the NeuroSLAM trajectory are near to the key positions in the ground truth trajectory.
+
+
+% 轨迹的平移误差
+Fig.16 shows the translation error of each group of key positions between the multilayered experience map, the odometry map and the ground truth map respectively based on the SynPanData.
+The translation error of aidvo increases with the distance traversed due to the accumulate error of odometry.
+However, the error of the NeuroSLAM trajectory in several key positions is small because of loop closure and map relaxation processing when revisting familiar scenes.
+The quantitative results are consistent with the qualitative results in Fig.15 and Fig.S3.
+
+
+Fig.17 (a) shows the ATE of each set of key positions between the NeuroSLAM map, the aidvo map and the ground truth map respectively based on the SynPanData.
+Each box represents the RMSE in a set of key positions, which indicates the translation error through each trajectory.
+NeuroSLAM has similar accuracy to the aidvo in the majority of key positions.
+Moreover, in the set (1-16) and the set (1-19), NeuroSLAM has better performance than the aidvo due to map relaxation processing when revisiting familiar scenes.
+The results are consistent with Fig.S3 and Fig.16.
+
+
+Fig.17(b) shows the RE of key positions in each sub-trajectory between the NeuroSLAM map, the aidvo map and the ground truth respectively based on the SynPanData.
+NeuroSLAM has better performance than the aidvo in the majority of the key positions.
+
+
+
+
+
 \noindent \textbf{3D mapping results based on the QUTCarparkData}
+
+As shown in Fig.18, the 3D mapping results based on the QUTCarparkData are presented.
+We can see from Fig.18 (a) and (b), the overall topology is consistent with the floor plan as shown in Fig.11.
+Due to a lack of accurate ground truth trajectory for this particular experiment, we didn't provide a quantitative evaluation in this case.
+Though the visual odometry has drift erros, the multilayered experience map retains a consistent topology using loop closure and map relaxation when revisiting familiar scenes.
+As shown in Fig.18 (a) and (b), when the robot comes back to the familiar places at the lower level from the upper level after traversing several loops, the recall of familiar experiences eanbles the robot to be relocated to the correct position.
+
+
+Overall, the results of these groups of experiments have shown the topological consistency and geometric accuracy of the multilayered experience maps.
+Though these up-level maps have a slight offset due to the long term odometry drift, the layout of the road network is very close to the ground truth map.
+When the robot revisited a familiar place again, loop closure occurred and the experience map correction and relaxation occurred continually.
+The map correction process worked well during loop closure.
+The visual odometry map without loop closure has slight drift over the long term due to the cumulative errors of odometry.
+After sufficient map relaxation cycles, the multilayered experience map reached a completely stable configuration.
+
 
 
 \subsubsection{Local view cell activity}
 
+Fig.19 indicates visual templates generated with the three groups of datasets.
+% 图片增加，而视觉模板没有增加，表示看到熟悉场景（红色点）
+The dotted line shows the start frame and the end frame during loop closure.
+Periods of no new template additions indicate times when the robot was moving through already learned environments.
+The performance of visual place recognition is good with high recognition rates, especially with SynPerData, as shown in Fig.19 (a).
+Specific to Fig.19 (b), the segments of decreasing template IDs show the robot traversed along a previously learned path in the opposite direction due to the panoramic matching.
+The performance of visual place recognition in real-world is also good as shown in Fig.19 (c).
 
+
+% 看到熟悉的场景（经验）激活
 \subsubsection{Active experiences}
+Fig.20 shows active experiences were learned or recalled when moving through a novel or familiar environments respectively.
+The numbers of experiences in three groups of maps are very close to the numbers of visual templates as shown in Fig.20.
+In Fig.20 (a), (b) and (c), the numbers of experiences learned with the balanced threshold of experience creation are suitable to create a high quality experience map.
+
 
 
 \subsubsection{3D grid cell activity}
 
+% 通过一个平面（或垂直空间）3D网格细胞 打包 激活
+The individual 3D grid cells fired at multiple distinct locations in the 3D environments.
+The wrapping connectivity of the 3D grid cell network encodes the large size of the 3D space by reusing cells.
+Fig.21 shows some snapshots of active 3D grid cells packet when moving through planar and vertical space.
+The active packete moved from the initial position to the right and then wrapped around to the left in the plane, as shown in Fig.21 from (a-1) to (a-5).
+In Fig.21 (b) and (c), the cells in various vertical areas were activated when the camera moved in vertical space.
+
+
+% 历史激活3D网格细胞
+Fig.22 shows the history of the most active cells during mapping with the three groups of datasets.
+Many cells in two planes were activated repeatedly due to the robot moving in the 3D environment for a long duration.
+Some cells encoded the 3D space repeatedly.
+Part of the cells in different height were activated when the robot moved in vertical space, as shown in Fig.22 (a) and (b).
+Due to the variations in spatial scale and size of different testing environments, the activated cells in Fig.22 (c) are relatively sparse compared with the other two groups.
+
+
 
 \subsubsection{Multilayered head direction cell activity}
 
+Fig.23 shows some snapshots of active multilayered head direction cells.
+When the robot moved in a specific planar space, the height was relatively stable, and active cells were shifted across the yaw dimension, as shown in Fig.23 from (a-1) to (a-5).
+% 度分秒：
+% $109^\circ 28^\prime 16^{\prime \prime}$
+The cells at opposing boundaries with wrapping connections can be activated if the accumulated angle is more than 360$^\circ$ or less than -360$ ^\circ $.
+In Fig.23 (b) and (c), the cell in different height were activated when the robot moved through the vertical space.
+The packet was shifted in height dimension.
+
+
+Fig.24 shows the history of the most active multilayered head direction cells.
+Many cells in  various heights were activated when the robot moved in these planes, as shown by the horizontal line in Fig.24.
+Some cells in different height were activated when the camera moved vertically, as shown by the vertical line in Fig.24.
+Due to the variations in spatial scale and size of the vertical spaces, the activated cells at different heights in Fig.24 (c) are relative dense compared with the other two groups.
+
 
 \subsubsection{Visual odometry}
+
+Fig.S4 shows some key snapshots of visual odeometry for estimating translational and rotational velocity during the first lap at the stages of 0$ ^\circ $, -90$ ^\circ $, -180$ ^\circ $, -270$ ^\circ $, -360$ ^\circ $, up and down.
+These velocities were estimated based on the SynPerData.
+The translational velocity was not stable due to sudden changes between successive scenes, as shown in Fig.S4 from (a-1) to (a-7).
+% 光线的突然变化
+We set the max velocity threshold, 0.2, to reduce the effects of scene change suddenly, e.g. sunlight.
+% 垂直速度的改变
+The vision system can estimate height change velocity when moving up and down in vertical space, as shown in Fig.S4 (b-6) and (b-7).
+The rotational velocity was estimated stably, as shown in Fig.S4 from (c-1) and (c-7).
+Fig.S4 (d) and (e) show the accumulated angle and map based on visual odometry.
+
 
 
 
@@ -153,6 +296,20 @@ At the end of this section, we show some key snapshots of the 3D visual odometry
 
 
 \subsection{Comparison with state-of-art 3D SLAM}
+
+In order to evalute the quality and topological consistency of the NeuroSLAM system, we compare our method with two types of state-of-the-art conventional 3D visual SLAM, ORB-SLAM and LDSO based on the SynPerData.
+ORB-SLAM is a feature-based monocular visual SLAM system, which is commonly used for comparison.
+LDSO is a monocular visual SLAM system based on direct sparse visual odometry (DSO), in which the loop closure is implemented based on feature matching.
+
+
+All 3D maps generated from these methods are shown in Fig.25.
+The topology in these maps is consistent with the ground truth map.
+However the map generated from LDSO has large errors due to incorrect estimation during motion up or down the slope.
+If the motion of the camera changes quickly in up and down direction, LDSO has large errors.
+Thus, the results from LDSO have dirft error in several sub-trajectories.
+We can see from Fig.25 (a) that the NeuroSLAM system can generate a map with consistent and correct topology.
+Comparing with other mapping results, NeuroSLAM can also build a 3D experience map of high quality similar to ORB-SLAM.
+In some cases, it's better than feature-based or direct sparse visual SLAM, such as LDSO.
 
 
 
