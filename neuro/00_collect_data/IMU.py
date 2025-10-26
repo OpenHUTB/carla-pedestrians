@@ -277,6 +277,32 @@ plt.scatter(-k_gnss_xy[:,0], k_gnss_xy[:,1], 0.3, label="GNSS data", color='red'
 plt.legend()
 plt.show()
 
+# 保存IMU数据到CSV
+import csv
+
+# 1. 保存IMU数据
+with open('imu_data.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z', 'timestamp'])
+    for data in imu_list:
+        accel = data[0]
+        gyro = data[1]
+        ts = data[2]
+        writer.writerow([accel[0], accel[1], accel[2], gyro[0], gyro[1], gyro[2], ts])
+
+# 2. 保存GNSS数据
+with open('gnss_data.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(['x', 'y', 'z', 'timestamp'])
+    for data in gnss_list:
+        pos = data[0]
+        ts = data[1]
+        writer.writerow([pos[0], pos[1], pos[2], ts])
+
+print("数据已保存到 imu_data.csv 和 gnss_data.csv")
+
+
+
 print("Time : %.2f to %.2f"%(kal_rpos_list[0][1], kal_rpos_list[-1][1]))
 print("Time : %.2f to %.2f"%(kal_obj.states[0][1], kal_obj.states[-1][1]))
 
