@@ -7,24 +7,51 @@ import cv2
 import queue
 import time
 import carla
+import weakref
 from scipy.spatial.transform import Rotation as R
 
+# -------------------------- 路径配置 --------------------------
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+carla_api_path = os.path.join(current_dir, '../../../../carla-0.9.15/PythonAPI/carla')
+sys.path.append(carla_api_path)
+from agents.navigation.behavior_agent import BehaviorAgent
 
-# -------------------------- 配置参数（适配 0.9.15，简化曝光参数） --------------------------
+# -------------------------- 配置参数 --------------------------
 TARGET_MAP = "Town10HD"
 MAX_SAVE_IMG = 5000
 OUTPUT_DIR = '../data/01_NeuroSLAM_Datasets/Town10Data/'
-# 相机曝光参数（用 0.9.15 兼容的参数，参考能运行的代码）
-EXPOSURE_MODE = "manual"
-EXPOSURE_COMPENSATION = "0"  # 增强强光抑制，0.9.15 支持该参数
-FSTOP = "4.0"                 # 光圈，对应原代码的 APERTURE
-ISO = "400"                   # 感光度，降低噪点
-GAMMA = "2.2"                 # 伽马校正值
 
+EXPOSURE_MODE = "manual"
+EXPOSURE_COMPENSATION = "0.0" 
+FSTOP = "4.0"
+ISO = "250"  
+GAMMA = "2.2"
+AGENT_BEHAVIOR = "cautious"
+AGENT_MAX_SPEED = 30  # km/h
+
+# -------------------------- 官方碰撞传感器 --------------------------
+class CollisionSensor(object):
+    def __init__(self, parent_actor):
+        self.sensor = None
+        self._parent = parent_actor
+        world = self._parent.get_world()
+        blueprint = world.get_blueprint_library().find('sensor.other.collision')
+        self.sensor = world.spawn_actor(blueprint, carla.Transform(), attach_to=self._parent)
+        weak_self = weakref.ref(self)
+        self.sensor.listen(lambda event: CollisionSensor._on_collision(weak_self, event))
+
+    @staticmethod
+    def _on_collision(weak_self, event):
+        self = weak_self()
+        if not self:
+            return
+        actor_type = event.other_actor.type_id.split('.')[-1]
+        print(f"⚠️  碰撞检测：与 {actor_type} 发生碰撞")
 
 # -------------------------- 全局工具函数 --------------------------
 def clear_all_actors(world):
-    """清理所有车辆、传感器、行人，避免资源残留"""
     for actor in world.get_actors().filter('vehicle.*.*'):
         try:
             actor.destroy()
@@ -43,51 +70,46 @@ def clear_all_actors(world):
             print(f"清理行人警告: {e}")
     time.sleep(1)
 
-
 def safe_spawn_vehicle(world, bp_lib, max_attempts=10):
-    """安全生成车辆，适配不同地图的生成点"""
     spawn_points = world.get_map().get_spawn_points()
     if not spawn_points:
-        raise ValueError(f"地图 {TARGET_MAP} 未找到生成点，请检查地图是否正确加载！")
+        raise ValueError(f"地图 {TARGET_MAP} 未找到生成点！")
     print(f"地图 {TARGET_MAP} 找到 {len(spawn_points)} 个生成点")
 
     vehicle_bp = bp_lib.find('vehicle.lincoln.mkz_2020')
+    vehicle_bp.set_attribute('role_name', 'hero')
     vehicle = None
     for attempt in range(max_attempts):
         chosen_spawn = random.choice(spawn_points)
         vehicle = world.try_spawn_actor(vehicle_bp, chosen_spawn)
         if vehicle is not None:
-            print(f"第{attempt+1}次尝试成功，生成车辆于: ({chosen_spawn.location.x:.1f}, {chosen_spawn.location.y:.1f})")
+            print(f"第{attempt+1}次尝试成功，生成车辆")
             return vehicle, spawn_points
-        print(f"第{attempt+1}次生成失败，换生成点重试...")
+        print(f"第{attempt+1}次生成失败，重试...")
         time.sleep(1)
-    
-    raise RuntimeError(f"连续{max_attempts}次生成车辆失败，可能生成点被占用！")
+    raise RuntimeError(f"连续{max_attempts}次生成失败！")
 
-
-# -------------------------- 初始化CARLA环境（核心修改：地图加载增加延迟） --------------------------
+# -------------------------- 初始化CARLA环境 --------------------------
 def init_carla_environment():
-    """初始化环境，根据TARGET_MAP加载对应地图"""
-    # 连接服务器（与参考代码逻辑一致）
     client = carla.Client('localhost', 2000)
-    client.set_timeout(20.0)  # 超时时间保持20秒
+    client.set_timeout(60.0)
     try:
         world = client.get_world()
-        print("成功连接CARLA服务器，开始加载地图...")
+        print("成功连接CARLA服务器")
     except Exception as e:
-        raise ConnectionError(f"连接CARLA失败: {e}\n请先启动服务器：./CarlaUE4.sh -RenderOffScreen")
+        raise ConnectionError(f"连接失败: {e}\n请先启动服务器：./CarlaUE4.sh")
     
-    # 清理残留资源
+    traffic_manager = client.get_trafficmanager()
+    traffic_manager.set_synchronous_mode(True)
+    
     clear_all_actors(world)
     
-    # 加载目标地图（核心修改：增加延迟，确保地图加载完成）
-    print(f"加载地图 {TARGET_MAP}...（可能需要3-5秒）")
+    print(f"加载地图 {TARGET_MAP}...")
     client.load_world(TARGET_MAP)
-    time.sleep(3)  # 关键：给地图加载留出时间，避免资源未就绪
-    world = client.get_world()  # 重新获取世界对象，确保是加载后的最新状态
-    print(f"地图 {TARGET_MAP} 加载完成，当前地图名称：{world.get_map().name}")  # 验证地图是否加载正确
+    time.sleep(3)
+    world = client.get_world()
+    print(f"地图加载完成: {world.get_map().name}")
     
-    # 交通灯全绿灯（与原逻辑一致）
     for tl in world.get_actors().filter('traffic.traffic_light*'):
         try:
             tl.set_state(carla.TrafficLightState.Green)
@@ -95,12 +117,23 @@ def init_carla_environment():
         except Exception as e:
             print(f"配置交通灯警告: {e}")
     
-    # 生成车辆
     bp_lib = world.get_blueprint_library()
     vehicle, spawn_points = safe_spawn_vehicle(world, bp_lib)
-    vehicle.set_autopilot(True)
+    try:
+        physics_control = vehicle.get_physics_control()
+        physics_control.use_sweep_wheel_collision = True
+        vehicle.apply_physics_control(physics_control)
+    except Exception as e:
+        print(f"配置车辆物理参数警告: {e}")
     
-    # 准备输出目录
+    agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
+    agent.follow_speed_limits(True)
+    destination = random.choice(spawn_points).location
+    agent.set_destination(destination)
+    print(f"避障智能体初始化完成，目标: ({destination.x:.1f}, {destination.y:.1f})")
+    
+    collision_sensor = CollisionSensor(vehicle)
+    
     try:
         if os.path.exists(OUTPUT_DIR):
             shutil.rmtree(OUTPUT_DIR)
@@ -109,58 +142,50 @@ def init_carla_environment():
         raise PermissionError(f"无权限操作目录: {OUTPUT_DIR}")
     print(f"输出目录: {OUTPUT_DIR}")
     
-    return world, bp_lib, vehicle, spawn_points, world.get_spectator()
+    return world, bp_lib, vehicle, spawn_points, world.get_spectator(), agent, traffic_manager, collision_sensor
 
-
-# -------------------------- 传感器配置（用参考代码的兼容参数） --------------------------
+# -------------------------- 传感器配置 --------------------------
 class SensorData:
     def __init__(self, data_type, timestamp, data):
-        self.data_type = data_type  # 'image' 或 'imu'
+        self.data_type = data_type
         self.timestamp = timestamp
         self.data = data
 
-
+# -------------------------- 核心修改：同步参考代码的相机配置及图像处理 --------------------------
 def create_rgb_camera(world, bp_lib, vehicle, data_queue):
     rgb_bp = bp_lib.find('sensor.camera.rgb')
-    
-    # 基础参数（与参考代码一致，确保兼容性）
+    # 完全同步参考代码的相机参数
     rgb_bp.set_attribute("image_size_x", "640")
     rgb_bp.set_attribute("image_size_y", "480")
-    rgb_bp.set_attribute("sensor_tick", "0.05")  # 20Hz，与IMU采样频率匹配
-    
-    # 核心：用 0.9.15 兼容的曝光参数（参考能运行的代码）
+    rgb_bp.set_attribute("sensor_tick", "0.05")
     rgb_bp.set_attribute("exposure_mode", EXPOSURE_MODE)
-    rgb_bp.set_attribute("exposure_compensation", EXPOSURE_COMPENSATION)  # 替代原 exposure_value
-    rgb_bp.set_attribute("fstop", FSTOP)  # 替代原 aperture
-    rgb_bp.set_attribute("iso", ISO)
+    rgb_bp.set_attribute("exposure_compensation", EXPOSURE_COMPENSATION)
+    rgb_bp.set_attribute("fstop", FSTOP)
+    rgb_bp.set_attribute("iso", ISO)  
     rgb_bp.set_attribute("gamma", GAMMA)
-    
-    # 高级图像控制（保留原逻辑，关闭干扰效果）
+    # 新增参考代码中的图像增强关闭参数，避免色彩失真
     rgb_bp.set_attribute("bloom_intensity", "0.0")
     rgb_bp.set_attribute("chromatic_aberration_intensity", "0.0")
     rgb_bp.set_attribute("lens_flare_intensity", "0.0")
     
-    # 相机安装位置与角度（与原逻辑一致）
     transform = carla.Transform(
-        carla.Location(x=0.5, y=0, z=3.5),
+        carla.Location(x=0.2, y=0, z=4.2),  
         carla.Rotation(pitch=-20)
     )
     
-    # 图像回调（简化逻辑，与参考代码一致）
+    # 同步参考代码的图像回调逻辑：直接保存原始RGB数据，避免格式转换失真
     def image_callback(image):
-        image.convert(carla.ColorConverter.Raw)
+        # 参考代码逻辑：不做ColorConverter转换，直接保留原始数据
         data_queue.put(SensorData('image', image.timestamp, image))
     
     camera = world.spawn_actor(rgb_bp, transform, attach_to=vehicle)
     camera.listen(image_callback)
-    print("RGB相机初始化完成")
+    print("RGB相机初始化完成（已同步参考代码色彩参数）")
     return camera, transform
 
-
 def create_imu_sensor(world, bp_lib, vehicle, data_queue, transform):
-    # 与原逻辑一致，IMU参数在 0.9.15 中无兼容性问题
     imu_bp = bp_lib.find("sensor.other.imu")
-    imu_bp.set_attribute('sensor_tick', str(1/60))  # 60Hz
+    imu_bp.set_attribute('sensor_tick', str(1/60))
     imu_bp.set_attribute('noise_accel_stddev_x', '0.1')
     imu_bp.set_attribute('noise_gyro_stddev_x', '0.001')
     imu = world.spawn_actor(imu_bp, transform, attach_to=vehicle)
@@ -168,8 +193,7 @@ def create_imu_sensor(world, bp_lib, vehicle, data_queue, transform):
     print("IMU传感器初始化完成")
     return imu
 
-
-# -------------------------- 时间戳对齐（原逻辑不变，无兼容性问题） --------------------------
+# -------------------------- 时间戳对齐 --------------------------
 class TimeAligner:
     def __init__(self, time_threshold=0.02):
         self.time_threshold = time_threshold
@@ -202,8 +226,7 @@ class TimeAligner:
         self.image_buffer = []
         return pairs
 
-
-# -------------------------- EKF融合（原逻辑不变，无兼容性问题） --------------------------
+# -------------------------- EKF融合--------------------------
 class EKF_VIO:
     def __init__(self, init_pose, init_vel, dt=0.05):
         self.x = np.array([
@@ -241,8 +264,8 @@ class EKF_VIO:
     def visual_update(self, visual_pose):
         z = np.array(visual_pose, dtype=np.float64)
         H = np.zeros((6, 9))
-        H[0,0] = H[1,1] = H[2,2] = 1  # 位置观测
-        H[3,6] = H[4,7] = H[5,8] = 1  # 姿态观测
+        H[0,0] = H[1,1] = H[2,2] = 1
+        H[3,6] = H[4,7] = H[5,8] = 1
 
         y = z - H @ self.x
         try:
@@ -258,46 +281,32 @@ class EKF_VIO:
     def get_current_pose(self):
         return self.x[:3].copy(), self.x[6:9].copy()
 
+# -------------------------- 图像后处理 --------------------------
+def save_image_simple(img_array, output_dir, idx, target_width=160, target_height=120):
+    """缩放为160×120，同步参考代码色彩处理逻辑"""
+    try:
+        # 参考代码逻辑：直接使用RGB数据，不做RGBA2BGR转换
+        resized_img = cv2.resize(img_array, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
+        img_path = os.path.join(output_dir, f"{idx:04d}.png")
+        cv2.imwrite(img_path, resized_img)
+        return True
+    except Exception as e:
+        print(f"保存图像{idx}失败: {e}")
+        return False
 
-# -------------------------- 图像后处理工具函数（保留原逻辑） --------------------------
-def adjust_exposure(image, clip_limit=2.0):
-    """高级曝光调整，保留细节同时抑制过曝"""
-    ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
-    y_channel, cr, cb = cv2.split(ycrcb)
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8,8))
-    y_clahe = clahe.apply(y_channel)
-    ycrcb_clahe = cv2.merge([y_clahe, cr, cb])
-    return cv2.cvtColor(ycrcb_clahe, cv2.COLOR_YCrCb2BGR)
-
-
-def suppress_highlights(image, threshold=230, factor=0.5):
-    """精准抑制高光区域"""
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    v_channel = hsv[:, :, 2]
-    highlight_mask = v_channel > threshold
-    hsv[:, :, 2] = np.where(
-        highlight_mask,
-        (v_channel * factor).astype(np.uint8),
-        v_channel
-    )
-    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-
-
-# -------------------------- 主循环（原逻辑不变） --------------------------
+# -------------------------- 主循环 --------------------------
 def main():
     try:
-        world, bp_lib, vehicle, spawn_points, spectator = init_carla_environment()
+        world, bp_lib, vehicle, spawn_points, spectator, agent, traffic_manager, collision_sensor = init_carla_environment()
     except Exception as e:
         print(f"初始化失败: {e}")
         return
 
-    # 启用同步模式
     settings = world.get_settings()
     settings.synchronous_mode = True
     settings.fixed_delta_seconds = 0.05
     world.apply_settings(settings)
 
-    # 初始化传感器
     sensor_queue = queue.Queue(maxsize=1000)
     try:
         camera, cam_transform = create_rgb_camera(world, bp_lib, vehicle, sensor_queue)
@@ -307,7 +316,6 @@ def main():
         clear_all_actors(world)
         return
 
-    # 初始化对齐器和EKF
     time_aligner = TimeAligner()
     init_pose = vehicle.get_transform()
     init_pos = [init_pose.location.x, init_pose.location.y, init_pose.location.z]
@@ -316,19 +324,18 @@ def main():
                 math.radians(init_pose.rotation.yaw)]
     ekf = EKF_VIO(init_pos+init_att, [0,0,0])
 
-    # 数据保存
+    # 数据保存参数（每1帧对齐数据保存1帧，确保时间戳同步）
     img_idx = 0
     fusion_log = open(os.path.join(OUTPUT_DIR, 'fusion_pose.txt'), 'w')
     fusion_log.write("timestamp,pos_x,pos_y,pos_z,roll,pitch,yaw,imu_pos_x,imu_pos_y,imu_pos_z\n")
 
     cv2.namedWindow('RGB Camera', cv2.WINDOW_AUTOSIZE)
-    stagnant_count = 0  # 用于检测车辆停滞
+    stagnant_count = 0
 
     try:
-        while True:
+        while True:                                                                                                  
             world.tick()
     
-            # 处理传感器数据
             while not sensor_queue.empty():
                 try:
                     data = sensor_queue.get(block=False)
@@ -336,13 +343,12 @@ def main():
                 except:
                     break
 
-            # 处理对齐数据
+
+            # 处理对齐的图像和IMU数据
             for img_data, imu_data in time_aligner.get_aligned_pairs():
-                # IMU预测
                 ekf.imu_prediction(imu_data.data)
                 imu_pos, _ = ekf.get_current_pose()
 
-                # 视觉观测（CARLA真实位姿）
                 carla_pose = vehicle.get_transform()
                 visual_pose = [
                     carla_pose.location.x, carla_pose.location.y, carla_pose.location.z,
@@ -351,42 +357,18 @@ def main():
                     math.radians(carla_pose.rotation.yaw)
                 ]
 
-                # EKF更新
                 ekf.visual_update(visual_pose)
                 fusion_pos, fusion_att = ekf.get_current_pose()
 
-                # 保存数据
+                # 参考代码逻辑：raw_data为RGBA格式，取前3通道作为RGB
+                img = np.reshape(np.copy(img_data.data.raw_data), (480, 640, 4))[:, :, :3]  # 仅保留RGB通道
+
+                # 保存图像（保持每1帧对齐数据保存1帧，确保与IMU时间戳同步）
                 img_idx += 1
-                img_path = os.path.join(OUTPUT_DIR, f"{img_idx:04d}.png")
-                
-                # 图像处理流程（参考兼容代码的后处理逻辑）
-                img = np.reshape(np.copy(img_data.data.raw_data), (480, 640, 4))
-                img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
-                
-                # 1. 轻度全局亮度调整（避免过暗或过曝）
-                img = np.clip(img * 0.8, 0, 255).astype(np.uint8)
-                
-                # 2. 局部过曝区域精准压制
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                overexposed_mask = gray > 220  # 仅针对极亮区域
-                img[overexposed_mask] = img[overexposed_mask] * 0.6  # 适度压暗
-                
-                # 3. 分离通道，温和增强对比度
-                b, g, r = cv2.split(img)
-                clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(10,10))  # 降低对比度限制
-                b = clahe.apply(b)
-                g = clahe.apply(g)
-                r = clahe.apply(r) * 0.8  # 轻微压制红色，平衡色彩
-                
-                # 4. 合并通道并调整动态范围
-                img = cv2.merge([b, g, r.astype(np.uint8)])
-                img = cv2.normalize(img, None, alpha=40, beta=210, norm_type=cv2.NORM_MINMAX)  # 优化亮度范围
+                save_image_simple(img, OUTPUT_DIR, img_idx)  # 使用同步后的保存函数
+                print(f"保存图像 {img_idx}/{MAX_SAVE_IMG}")
 
-                # 保存和显示
-                cv2.imwrite(img_path, cv2.resize(img, (160, 120)))
-                print(f"保存图像 {img_idx}/{MAX_SAVE_IMG}: {img_path}")
-
-                # 保存IMU数据
+                # 保存IMU数据（与图像时间戳严格对齐）
                 with open(os.path.join(OUTPUT_DIR, 'aligned_imu.txt'), 'a') as f:
                     f.write(f"{imu_data.timestamp:.6f},"
                             f"{imu_data.data.accelerometer.x:.6f},{imu_data.data.accelerometer.y:.6f},{imu_data.data.accelerometer.z:.6f},"
@@ -398,32 +380,53 @@ def main():
                                 f"{math.degrees(fusion_att[0]):.6f},{math.degrees(fusion_att[1]):.6f},{math.degrees(fusion_att[2]):.6f},"
                                 f"{imu_pos[0]:.6f},{imu_pos[1]:.6f},{imu_pos[2]:.6f}\n")
 
-                # 显示图像
-                cv2.putText(img, f"Pos: {fusion_pos[:2]}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-                cv2.imshow('RGB Camera', img)
-
                 if img_idx >= MAX_SAVE_IMG:
                     print("达到最大保存数量，退出")
                     return
 
-            # 检测车辆是否停滞
+                # 显示原始图像
+                cv2.imshow('RGB Camera', img)
+
+            # 避障智能体控制（保持不变）
+            if agent.done():
+                destination = random.choice(spawn_points).location
+                agent.set_destination(destination)
+                print(f"已到达，新目标：({destination.x:.1f}, {destination.y:.1f})")
+            control = agent.run_step()
+            control.manual_gear_shift = False
+            vehicle.apply_control(control)
+
+            # 停滞检测与重置
             vel = vehicle.get_velocity()
             speed = math.sqrt(vel.x**2 + vel.y**2)
+            reset_needed = False
             if speed < 0.1:
                 stagnant_count += 1
-                if stagnant_count > 100:  # 停滞5秒（100*0.05）
+                if stagnant_count > 100:
                     print("车辆停滞，重新生成...")
-                    camera.stop()
-                    imu.stop()
-                    camera.destroy()
-                    imu.destroy()
-                    vehicle.destroy()
-                    vehicle, _ = safe_spawn_vehicle(world, bp_lib)
-                    vehicle.set_autopilot(True)
-                    camera, _ = create_rgb_camera(world, bp_lib, vehicle, sensor_queue)
-                    imu = create_imu_sensor(world, bp_lib, vehicle, sensor_queue, cam_transform)
-                    stagnant_count = 0
+                    reset_needed = True
             else:
+                stagnant_count = 0
+
+            if reset_needed:
+                camera.stop()
+                imu.stop()
+                camera.destroy()
+                imu.destroy()
+                vehicle.destroy()
+                vehicle, _ = safe_spawn_vehicle(world, bp_lib)
+                try:
+                    physics_control = vehicle.get_physics_control()
+                    physics_control.use_sweep_wheel_collision = True
+                    vehicle.apply_physics_control(physics_control)
+                except:
+                    pass
+                agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
+                agent.set_max_speed(AGENT_MAX_SPEED / 3.6)
+                agent.set_destination(random.choice(spawn_points).location)
+                camera, _ = create_rgb_camera(world, bp_lib, vehicle, sensor_queue)  # 重新初始化相机（使用同步参数）
+                imu = create_imu_sensor(world, bp_lib, vehicle, sensor_queue, cam_transform)
+                collision_sensor = CollisionSensor(vehicle)
                 stagnant_count = 0
 
             # 跟随视角
@@ -443,16 +446,16 @@ def main():
         fusion_log.close()
         camera.stop()
         imu.stop()
+        collision_sensor.sensor.stop()
         clear_all_actors(world)
-        # 恢复世界设置（兼容0.9.15的API）
         settings = world.get_settings()
         settings.synchronous_mode = False
         settings.fixed_delta_seconds = None
         world.apply_settings(settings)
+        traffic_manager.set_synchronous_mode(False)
         cv2.destroyAllWindows()
         print("资源清理完成")
 
 
 if __name__ == "__main__":
     main()
-

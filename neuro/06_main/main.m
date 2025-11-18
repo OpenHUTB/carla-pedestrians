@@ -1,3 +1,4 @@
+
 function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryFile, vtHistoryFile, emHistoryFile, gcTrajFile, hdcTrajFile,varargin)
 %     NeuroSLAM System Copyright (C) 2018-2019 
 %     NeuroSLAM: A Brain inspired SLAM System for 3D Environments
@@ -24,193 +25,238 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
 %     You should have received a copy of the GNU General Public License
 %     along with this program.  If not, see <http://www.gnu.org/licenses/>.
     
-    %% Initial some variables
-    % Transform the angle from degree to radian
-    
+    %% 日志：启动函数
+    disp('='*50);
+    disp('=== NeuroSLAM 优化版主程序启动 ===');
+    disp('='*50);
+
     clear EXP_NODES_LINKS
-    
-    global DEGREE_TO_RADIAN;
-    DEGREE_TO_RADIAN = pi / 180;
-   
-    % 将角度从弧度转换为角度
-    global RADIAN_TO_DEGREE;
-    RADIAN_TO_DEGREE = 180 / pi;  
-    
-    % 定义读取视频块的大小
-    global BLOCK_READ;
-    
-    % 定义绘制 视觉里程计vo 的渲染速率
-    global RENDER_RATE;
-    
-    global GT_ODO_X_SCALING;
-    global GT_ODO_Y_SCALING;
-    global GT_ODO_Z_SCALING;
-    global GT_EXP_X_SCALING;
-    global GT_EXP_Y_SCALING;
-    global GT_EXP_Z_SCALING;
-    
-    global ODO_MAP_X_SCALING;
-    global ODO_MAP_Y_SCALING;
-    global ODO_MAP_Z_SCALING;
-    global EXP_MAP_X_SCALING;
-    global EXP_MAP_Y_SCALING;
-    global EXP_MAP_Z_SCALING;
-    
-    % 处理参数
+    %% 1. 添加所有依赖路径（确保能找到辅助函数）
+    disp('[1/12] 开始添加依赖路径...');
+    rootDir = '/home/dream/Neuro_WS/carla-pedestrians/neuro';
+    addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/3d_grid_cells_network'));
+    addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/yaw_height_hdc_network'));
+    addpath(fullfile(rootDir, '04_visual_template'));
+    addpath(fullfile(rootDir, '02_multilayered_experience_map'));
+    addpath(fullfile(rootDir, '06_main'));
+    addpath(fullfile(rootDir, '05_tookit/process_visual_data/process_images_data'));
+    savepath;
+    disp('[1/12] 依赖路径添加完成！');
+
+    %% 2. 补全所有全局变量（无重复，全初始化）
+    disp('[2/12] 开始初始化全局变量...');
+    % 视觉模板相关
+    global PREV_VT_ID; PREV_VT_ID = -1;
+    global SUB_VT_IMG; SUB_VT_IMG = [];
+    global VT_HISTORY; VT_HISTORY = [];
+    global IMG_TYPE; IMG_TYPE = '*.png';
+    global VT_STEP; VT_STEP = 1;
+    global VT_TEMPLATES; VT_TEMPLATES = [];
+    global VT_ID_COUNT; VT_ID_COUNT = 0;
+    % 视觉模板裁剪/缩放（适配120x160图像）
+    global VT_IMG_Y_RANGE; VT_IMG_Y_RANGE = 20:100;
+    global VT_IMG_X_RANGE; VT_IMG_X_RANGE = 30:130;
+    global VT_IMG_RESIZE_Y_RANGE; VT_IMG_RESIZE_Y_RANGE = 32;
+    global VT_IMG_RESIZE_X_RANGE; VT_IMG_RESIZE_X_RANGE = 32;
+
+    % HDC（偏航-高度细胞）相关
+    global VT; VT = [];
+    global HDC_CELLS; HDC_CELLS = zeros(36, 36);
+    global HDC_LEARNING_RATE; HDC_LEARNING_RATE = 0.1;
+    global HDC_THRESHOLD; HDC_THRESHOLD = 0.3;
+    global YAW_HEIGHT_HDC; YAW_HEIGHT_HDC = zeros(36, 36);
+    global YAW_HEIGHT_HDC_Y_DIM; YAW_HEIGHT_HDC_Y_DIM = 36;
+    global YAW_HEIGHT_HDC_H_DIM; YAW_HEIGHT_HDC_H_DIM = 36;
+    global YAW_HEIGHT_HDC_Y_TH_SIZE; YAW_HEIGHT_HDC_Y_TH_SIZE = 2*pi/36;
+    global MAX_ACTIVE_YAW_HEIGHT_HIS_PATH; MAX_ACTIVE_YAW_HEIGHT_HIS_PATH = [];
+
+    % 3D网格细胞相关
+    global GRIDCELLS; GRIDCELLS = zeros(36, 36, 36);
+    global GC_X_DIM; GC_X_DIM = 36;
+    global GC_Y_DIM; GC_Y_DIM = 36;
+    global GC_Z_DIM; GC_Z_DIM = 36;
+    global GC_LEARNING_RATE; GC_LEARNING_RATE = 0.1;
+    global GC_THRESHOLD; GC_THRESHOLD = 0.3;
+    global gcX; gcX = 18;
+    global gcY; gcY = 18;
+    global gcZ; gcZ = 18;
+    global MAX_ACTIVE_XYZ_PATH; MAX_ACTIVE_XYZ_PATH = [];
+
+    % 经验图相关
+    global EXPERIENCES; EXPERIENCES = [];
+    global EXP_HISTORY; EXP_HISTORY = [];
+    global NUM_EXPS; NUM_EXPS = 0;
+    global EXP_CORRECTION; EXP_CORRECTION = [];
+    global EXP_LOOPS; EXP_LOOPS = [];
+    global DELTA_EM; DELTA_EM = 0;
+
+    % 视觉里程计（VO）相关
+    global ODO_IMG_YAW_ROT_Y_RANGE; ODO_IMG_YAW_ROT_Y_RANGE = 20:100;
+    global ODO_IMG_YAW_ROT_X_RANGE; ODO_IMG_YAW_ROT_X_RANGE = 30:130;
+    global ODO_IMG_HEIGHT_V_Y_RANGE; ODO_IMG_HEIGHT_V_Y_RANGE = 20:100;
+    global ODO_IMG_HEIGHT_V_X_RANGE; ODO_IMG_HEIGHT_V_X_RANGE = 30:130;
+    global ODO_IMG_TRANS_Y_RANGE; ODO_IMG_TRANS_Y_RANGE = 20:100;
+    global ODO_IMG_TRANS_X_RANGE; ODO_IMG_TRANS_X_RANGE = 30:130;
+    global ODO_IMG_YAW_ROT_RESIZE_RANGE; ODO_IMG_YAW_ROT_RESIZE_RANGE = [32 32];
+    global ODO_IMG_HEIGHT_V_RESIZE_RANGE; ODO_IMG_HEIGHT_V_RESIZE_RANGE = [64 64];
+    global ODO_IMG_TRANS_RESIZE_RANGE; ODO_IMG_TRANS_RESIZE_RANGE = [64 64];
+    global ODO_TRANS_V_SCALE; ODO_TRANS_V_SCALE = 0.1;
+    global ODO_YAW_ROT_V_SCALE; ODO_YAW_ROT_V_SCALE = 0.1;
+    global ODO_HEIGHT_V_SCALE; ODO_HEIGHT_V_SCALE = 0.1;
+    global MAX_TRANS_V_THRESHOLD; MAX_TRANS_V_THRESHOLD = 5;
+    global MAX_YAW_ROT_V_THRESHOLD; MAX_YAW_ROT_V_THRESHOLD = 10;
+    global MAX_HEIGHT_V_THRESHOLD; MAX_HEIGHT_V_THRESHOLD = 5;
+    global ODO_SHIFT_MATCH_VERT; ODO_SHIFT_MATCH_VERT = -5:5;
+    global ODO_SHIFT_MATCH_HORI; ODO_SHIFT_MATCH_HORI = -5:5;
+    global FOV_HORI_DEGREE; FOV_HORI_DEGREE = 90;
+    global FOV_VERT_DEGREE; FOV_VERT_DEGREE = 60;
+    global PREV_TRANS_V_IMG_X_SUMS; PREV_TRANS_V_IMG_X_SUMS = zeros(1,64);
+    global PREV_YAW_ROT_V_IMG_X_SUMS; PREV_YAW_ROT_V_IMG_X_SUMS = zeros(1,64);
+    global PREV_HEIGHT_V_IMG_Y_SUMS; PREV_HEIGHT_V_IMG_Y_SUMS = zeros(64,1);
+    global PREV_TRANS_V; PREV_TRANS_V = 0;
+    global PREV_YAW_ROT_V; PREV_YAW_ROT_V = 0;
+    global PREV_HEIGHT_V; PREV_HEIGHT_V = 0;
+    global OFFSET_YAW_ROT; OFFSET_YAW_ROT = 0;
+    global OFFSET_HEIGHT_V; OFFSET_HEIGHT_V = 0;
+
+    % 其他参数
+    global BLOCK_READ; BLOCK_READ = 500;
+    global RENDER_RATE; RENDER_RATE = 1;
+    global GT_ODO_X_SCALING; GT_ODO_X_SCALING = 1;
+    global GT_ODO_Y_SCALING; GT_ODO_Y_SCALING = 1;
+    global GT_ODO_Z_SCALING; GT_ODO_Z_SCALING = 1;
+    global GT_EXP_X_SCALING; GT_EXP_X_SCALING = 1;
+    global GT_EXP_Y_SCALING; GT_EXP_Y_SCALING = 1;
+    global GT_EXP_Z_SCALING; GT_EXP_Z_SCALING = 1;
+    global ODO_MAP_X_SCALING; ODO_MAP_X_SCALING = 1;
+    global ODO_MAP_Y_SCALING; ODO_MAP_Y_SCALING = 1;
+    global ODO_MAP_Z_SCALING; ODO_MAP_Z_SCALING = 1;
+    global EXP_MAP_X_SCALING; EXP_MAP_X_SCALING = 1;
+    global EXP_MAP_Y_SCALING; EXP_MAP_Y_SCALING = 1;
+    global EXP_MAP_Z_SCALING; EXP_MAP_Z_SCALING = 1;
+    global KEY_POINT_SET; KEY_POINT_SET = [];
+    global ODO_STEP; ODO_STEP = 1;
+    global DEGREE_TO_RADIAN; DEGREE_TO_RADIAN = pi / 180;
+    global RADIAN_TO_DEGREE; RADIAN_TO_DEGREE = 180 / pi;  
+    disp('[2/12] 全局变量初始化完成！');
+
+    %% 3. 处理输入参数（支持可视化开关）
+    disp('[3/12] 开始处理输入参数...');
+    visualizate = false;  % 默认关闭可视化
     for i=1:(nargin - 8)
         if ischar(varargin{i})
             switch varargin{i}
-                case 'BLOCK_READ', BLOCK_READ = varargin{i+1};
-                case 'RENDER_RATE', RENDER_RATE = varargin{i+1};
-                case 'GT_ODO_X_SCALING', GT_ODO_X_SCALING = varargin{i+1};    
-                case 'GT_ODO_Y_SCALING', GT_ODO_Y_SCALING = varargin{i+1};    
-                case 'GT_ODO_Z_SCALING', GT_ODO_Z_SCALING = varargin{i+1};    
-                case 'GT_EXP_X_SCALING', GT_EXP_X_SCALING = varargin{i+1};    
-                case 'GT_EXP_Y_SCALING', GT_EXP_Y_SCALING = varargin{i+1};    
-                case 'GT_EXP_Z_SCALING', GT_EXP_Z_SCALING = varargin{i+1};   
-                case 'ODO_MAP_X_SCALING', ODO_MAP_X_SCALING = varargin{i+1};    
-                case 'ODO_MAP_Y_SCALING', ODO_MAP_Y_SCALING = varargin{i+1};    
-                case 'ODO_MAP_Z_SCALING', ODO_MAP_Z_SCALING = varargin{i+1};    
-                case 'EXP_MAP_X_SCALING', EXP_MAP_X_SCALING = varargin{i+1};    
-                case 'EXP_MAP_Y_SCALING', EXP_MAP_Y_SCALING = varargin{i+1};    
-                case 'EXP_MAP_Z_SCALING', EXP_MAP_Z_SCALING = varargin{i+1};   
+                case 'BLOCK_READ', BLOCK_READ = varargin{i+1}; disp(['[3/12] BLOCK_READ设置为：', num2str(BLOCK_READ)]);
+                case 'RENDER_RATE', RENDER_RATE = varargin{i+1}; disp(['[3/12] RENDER_RATE设置为：', num2str(RENDER_RATE)]);
+                case 'VISUALIZE', visualizate = varargin{i+1}; disp(['[3/12] 可视化开关：', num2str(visualizate)]);
+                case 'GT_ODO_X_SCALING', GT_ODO_X_SCALING = varargin{i+1};
+                case 'GT_ODO_Y_SCALING', GT_ODO_Y_SCALING = varargin{i+1};
+                case 'GT_ODO_Z_SCALING', GT_ODO_Z_SCALING = varargin{i+1};
+                case 'GT_EXP_X_SCALING', GT_EXP_X_SCALING = varargin{i+1};
+                case 'GT_EXP_Y_SCALING', GT_EXP_Y_SCALING = varargin{i+1};
+                case 'GT_EXP_Z_SCALING', GT_EXP_Z_SCALING = varargin{i+1};
+                case 'ODO_MAP_X_SCALING', ODO_MAP_X_SCALING = varargin{i+1};
+                case 'ODO_MAP_Y_SCALING', ODO_MAP_Y_SCALING = varargin{i+1};
+                case 'ODO_MAP_Z_SCALING', ODO_MAP_Z_SCALING = varargin{i+1};
+                case 'EXP_MAP_X_SCALING', EXP_MAP_X_SCALING = varargin{i+1};
+                case 'EXP_MAP_Y_SCALING', EXP_MAP_Y_SCALING = varargin{i+1};
+                case 'EXP_MAP_Z_SCALING', EXP_MAP_Z_SCALING = varargin{i+1};
             end
         end
     end
-    
-    %% 视觉模板 vt
-    global PREV_VT_ID;
-    global SUB_VT_IMG;
-    global VT_HISTORY;
-    global IMG_TYPE;
-    global VT_STEP;
-    
-    %% 视觉里程计 vo
-    % 绘制用于估计俯仰和偏航的图像
-    global SUB_HORI_TRANS_IMG;
-    global SUB_ROT_IMG;
-    global SUB_VERT_TRANS_IMG;
-    global SUB_PITCH_IMG;
-    global KEY_POINT_SET;
-    global ODO_STEP;
-    
-    %% yaw_height_hdc
-    global YAW_HEIGHT_HDC;
-        
-    % yaw_height_hdc 网络中偏航的维度
-    global YAW_HEIGHT_HDC_Y_DIM;
-    
-    % yaw_height_hdc 网络中俯仰的维度
-    global YAW_HEIGHT_HDC_H_DIM;
-    
-    % The yaw theta size of each unit in radian, 2*pi/ YAW_HEIGHT_HDC_Y_DIM
-    % radian e.g. 2*pi/360 = 0.0175
-    global YAW_HEIGHT_HDC_Y_TH_SIZE;                      
-    global MAX_ACTIVE_YAW_HEIGHT_HIS_PATH;
-    
-   [curYawTheta, curHeightValue] = get_hdc_initial_value();
-    
-    %%  3D 网格细胞 gridcells（内嗅皮层）
-    global GRIDCELLS;
-    
-    global GC_X_DIM;
-    global GC_Y_DIM;
-    global GC_Z_DIM;
-    
-    % 在网格细胞网络中设置初始的位置
+    disp('[3/12] 输入参数处理完成！');
+
+    %% 4. 初始化HDC和3D网格细胞
+    disp('[4/12] 初始化HDC模块...');
+    [curYawTheta, curHeightValue] = get_hdc_initial_value();
+    disp(['[4/12] HDC初始化结果：curYawTheta=', num2str(curYawTheta), ', curHeightValue=', num2str(curHeightValue)]);
+
+    disp('[5/12] 初始化3D网格细胞模块...');
     [gcX, gcY, gcZ] = get_gc_initial_pos();
-   
-    global MAX_ACTIVE_XYZ_PATH;
-    
-    %% 3D EM
-    global EXPERIENCES;
-        
-    % 历史经验
-    global EXP_HISTORY;
-    
-    % 全部经验的数目
-    global NUM_EXPS;
-    
-    global EXP_CORRECTION;
-    global EXP_LOOPS;
-    
-    %% 读取图片作为视觉模板VT输入
+    disp(['[5/12] 网格细胞初始位置：gcX=', num2str(gcX), ', gcY=', num2str(gcY), ', gcZ=', num2str(gcZ)]);
 
-    % 获得视觉数据信息
-    [subFoldersPathSet, numSubFolders] = get_images_data_info(visualDataFile);
+    %% 6. 读取视觉数据（手动指定路径，兼容自动解析）
+    disp('[6/12] 读取视觉数据文件夹...');
+    subFoldersPathSet = {
+        %'/home/dream/Neuro_WS/carla-pedestrians/neuro/data/01_NeuroSLAM_Datasets/Town01Data',
+        '/home/dream/Neuro_WS/carla-pedestrians/neuro/data/01_NeuroSLAM_Datasets/Town10Data'
+    };
+    % 验证路径有效性
+    numSubFolders = length(subFoldersPathSet);
+    for i = 1:numSubFolders
+        if ~exist(subFoldersPathSet{i}, 'dir')
+            warning('子文件夹不存在：%s，尝试自动解析', subFoldersPathSet{i});
+            [subFoldersPathSet, numSubFolders] = get_images_data_info(visualDataFile);
+            break;
+        end
+    end
+    disp(['[6/12] 共识别 ', num2str(numSubFolders), ' 个子文件夹，准备处理图像！']);
 
-    % 初始化一些用于绘制俯仰和偏航的变量
+    %% 7. 初始化绘图和轨迹变量
+    disp('[7/12] 初始化绘图和轨迹变量...');
     odoHeightValue = [0 0 0];
     Theta = [0 0 0 0 0 0];
     Rho = [0 0 0 0 0 0];
     startpoint =[0 0];
     endpoint = [0.8 0.8];
-
     odoYawTheta = [0 0 0];
-
     hdcYawTheta = [0 0 0];
-    
-    hdcYawTheta(1,3)= 0;  
-   
+    hdcYawTheta(1,3)= 0;
     zAxisHDC = 1:2:36;
-  
-      
-    % x,y,z, yaw
     expTrajectory(1,1) = 0;
     expTrajectory(1,2) = 0;
     expTrajectory(1,3) = 0;
     expTrajectory(1,4) = 0;
-    
     odoMapTrajectory(1,1) = 0;
     odoMapTrajectory(1,2) = 0;
     odoMapTrajectory(1,3) = 0;
     odoMapTrajectory(1,4) = 0;
-    
     gtHasValue = 0;
-    if isempty(groundTruthFile) == 1
-        gtHasValue = 0;
-    else
-        % 加载真值数据
-        [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz] = load_ground_truth_data(groundTruthFile);
-        gtHasValue = 1;
-    end
-    
-    startFrame = 1;
-    endFrame = 956;
     curFrame = 0;
-    
     vtcurFrame = 1;
     preImg = 0;
-%     global EXP_NODES_LINKS;
+    % 初始化经验图节点连接（矩阵类型，兼容旧脚本）
     EXP_NODES_LINKS.nodes(1) = 1;
     EXP_NODES_LINKS.numlinks(1) = 0;
-    EXP_NODES_LINKS.linknodes(1, 1) = 0;
-    
-    global DELTA_EM;
-    
-    %% process
+    EXP_NODES_LINKS.linknodes = zeros(1,1);  % 明确为矩阵
+    EXP_NODES_LINKS.linknodes(1,1) = 0;
+    global DELTA_EM; DELTA_EM = 0;
+    disp('[7/12] 绘图和轨迹变量初始化完成！');
+
+    %% 8. 加载真值数据（可选）
+    disp('[8/12] 加载真值数据...');
+    if ~isempty(groundTruthFile) && exist(groundTruthFile, 'file')
+        [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz] = load_ground_truth_data(groundTruthFile);
+        gtHasValue = 1;
+        disp(['[8/12] 真值数据加载成功，共 ', num2str(length(frameId)), ' 帧']);
+    else
+        disp('[8/12] 未找到真值文件，跳过加载');
+    end
+
+    %% 9. 主处理循环（子文件夹+图像帧）
+    disp('[9/12] 开始主处理循环...');
+    startFrame = 1;
+    endFrame = 956;  % 可改为numImgs处理全部帧
     for iSubFolder = 1 : numSubFolders
+        disp(['='*30]);
+        disp(['[9/12] 处理第 ', num2str(iSubFolder), '/', num2str(numSubFolders), ' 个子文件夹']);
         
         [curFolderPath, imgFilesPathList, numImgs] = get_cur_img_files_path_list(subFoldersPathSet, IMG_TYPE, iSubFolder);
+        disp(['[9/12] 子文件夹路径：', curFolderPath]);
+        disp(['[9/12] 子文件夹包含 ', num2str(numImgs), ' 张图像']);
         
         if numImgs > 0
-
-              for indFrame = startFrame :ODO_STEP: numImgs -1
+            for indFrame = startFrame : ODO_STEP : min(numImgs-1, endFrame)
+                disp(['[10/12] 处理第 ', num2str(indFrame), '/', num2str(numImgs), ' 帧']);
+                
+                % 读取并预处理图像
                 [curImg] = read_current_image(curFolderPath, imgFilesPathList, indFrame);
-                                
-                % 可视化模板和可视化odo使用强度使其转换为灰度
                 curGrayImg = rgb2gray(curImg);
                 curGrayImg = im2double(curGrayImg);
-                
-                %% step2: 处理视觉里程计 vo
-                % get the odometry from the video
-                % computing the 3d odometry based on the current image.
-                % yawRotV in degree
-                
-                % for common use
-                %  [transV, yawRotV, heightV] = visual_odometry(curGrayImg);
-                
-                % for special use
+                disp(['[10/12] 图像预处理完成，尺寸：', num2str(size(curGrayImg))]);
+
+                %% 10. 视觉里程计（VO）计算
+                disp('[10/12] 调用visual_odometry计算里程计...');
                 if length(KEY_POINT_SET) == 2
                     if indFrame < KEY_POINT_SET(1)
                         [transV, yawRotV, heightV] = visual_odometry(curGrayImg);
@@ -221,7 +267,7 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
                     end
                     transV = 2;
                 else
-                    if indFrame < KEY_POINT_SET(1)
+                    if isempty(KEY_POINT_SET) || indFrame < KEY_POINT_SET(1)
                         [transV, yawRotV, heightV] = visual_odometry(curGrayImg);
                     elseif indFrame < KEY_POINT_SET(2) 
                         [transV, yawRotV, heightV] = visual_odometry_up(curGrayImg);
@@ -233,48 +279,48 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
                         [transV, yawRotV, heightV] = visual_odometry(curGrayImg);
                     end
                 end
-                
-                yawRotV = yawRotV * DEGREE_TO_RADIAN;  % 以弧度表示
-                
-                      
-                %% step3: 处理视觉模板 vt
-                % 获得最活跃的视觉模板 view template
+                yawRotV = yawRotV * DEGREE_TO_RADIAN;
+                disp(['[10/12] 里程计结果：transV=', num2str(transV), ', yawRotV=', num2str(yawRotV), ', heightV=', num2str(heightV)]);
+
+                %% 11. 视觉模板（VT）处理
+                disp('[11/12] 处理视觉模板...');
                 curFrame = curFrame + 1;
                 if VT_STEP == 1
                     vtcurGrayImg = curGrayImg; 
                 else
-                    if mod(curFrame,VT_STEP) == 1 
+                    if mod(curFrame, VT_STEP) == 1 
                         vtcurGrayImg = curGrayImg; 
                         preImg = vtcurGrayImg;
                     else
                         vtcurGrayImg = preImg;
                     end
                 end
-                
-                [vt_id] = visual_template(vtcurGrayImg, gcX, gcY,gcZ, curYawTheta, curHeightValue);
-   
-                
-                %% step4: 处理 俯仰高度 yaw_height_hdc 的积分
+                [vt_id] = visual_template(vtcurGrayImg, gcX, gcY, gcZ, curYawTheta, curHeightValue);
+                disp(['[11/12] 视觉模板ID：vt_id=', num2str(vt_id)]);
+
+                %% 12. HDC迭代
+                disp('[12/12] HDC模块迭代...');
                 yaw_height_hdc_iteration(vt_id, yawRotV, heightV);
-
                 [curYawTheta, curHeightValue] = get_current_yaw_height_value();
-
-                % transform to radian
                 curYawThetaInRadian = curYawTheta * YAW_HEIGHT_HDC_Y_TH_SIZE;
-
                 MAX_ACTIVE_YAW_HEIGHT_HIS_PATH = [MAX_ACTIVE_YAW_HEIGHT_HIS_PATH; curYawTheta curHeightValue];
+                disp(['[12/12] HDC更新结果：yaw=', num2str(curYawThetaInRadian), ', height=', num2str(curHeightValue)]);
 
-                % 3d grid cells interation
+                %% 13. 3D网格细胞迭代
+                disp('[13/12] 3D网格细胞迭代...');
                 gc_iteration(vt_id, transV, curYawThetaInRadian, heightV);
-
                 [gcX, gcY, gcZ] = get_gc_xyz();
-
                 MAX_ACTIVE_XYZ_PATH = [MAX_ACTIVE_XYZ_PATH; gcX gcY gcZ];  
+                disp(['[13/12] 网格细胞位置：(', num2str(gcX), ',', num2str(gcY), ',', num2str(gcZ), ')']);
 
-                % 3d experience map interation
+                %% 14. 经验图迭代
+                disp('[14/12] 经验图迭代...');
                 exp_map_iteration(vt_id, transV, yawRotV, heightV, gcX, gcY, gcZ, curYawTheta, curHeightValue);
+                disp(['[14/12] 经验图当前节点数：', num2str(NUM_EXPS)]);
 
-                % for drawing odometry yaw theta
+                %% 15. 更新轨迹数据（修复版：矩阵存储连接关系）
+                disp('[15/12] 更新轨迹数据...');
+                % 里程计轨迹
                 odoYawTheta(curFrame + 1, 1) = cos(odoYawTheta(curFrame, 3) + yawRotV);
                 odoYawTheta(curFrame + 1, 2) = sin(odoYawTheta(curFrame, 3) + yawRotV);
                 odoYawTheta(curFrame + 1, 3) = odoYawTheta(curFrame, 3) + yawRotV;
@@ -284,307 +330,135 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
                 odoMapTrajectory(curFrame + 1,3) = odoMapTrajectory(curFrame,3) + heightV;
                 odoMapTrajectory(curFrame + 1,4) = odoYawTheta(curFrame + 1, 3);
 
-
-                % for drawing HDC yaw theta
+                % HDC偏航角轨迹
                 hdcYawTheta(curFrame, 1) = cos(curYawTheta * YAW_HEIGHT_HDC_Y_TH_SIZE);
                 hdcYawTheta(curFrame, 2) = sin(curYawTheta * YAW_HEIGHT_HDC_Y_TH_SIZE);
                 hdcYawTheta(curFrame, 3) = curYawTheta * YAW_HEIGHT_HDC_Y_TH_SIZE;
 
-
+                % 经验图轨迹（使用实际字段gcX/gcY/gcZ/yaw）
                 for ind = 1 : NUM_EXPS 
-                    expTrajectory(ind,1) = EXPERIENCES(ind).x_exp;
-                    expTrajectory(ind,2) = EXPERIENCES(ind).y_exp;
-                    expTrajectory(ind,3) = EXPERIENCES(ind).z_exp;
-                    expTrajectory(ind,4) = EXPERIENCES(ind).yaw_exp_rad;    
+                    expTrajectory(ind,1) = EXPERIENCES(ind).gcX;
+                    expTrajectory(ind,2) = EXPERIENCES(ind).gcY;
+                    expTrajectory(ind,3) = EXPERIENCES(ind).gcZ;
+                    expTrajectory(ind,4) = EXPERIENCES(ind).yaw;
                 end
 
-                % get the experience nodes and links info
+                % 经验图节点连接关系（矩阵存储，无类型错误）
                 for ind_exps = 1 : NUM_EXPS
-
+                    % 节点ID
                     EXP_NODES_LINKS.nodes(ind_exps) = ind_exps;
-                    EXP_NODES_LINKS.numlinks(ind_exps) = EXPERIENCES(ind_exps).numlinks;
-
-                    for link_id = 1 : EXPERIENCES(ind_exps).numlinks
-                        EXP_NODES_LINKS.linknodes(ind_exps, link_id) =  ...
-                            EXPERIENCES(ind_exps).links(link_id).exp_id;
+                    
+                    % 连接数量：强制设为0（兼容无numlinks字段）
+                    EXP_NODES_LINKS.numlinks(ind_exps) = 0;
+                    
+                    % 连接节点：矩阵动态扩展，无连接填0
+                    if isfield(EXPERIENCES(ind_exps), 'links') && ~isempty(EXPERIENCES(ind_exps).links)
+                        link_count = length(EXPERIENCES(ind_exps).links);
+                        % 扩展矩阵列数避免索引错误
+                        if link_count > size(EXP_NODES_LINKS.linknodes, 2)
+                            add_cols = link_count - size(EXP_NODES_LINKS.linknodes, 2);
+                            EXP_NODES_LINKS.linknodes = [EXP_NODES_LINKS.linknodes, zeros(size(EXP_NODES_LINKS.linknodes, 1), add_cols)];
+                        end
+                        % 填充连接ID
+                        for link_id = 1 : link_count
+                            if isfield(EXPERIENCES(ind_exps).links(link_id), 'exp_id')
+                                EXP_NODES_LINKS.linknodes(ind_exps, link_id) = EXPERIENCES(ind_exps).links(link_id).exp_id;
+                            else
+                                EXP_NODES_LINKS.linknodes(ind_exps, link_id) = 0;
+                            end
+                        end
+                    else
+                        % 无连接时填0
+                        if size(EXP_NODES_LINKS.linknodes, 1) < ind_exps
+                            % 扩展矩阵行数
+                            EXP_NODES_LINKS.linknodes(ind_exps, :) = 0;
+                        else
+                            EXP_NODES_LINKS.linknodes(ind_exps, :) = 0;
+                        end
                     end
-
                 end
-                
-                
-                % draw the results
-                if (mod(curFrame, RENDER_RATE) == 1)
+
+                %% 16. 可视化（按需开启）
+                if visualizate && mod(curFrame, RENDER_RATE) == 1
+                    disp('[16/12] 绘制可视化结果...');
+                    figure('Position', [100, 100, 1200, 800]);
                     
-                    % drawing the activity of 3D grid cells
-                    subplot(8, 9, [1 11],'replace');
-                    edge1_x = [0 0];
-                    edge1_y = [0 0];
-                    edge1_z = [0 36];
-
-                    edge2_x = [0 0];
-                    edge2_y = [0 36];
-                    edge2_z = [0 0];
-
-                    edge3_x = [0 36];
-                    edge3_y = [0 0];
-                    edge3_z = [0 0];
-
-                    edge4_x = [0 36];
-                    edge4_y = [36 36];
-                    edge4_z = [0 0];
-
-                    edge5_x = [0 0];
-                    edge5_y = [36 36];
-                    edge5_z = [0 36];
-
-                    edge6_x = [36 36];
-                    edge6_y = [0 36];
-                    edge6_z = [0 0];
-
-                    edge7_x = [36 36];
-                    edge7_y = [0 0];
-                    edge7_z = [0 36];
-
-                    edge8_x = [0 0];
-                    edge8_y = [0 36];
-                    edge8_z = [36 36];
-
-                    edge9_x = [0 36];
-                    edge9_y = [0 0];
-                    edge9_z = [36 36];
-
-                    edge10_x = [0 36];
-                    edge10_y = [36 36];
-                    edge10_z = [36 36];
-
-                    edge11_x = [36 36];
-                    edge11_y = [0 36];
-                    edge11_z = [36 36];
-
-                    edge12_x = [36 36];
-                    edge12_y = [36 36];
-                    edge12_z = [0 36];
-
-                    plot3(edge1_x,edge1_y,edge1_z, '-k');
-                    hold on
-                    plot3(edge2_x,edge2_y,edge2_z, '-k');
-                    hold on
-                    plot3(edge3_x,edge3_y,edge3_z, '-k');
-                    hold on
-                    plot3(edge4_x,edge4_y,edge4_z, '-k');
-                    hold on
-                    plot3(edge5_x,edge5_y,edge5_z, '-k');
-                    hold on
-                    plot3(edge6_x,edge6_y,edge6_z, '-k');
-                    hold on
-                    plot3(edge7_x,edge7_y,edge7_z, '-k');
-                    hold on
-                    plot3(edge8_x,edge8_y,edge8_z, '-k');
-                    hold on
-                    plot3(edge9_x,edge9_y,edge9_z, '-k');
-                    hold on
-                    plot3(edge10_x,edge10_y,edge10_z, '-k');
-                    hold on
-                    plot3(edge11_x,edge11_y,edge11_z, '-k');
-                    hold on
-                    plot3(edge12_x,edge12_y,edge12_z, '-k');
+                    % 1. 3D网格细胞活性图
+                    subplot(2,3,1);
+                    gridSlice = GRIDCELLS(:,:,gcZ);
+                    imagesc(gridSlice); colormap(jet); colorbar;
+                    hold on; plot(gcY, gcX, 'ro', 'MarkerSize', 5); hold off;
+                    xlabel('GC Y'); ylabel('GC X'); title(['3D网格细胞活性（Z=', num2str(gcZ), '）']);
+                    axis equal;
                     
-                    view(20,20)
-
-                    phandles = contourslice(GRIDCELLS, 1:2:GC_X_DIM, 1:2:GC_Y_DIM, 1:2:GC_Z_DIM, 10); 
-                    axis([1 GC_X_DIM 1 GC_Y_DIM 1 GC_Z_DIM]);
-%                     view(3);
-                    set(phandles,'LineWidth',0.5);
-%                     grid on;
-                    hold on;
-%                     plot3(MAX_ACTIVE_XYZ_PATH(:,2), MAX_ACTIVE_XYZ_PATH(:,1),  MAX_ACTIVE_XYZ_PATH(:,3), '.m', 'MarkerSize',8);
-%                     plot3([MAX_ACTIVE_XYZ_PATH(end,2) MAX_ACTIVE_XYZ_PATH(end,2)], [MAX_ACTIVE_XYZ_PATH(end,1) MAX_ACTIVE_XYZ_PATH(end,1)], [0 gcZ], 'MarkerSize',8);
-%                     plot3([MAX_ACTIVE_XYZ_PATH(end,1) MAX_ACTIVE_XYZ_PATH(end,1)],[MAX_ACTIVE_XYZ_PATH(end,2) MAX_ACTIVE_XYZ_PATH(end,2)],  [0 gcZ], 'MarkerSize',8);
-
-                    hold off;
-                    xl = xlabel('y', 'FontSize',12);
-                    yl = ylabel('x', 'FontSize',12);
-                    z1 = zlabel('z', 'FontSize',12);
-                    set(gca,'xtick',0:9:36)  
-                    set(gca,'ytick',0:18:36) 
-                    set(gca,'ztick',0:9:36) 
-                    view(20,20)
+                    % 2. HDC热力图
+                    subplot(2,3,2);
+                    imagesc(HDC_CELLS); colormap(jet); colorbar;
+                    hold on; plot(curHeightValue, curYawTheta, 'ro', 'MarkerSize', 5); hold off;
+                    xlabel('Height Index'); ylabel('Yaw Index'); title('HDC偏航-高度活性热力图');
+                    axis equal;
                     
-                    axis([0 36 0 36 0 36]);
-%                     set(xl,'Rotation',15);
-%                     set(yl,'Rotation',-30);
-%                     set(gca,'FontSize',24, 'LineWidth',1.5); % axis font
-%                     fig = get(groot,'CurrentFigure');
-                    title('3D Grid Cell Activity (x,y,z)');
-                    set(gca,'FontSize',12, 'LineWidth',1.2); % axis font
-                      
+                    % 3. 经验图3D轨迹
+                    subplot(2,3,3);
+                    if NUM_EXPS > 1
+                        plot3(expTrajectory(:,1), expTrajectory(:,2), expTrajectory(:,3), 'b-o', 'LineWidth', 1);
+                    else
+                        plot3(expTrajectory(:,1), expTrajectory(:,2), expTrajectory(:,3), 'bo', 'MarkerSize', 5);
+                    end
+                    xlabel('GC X'); ylabel('GC Y'); zlabel('GC Z'); title('经验图3D轨迹'); grid on;
                     
-                     % drawing the activity of yaw_pitch_hdc
-                    subplot(8, 9, [4 14], 'replace');
-                    [x,y]= meshgrid(1:1:36);
-                    z = YAW_HEIGHT_HDC ;
-                    surf(x,y,z,'EdgeColor','b');
-                    % surf(x,y,z,'FaceColor','red','EdgeColor','none');
-                    shading interp
-                     axis([1 YAW_HEIGHT_HDC_Y_DIM 1 YAW_HEIGHT_HDC_H_DIM 0 0.1]);
-                    % meshc(x,y,z);
-                    % view(0, 90);
-                    xl = xlabel('Height');
-                    yl = ylabel('Yaw');
-                    zlabel('Acitivity');
-                    set(gca,'xtick',0:9:36)  
-                    set(gca,'ytick',0:9:36) 
+                    % 4. 里程计2D轨迹
+                    subplot(2,3,4);
+                    if curFrame > 1
+                        plot(odoMapTrajectory(:,1), odoMapTrajectory(:,2), 'r-', 'LineWidth', 1.5);
+                    else
+                        plot(odoMapTrajectory(:,1), odoMapTrajectory(:,2), 'ro', 'MarkerSize', 5);
+                    end
+                    xlabel('X Position'); ylabel('Y Position'); title('里程计轨迹（X-Y平面）'); grid on;
                     
-                    set(xl,'Rotation',15);
-                    set(yl,'Rotation',-30);
-                    title('Multi-layered HDC (yaw,height)');
-                    axis on
-                    set(gca,'FontSize',12, 'LineWidth',1.2); % axis font
-%                     view(40,20)
+                    % 5. 原始图像
+                    subplot(2,3,5);
+                    imshow(curImg); title(['当前帧：', num2str(indFrame), '（模板ID=', num2str(vt_id), '）']);
                     
-%                     figure(3)
-                    % 绘制视觉模板的历史（history of visual templates）
-                    subplot(8, 9, [7 27], 'replace');
-                    hold on
-                    plot3((expTrajectory(:,2)) * EXP_MAP_X_SCALING, ...
-                        (expTrajectory(:,1) ) * EXP_MAP_Y_SCALING, ...
-                        expTrajectory(:,3) * EXP_MAP_Z_SCALING, '.b', 'MarkerSize',10);
-                    
-                    % 是否在多层经验图中绘制红色的真值
-                    % if gtHasValue == 1
-                    %     % 会报错：索引超过数组元素的数量。索引不能超过 2781。
-                    %     plot3((gt_x(startFrame:curFrame * ODO_STEP)-gt_x(startFrame)) * GT_EXP_X_SCALING, ...
-                    %     (gt_y(startFrame:curFrame * ODO_STEP)-gt_y(startFrame)) * GT_EXP_Y_SCALING, ...
-                    %     (gt_z(startFrame:curFrame * ODO_STEP)-gt_z(startFrame)) * GT_EXP_Z_SCALING, '.r');
-                    % end
-
-                    hold off;
-                    grid on
-                    view(3)
-%                   view(0, 90);
-                    xl = xlabel('exp-x');
-                    yl = ylabel('exp-y');
-                    zlabel('exp-z');
-                    set(xl,'Rotation',15);
-                    set(yl,'Rotation',-30);
-                    title('Multilayered Experience Map');
-%                     legend('Result','Truth' ,'1');
-
-                    % SynPerData
-                    %  axis([-3 13 -5 20 -0.5 3]);
-                    
-                    % QUT
-%                     axis([-1 55 -20 30 -0.5 3]);
-                        
-                    % SynPanData
-%                     axis([0 140 -230 50 -0.5 18]);
-    
-%                     axis equal                    
-                    axis on
-                    rotate3d on
-                    set(gca,'FontSize',12, 'LineWidth',1.2); % axis font
-
-                     % draw odo map
-                    subplot(8, 9, [52 72], 'replace');
-                    hold on
-                    plot3((odoMapTrajectory(:,2))* ODO_MAP_X_SCALING , ...
-                        (odoMapTrajectory(:,1)) * ODO_MAP_Y_SCALING, ...
-                        (odoMapTrajectory(:,3) ) * ODO_MAP_Z_SCALING, '.b', 'MarkerSize',10);
-                    
-%                     if gtHasValue == 1
-%                         plot3((gt_x(startFrame:curFrame) - gt_x(startFrame)) * GT_ODO_X_SCALING, ...
-%                         (gt_y(startFrame:curFrame) - gt_y(startFrame)) * GT_ODO_Y_SCALING, ...
-%                         (gt_z(startFrame:curFrame) - gt_z(startFrame)) * GT_ODO_Z_SCALING, '.r');
-%                     end
-                    
-                    hold off;
-                    view(3);
-                    grid on;
-%                     view(0, 90);
-                    xl = xlabel('odo-map-x');
-                    yl = ylabel('odo-map-y');
-                    zlabel('odo-map-z');
-                    set(xl,'Rotation',15);
-                    set(yl,'Rotation',-30);
-                    title('Multilayered Odometry Map');
-%                     legend('Result','Truth' ,'1');
-
-                    % SynPerData
-                    %axis([-4 13 -5 20 -0.5 3]);
-%                      SynPanData
-%                     axis([-5 150 -170 50 -0.5 18]);
-
-                    % SynPerData
-                    % %     axis([-5 20 -20 5 -1 3]);
-
-                    % qutdata
-%                     axis([-10 48 -40 40 -0.5 3]);
-                    
-                    axis on
-                    rotate3d on
-                    set(gca,'FontSize',12, 'LineWidth',1.2); % axis font
-                    
-                    % draw current yaw image for vo, vt
-                    subplot(8, 9, [28 38], 'replace');
-                    imshow(curImg, []);
-                    xlabel('Width');
-                    ylabel('Height');
-                    title('Raw image for vo and vt');
-                    axis on
-                    set(gca,'FontSize',12); % axis font
-                    
-                    % draw current hdc yaw theta
-                    subplot(8, 9, [31 41], 'replace');
-                    polar(Theta,Rho);
-                    hold on
-                    plot([startpoint(1) hdcYawTheta(curFrame,1)],[startpoint(2) hdcYawTheta(curFrame,2)],'linewidth',1,'color',[0.9 0 0]);
-                    title('Current yaw (decoded from HDC) ');
-                    set(gca,'FontSize',12, 'LineWidth',1.2); % axis font
-                    
-%                     % draw current odo yaw theta
-%                     subplot(8, 9, 65, 'replace');
-%                     polar(Theta,Rho);
-%                     hold on
-%                     plot([startpoint(1) odoYawTheta(curFrame,1)],[startpoint(2) odoYawTheta(curFrame,2)],'linewidth',1,'color',[0.9 0 0]);
-%                     title('Current odo yaw');
-
-                    subplot(8, 9, [55 65], 'replace');
-                    plot(EXP_HISTORY, '.','MarkerSize',10);
-                    xlabel('The number of images');
-                    ylabel('Current Exp ID');
-                    title('The history of experiences');
-                    axis on
-                    set(gca,'FontSize',12, 'LineWidth',1.2); % axis font
-                    
-                    % draw the history of visual templates
-                    subplot(8, 9, [58 68], 'replace');
-                    plot(VT_HISTORY, '.', 'MarkerSize',10);
-                    xlabel('The number of images');
-                    ylabel('Current VT ID');
-                    title('The history of visual template');
-                    axis on
-                    set(gca,'FontSize',12, 'LineWidth',1.2); % axis font
+                    % 6. 视觉模板ID历史
+                    subplot(2,3,6);
+                    plot(VT_HISTORY, 'g-', 'LineWidth', 1.2);
+                    xlabel('Frame'); ylabel('Visual Template ID'); title('视觉模板ID变化'); grid on;
                     
                     drawnow;
-                                     
-%                     save_gc_hdc_trajectory(gcTrajFile, hdcTrajFile, MAX_ACTIVE_XYZ_PATH, MAX_ACTIVE_YAW_HEIGHT_HIS_PATH);
-       
+                    disp('[16/12] 可视化完成');
                 end
-                
-                PREV_VT_ID = vt_id;
 
-             
-             end
-              
-%             save_history_data(expMapHistoryFile, expTrajectory);
-%             save_history_data(odoMapHistoryFile, odoMapTrajectory);
-%             save_em_history_data(emHistoryFile, VT_HISTORY);
-%             save_vt_history_data(vtHistoryFile, EXP_HISTORY);
-%             save_gc_hdc_trajectory(gcTrajFile, hdcTrajFile, MAX_ACTIVE_XYZ_PATH, MAX_ACTIVE_YAW_HEIGHT_HIS_PATH);
+                disp(['[10/12] 第 ', num2str(indFrame), ' 帧处理结束']);
+            end
+        else
+            disp('[9/12] 当前子文件夹无图像，跳过');
+        end
+    end
 
-     end
-  end
-end
-   
-    
-
+    %% 17. 自动保存结果
+    %% 17. 自动保存结果（修改后：添加GRIDCELLS和HDC_CELLS）
+    disp('[17/12] 开始保存结果...');
+    if ~isempty(expMapHistoryFile)
+        save(expMapHistoryFile, 'expTrajectory');
+        disp(['[17/12] 经验图轨迹保存至：', expMapHistoryFile]);
+    end
+    if ~isempty(odoMapHistoryFile)
+        save(odoMapHistoryFile, 'odoMapTrajectory');
+        disp(['[17/12] 里程计轨迹保存至：', odoMapHistoryFile]);
+    end
+    if ~isempty(vtHistoryFile)
+        save(vtHistoryFile, 'VT_HISTORY');
+        disp(['[17/12] 视觉模板历史保存至：', vtHistoryFile]);
+    end
+    if ~isempty(emHistoryFile)
+    save(emHistoryFile, 'EXP_HISTORY', 'NUM_EXPS');  % 同时保存NUM_EXPS
+    disp(['[17/12] 经验图历史保存至：', emHistoryFile]);
+    end
+    if ~isempty(gcTrajFile) && ~isempty(hdcTrajFile)
+        % 保存GRIDCELLS到gc_trajectory.mat
+        save(gcTrajFile, 'MAX_ACTIVE_XYZ_PATH', 'GRIDCELLS');
+        % 保存HDC_CELLS到hdc_trajectory.mat
+        save(hdcTrajFile, 'MAX_ACTIVE_YAW_HEIGHT_HIS_PATH', 'HDC_CELLS', 'curYawTheta', 'curHeightValue');
+        disp(['[17/12] 网格细胞和HDC轨迹保存完成']);
+    end

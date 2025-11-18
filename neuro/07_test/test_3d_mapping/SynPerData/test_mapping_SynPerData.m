@@ -26,6 +26,7 @@
 clear workspace
 % global expTrajectory;
 % vo initial
+data_dir='./Dataset';
 visual_odo_initial( ...
     'ODO_IMG_TRANS_Y_RANGE', 31:90, ...
     'ODO_IMG_TRANS_X_RANGE', 16:145, ...
@@ -116,13 +117,13 @@ exp_initial( ...
 
 % main process 
 % file path: visualDataFile, expMapHistoryFile, odoMapHistoryFile, groundTruthFile,vtHistoryFile, emHistoryFile, varargin
-imageFolderPath = fullfile(data_dir, '01_NeuroSLAM_Datasets\01_SynPerData');
+imageFolderPath = fullfile(data_dir, '01_NeuroSLAM_Datasets','01_SynPerData');
 SynPerDataFile = fullfile (imageFolderPath, '');
 
-gtDataFolderPath = fullfile(data_dir, '02_NeuroSLAM_Groudtruth\');
+gtDataFolderPath = fullfile(data_dir, '02_NeuroSLAM_Groudtruth');
 gtDataFile = fullfile(gtDataFolderPath, '01_SynPerData_GT.txt');
 
-experiDataPath = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPerData');
+experiDataPath = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results','SynPerData');
 expMapFile  = fullfile(experiDataPath, '01_exp_map_ml.txt');
 odoMapFile  = fullfile(experiDataPath, '02_odo_map_ml.txt');
 emHisFile   = fullfile(experiDataPath, '03_em_history_ml.txt');
@@ -132,7 +133,7 @@ hdcTrajFile = fullfile(experiDataPath, '06_hdc_trajectory.txt');
 
 main(SynPerDataFile, ...
     gtDataFile, ...
-    expMapFile, ...
+    expMapFile, ...zx 
     odoMapFile, ...
     emHisFile, ...
     vtHisFile, ...    

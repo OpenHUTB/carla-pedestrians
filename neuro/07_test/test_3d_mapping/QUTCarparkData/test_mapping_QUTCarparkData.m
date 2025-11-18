@@ -117,6 +117,7 @@ exp_initial( ...
 % main process 
 % file path: visualDataFile, expMapHistoryFile, odoMapHistoryFile, groundTruthFile,vtHistoryFile, emHistoryFile, varargin
 
+data_dir='./Dataset';
 imageFolderPath = fullfile(data_dir, '01_NeuroSLAM_Datasets\03_QUTCarparkData');
 SynPerDataFile = fullfile (imageFolderPath, '');
 

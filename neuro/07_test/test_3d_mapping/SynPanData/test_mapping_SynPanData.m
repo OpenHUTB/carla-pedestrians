@@ -115,7 +115,9 @@ exp_initial( ...
     'EXP_CORRECTION', 0.005 );   % 0.005
     
 % main process 
+
 % file path: visualDataFile, expMapHistoryFile, odoMapHistoryFile, groundTruthFile,vtHistoryFile, emHistoryFile, varargin
+data_dir='./Dataset';
 imageFolderPath = fullfile(data_dir, '01_NeuroSLAM_Datasets\02_SynPanData');
 SynPerDataFile = fullfile (imageFolderPath, '');
 

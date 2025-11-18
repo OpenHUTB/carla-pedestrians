@@ -117,15 +117,16 @@ exp_initial( ...
 % 主函数处理
 % 文件路径: visualDataFile, expMapHistoryFile, odoMapHistoryFile, groundTruthFile,vtHistoryFile, emHistoryFile, varargin
 % 合成透视数据：包含4994个png图片（标号到5000）
-imageFolderPath = fullfile(data_dir, '01_NeuroSLAM_Datasets\00_CarlaData');
-SynPerDataFile = fullfile (imageFolderPath, '');
+
+imageFolderPath =fullfile('./', 'Dataset', '01_NeuroSLAM_Datasets');
+SynPerDataFile = fullfile(imageFolderPath,'01_SynPerData');
 
 % 真值，每一行表示：图片序列号, 
 % [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz]
-gtDataFolderPath = fullfile(data_dir, '02_NeuroSLAM_Groudtruth\');
+gtDataFolderPath= fullfile('./', 'Dataset', '02_NeuroSLAM_Groudtruth');
 gtDataFile = fullfile(gtDataFolderPath, '01_SynPerData_GT.txt');
 
-experiDataPath = fullfile(data_dir, '03_NeuroSLAM_Experiments_Results\SynPerData');
+experiDataPath = fullfile('./Dataset', '03_NeuroSLAM_Experiments_Results\SynPerData');
 expMapFile  = fullfile(experiDataPath, '01_exp_map_ml.txt');
 odoMapFile  = fullfile(experiDataPath, '02_odo_map_ml.txt');
 emHisFile   = fullfile(experiDataPath, '03_em_history_ml.txt');
