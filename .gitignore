@@ -143,3 +143,26 @@ subsets/
 *.pt
 
 .DS_Store
+
+# NeuroSLAM数据和结果（不上传）
+neuro/data/
+
+# SLAM测试结果（不上传）
+neuro/07_test/test_imu_visual_slam/*_results/
+neuro/07_test/test_imu_visual_slam/*.png
+neuro/07_test/test_imu_visual_slam/*.mat
+neuro/07_test/test_imu_visual_slam/*.txt
+
+# 说明文档（不上传，只上传核心代码）
+neuro/07_test/test_imu_visual_slam/*.md
+neuro/09_vestibular/README*.md
+neuro/09_vestibular/QUICKSTART*.md
+neuro/IMU_VISUAL_FUSION_SUMMARY.md
+
+# 诊断和测试脚本（不上传）
+neuro/00_collect_data/diagnose_error.py
+neuro/00_collect_data/test_collision_avoidance.py
+neuro/00_collect_data/COLLISION_AVOIDANCE_CONFIG.md
+
+# MATLAB临时文件
+*.asv

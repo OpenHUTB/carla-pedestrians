@@ -19,9 +19,13 @@ sys.path.append(carla_api_path)
 from agents.navigation.behavior_agent import BehaviorAgent
 
 # -------------------------- 配置参数 --------------------------
-TARGET_MAP = "Town10HD"
+TARGET_MAP = "Town01"
 MAX_SAVE_IMG = 5000
-OUTPUT_DIR = '../data/01_NeuroSLAM_Datasets/Town10Data/'
+OUTPUT_DIR = '../data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/'
+
+# IMU-视觉融合参数优化
+IMU_SAMPLE_RATE = 60  # Hz
+CAMERA_SAMPLE_RATE = 20  # Hz (1/0.05)
 
 EXPOSURE_MODE = "manual"
 EXPOSURE_COMPENSATION = "0.0" 
@@ -29,13 +33,18 @@ FSTOP = "4.0"
 ISO = "250"  
 GAMMA = "2.2"
 AGENT_BEHAVIOR = "cautious"
-AGENT_MAX_SPEED = 30  # km/h
+AGENT_MAX_SPEED = 20  # km/h - 降低速度以提高安全性
+AGENT_SAFE_DISTANCE = 5.0  # 安全距离（米）
+COLLISION_RESET_THRESHOLD = 3  # 碰撞次数阈值，超过后重置车辆
 
-# -------------------------- 官方碰撞传感器 --------------------------
+# -------------------------- 增强型碰撞传感器 --------------------------
 class CollisionSensor(object):
     def __init__(self, parent_actor):
         self.sensor = None
         self._parent = parent_actor
+        self.collision_count = 0
+        self.collision_history = []
+        self.last_collision_time = 0
         world = self._parent.get_world()
         blueprint = world.get_blueprint_library().find('sensor.other.collision')
         self.sensor = world.spawn_actor(blueprint, carla.Transform(), attach_to=self._parent)
@@ -47,8 +56,29 @@ class CollisionSensor(object):
         self = weak_self()
         if not self:
             return
-        actor_type = event.other_actor.type_id.split('.')[-1]
-        print(f"⚠️  碰撞检测：与 {actor_type} 发生碰撞")
+        current_time = time.time()
+        # 防止同一碰撞事件被多次记录（0.5秒内的视为同一次）
+        if current_time - self.last_collision_time > 0.5:
+            self.collision_count += 1
+            self.last_collision_time = current_time
+            actor_type = event.other_actor.type_id.split('.')[-1]
+            impulse = event.normal_impulse
+            intensity = math.sqrt(impulse.x**2 + impulse.y**2 + impulse.z**2)
+            self.collision_history.append({
+                'time': current_time,
+                'actor': actor_type,
+                'intensity': intensity
+            })
+            print(f"⚠️  碰撞检测 [{self.collision_count}次]: 与 {actor_type} 发生碰撞 (强度: {intensity:.2f})")
+    
+    def reset_collision_count(self):
+        """重置碰撞计数"""
+        self.collision_count = 0
+        self.collision_history = []
+    
+    def has_major_collision(self):
+        """检测是否发生严重碰撞"""
+        return self.collision_count >= COLLISION_RESET_THRESHOLD
 
 # -------------------------- 全局工具函数 --------------------------
 def clear_all_actors(world):
@@ -69,6 +99,35 @@ def clear_all_actors(world):
         except Exception as e:
             print(f"清理行人警告: {e}")
     time.sleep(1)
+
+def select_forward_destination(vehicle, spawn_points, min_distance=50.0):
+    """选择车辆前方的目标点，优先直行路径"""
+    vehicle_transform = vehicle.get_transform()
+    vehicle_location = vehicle_transform.location
+    vehicle_forward = vehicle_transform.get_forward_vector()
+    
+    # 筛选前方的spawn点
+    forward_points = []
+    for sp in spawn_points:
+        to_spawn = sp.location - vehicle_location
+        distance = to_spawn.length()
+        
+        # 计算是否在前方（点积>0表示在前方）
+        if distance > min_distance:
+            direction = to_spawn / distance
+            dot_product = vehicle_forward.x * direction.x + vehicle_forward.y * direction.y
+            
+            if dot_product > 0.7:  # 夹角小于45度认为是前方
+                forward_points.append((sp.location, distance, dot_product))
+    
+    if forward_points:
+        # 按照"前方程度"排序，选择最前方的点
+        forward_points.sort(key=lambda x: x[2], reverse=True)
+        return forward_points[0][0]
+    else:
+        # 如果没有前方点，选择距离最远的点
+        farthest = max(spawn_points, key=lambda sp: (sp.location - vehicle_location).length())
+        return farthest.location
 
 def safe_spawn_vehicle(world, bp_lib, max_attempts=10):
     spawn_points = world.get_map().get_spawn_points()
@@ -102,6 +161,10 @@ def init_carla_environment():
     traffic_manager = client.get_trafficmanager()
     traffic_manager.set_synchronous_mode(True)
     
+    # 优化Traffic Manager参数以提高安全性
+    traffic_manager.set_global_distance_to_leading_vehicle(3.0)  # 增加跟车距离
+    traffic_manager.set_random_device_seed(42)  # 固定随机种子，行为可复现
+    
     clear_all_actors(world)
     
     print(f"加载地图 {TARGET_MAP}...")
@@ -127,10 +190,40 @@ def init_carla_environment():
         print(f"配置车辆物理参数警告: {e}")
     
     agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
-    agent.follow_speed_limits(True)
-    destination = random.choice(spawn_points).location
+    agent.follow_speed_limits(False)  # 禁用限速，使用自定义速度
+    
+    # 兼容不同CARLA版本的速度设置
+    try:
+        agent.set_max_speed(AGENT_MAX_SPEED / 3.6)  # km/h转m/s
+    except AttributeError:
+        # 旧版本使用set_target_speed
+        try:
+            agent.set_target_speed(AGENT_MAX_SPEED / 3.6)
+        except AttributeError:
+            # 直接设置内部属性
+            agent._max_speed = AGENT_MAX_SPEED / 3.6
+            print(f"使用备用方式设置速度: {AGENT_MAX_SPEED} km/h")
+    
+    # 增强避障参数（兼容性处理）
+    try:
+        # 设置更大的安全距离和更保守的驾驶参数
+        if hasattr(agent, '_vehicle_controller') and agent._vehicle_controller is not None:
+            if hasattr(agent._vehicle_controller, '_args_lateral_dict'):
+                agent._vehicle_controller._args_lateral_dict['K_P'] = 0.8
+                agent._vehicle_controller._args_lateral_dict['K_I'] = 0.02
+                agent._vehicle_controller._args_lateral_dict['K_D'] = 0.0
+        if hasattr(agent, '_min_distance'):
+            agent._min_distance = AGENT_SAFE_DISTANCE
+        if hasattr(agent, '_max_brake'):
+            agent._max_brake = 0.8
+    except (AttributeError, KeyError, TypeError) as e:
+        print(f"警告：无法设置高级避障参数 ({e})，使用默认配置")
+    
+    # 选择前方较远的目标点，避免斜着走
+    destination = select_forward_destination(vehicle, spawn_points)
     agent.set_destination(destination)
-    print(f"避障智能体初始化完成，目标: ({destination.x:.1f}, {destination.y:.1f})")
+    print(f"避障智能体初始化完成（最大速度: {AGENT_MAX_SPEED} km/h，安全距离: {AGENT_SAFE_DISTANCE}m）")
+    print(f"目标位置: ({destination.x:.1f}, {destination.y:.1f}, {destination.z:.1f})")
     
     collision_sensor = CollisionSensor(vehicle)
     
@@ -235,9 +328,14 @@ class EKF_VIO:
             init_pose[3], init_pose[4], init_pose[5]
         ], dtype=np.float64)
         self.dt = dt
-        self.P = np.diag([0.1, 0.1, 0.1, 0.5, 0.5, 0.5, 0.01, 0.01, 0.01])
-        self.Q = np.diag([0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.001, 0.001, 0.001])
-        self.R = np.diag([0.05, 0.05, 0.05, 0.005, 0.005, 0.005])
+        # 优化协方差矩阵以提高融合精度
+        self.P = np.diag([0.05, 0.05, 0.05, 0.2, 0.2, 0.2, 0.005, 0.005, 0.005])  # 位置、速度、姿态初始协方差
+        self.Q = np.diag([0.005, 0.005, 0.005, 0.05, 0.05, 0.05, 0.0005, 0.0005, 0.0005])  # 过程噪声降低
+        self.R = np.diag([0.02, 0.02, 0.02, 0.002, 0.002, 0.002])  # 视觉观测噪声降低
+        
+        # 统计信息
+        self.innovation_history = []
+        self.uncertainty_history = []
 
     def imu_prediction(self, imu_data):
         accel = np.array([imu_data.accelerometer.x, imu_data.accelerometer.y, imu_data.accelerometer.z])
@@ -267,19 +365,42 @@ class EKF_VIO:
         H[0,0] = H[1,1] = H[2,2] = 1
         H[3,6] = H[4,7] = H[5,8] = 1
 
-        y = z - H @ self.x
+        y = z - H @ self.x  # 新息(innovation)
         try:
             S = H @ self.P @ H.T + self.R + np.eye(6)*1e-8
             K = self.P @ H.T @ np.linalg.inv(S)
+            
+            # 记录新息和不确定性用于质量评估
+            self.innovation_history.append(np.linalg.norm(y))
+            self.uncertainty_history.append(np.trace(self.P[:3, :3]))  # 位置不确定性
         except:
             K = np.eye(9,6)*0.1
 
         self.x += K @ y
-        self.P = (np.eye(9) - K@H) @ self.P
-        self.P = 0.5*(self.P + self.P.T)
+        # Joseph形式协方差更新，保证数值稳定性
+        I_KH = np.eye(9) - K @ H
+        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
+        self.P = 0.5*(self.P + self.P.T)  # 保持对称性
 
     def get_current_pose(self):
         return self.x[:3].copy(), self.x[6:9].copy()
+    
+    def get_current_velocity(self):
+        return self.x[3:6].copy()
+    
+    def get_position_uncertainty(self):
+        """返回位置估计的不确定性(标准差)"""
+        return np.sqrt(np.diag(self.P[:3, :3]))
+    
+    def get_fusion_quality_metrics(self):
+        """返回融合质量指标"""
+        if len(self.innovation_history) > 0:
+            return {
+                'avg_innovation': np.mean(self.innovation_history[-100:]),
+                'avg_uncertainty': np.mean(self.uncertainty_history[-100:]),
+                'innovation_std': np.std(self.innovation_history[-100:])
+            }
+        return {'avg_innovation': 0, 'avg_uncertainty': 0, 'innovation_std': 0}
 
 # -------------------------- 图像后处理 --------------------------
 def save_image_simple(img_array, output_dir, idx, target_width=160, target_height=120):
@@ -327,7 +448,21 @@ def main():
     # 数据保存参数（每1帧对齐数据保存1帧，确保时间戳同步）
     img_idx = 0
     fusion_log = open(os.path.join(OUTPUT_DIR, 'fusion_pose.txt'), 'w')
-    fusion_log.write("timestamp,pos_x,pos_y,pos_z,roll,pitch,yaw,imu_pos_x,imu_pos_y,imu_pos_z\n")
+    fusion_log.write("timestamp,pos_x,pos_y,pos_z,roll,pitch,yaw,imu_pos_x,imu_pos_y,imu_pos_z,vel_x,vel_y,vel_z,uncertainty_x,uncertainty_y,uncertainty_z\n")
+    
+    # 保存Ground Truth（CARLA车辆真实位置）
+    gt_log = open(os.path.join(OUTPUT_DIR, 'ground_truth.txt'), 'w')
+    gt_log.write("timestamp,pos_x,pos_y,pos_z,roll,pitch,yaw,vel_x,vel_y,vel_z\n")
+    
+    # 添加MATLAB兼容的元数据文件
+    metadata_log = open(os.path.join(OUTPUT_DIR, 'dataset_metadata.txt'), 'w')
+    metadata_log.write(f"# IMU-Visual SLAM Dataset\n")
+    metadata_log.write(f"# Map: {TARGET_MAP}\n")
+    metadata_log.write(f"# Camera Rate: {CAMERA_SAMPLE_RATE} Hz\n")
+    metadata_log.write(f"# IMU Rate: {IMU_SAMPLE_RATE} Hz\n")
+    metadata_log.write(f"# Image Size: 160x120\n")
+    metadata_log.write(f"# Total Frames: {MAX_SAVE_IMG}\n")
+    metadata_log.close()
 
     cv2.namedWindow('RGB Camera', cv2.WINDOW_AUTOSIZE)
     stagnant_count = 0
@@ -359,6 +494,19 @@ def main():
 
                 ekf.visual_update(visual_pose)
                 fusion_pos, fusion_att = ekf.get_current_pose()
+                fusion_vel = ekf.get_current_velocity()
+                pos_uncertainty = ekf.get_position_uncertainty()
+                
+                # 保存Ground Truth（CARLA车辆真实位置）
+                vehicle_vel = vehicle.get_velocity()
+                gt_log.write(f"{img_data.timestamp:.6f},"
+                            f"{carla_pose.location.x:.6f},{carla_pose.location.y:.6f},{carla_pose.location.z:.6f},"
+                            f"{carla_pose.rotation.roll:.6f},{carla_pose.rotation.pitch:.6f},{carla_pose.rotation.yaw:.6f},"
+                            f"{vehicle_vel.x:.6f},{vehicle_vel.y:.6f},{vehicle_vel.z:.6f}\n")
+                
+                # 每10帧flush一次ground truth数据
+                if img_idx % 10 == 0:
+                    gt_log.flush()
 
                 # 参考代码逻辑：raw_data为RGBA格式，取前3通道作为RGB
                 img = np.reshape(np.copy(img_data.data.raw_data), (480, 640, 4))[:, :, :3]  # 仅保留RGB通道
@@ -374,11 +522,24 @@ def main():
                             f"{imu_data.data.accelerometer.x:.6f},{imu_data.data.accelerometer.y:.6f},{imu_data.data.accelerometer.z:.6f},"
                             f"{imu_data.data.gyroscope.x:.6f},{imu_data.data.gyroscope.y:.6f},{imu_data.data.gyroscope.z:.6f}\n")
 
-                # 保存融合结果
+                # 保存融合结果（增加速度和不确定性信息）
                 fusion_log.write(f"{img_data.timestamp:.6f},"
                                 f"{fusion_pos[0]:.6f},{fusion_pos[1]:.6f},{fusion_pos[2]:.6f},"
                                 f"{math.degrees(fusion_att[0]):.6f},{math.degrees(fusion_att[1]):.6f},{math.degrees(fusion_att[2]):.6f},"
-                                f"{imu_pos[0]:.6f},{imu_pos[1]:.6f},{imu_pos[2]:.6f}\n")
+                                f"{imu_pos[0]:.6f},{imu_pos[1]:.6f},{imu_pos[2]:.6f},"
+                                f"{fusion_vel[0]:.6f},{fusion_vel[1]:.6f},{fusion_vel[2]:.6f},"
+                                f"{pos_uncertainty[0]:.6f},{pos_uncertainty[1]:.6f},{pos_uncertainty[2]:.6f}\n")
+                
+                # 每10帧flush一次，确保数据及时写入磁盘
+                if img_idx % 10 == 0:
+                    fusion_log.flush()
+                
+                # 每100帧打印融合质量指标
+                if img_idx % 100 == 0 and img_idx > 0:
+                    metrics = ekf.get_fusion_quality_metrics()
+                    print(f"融合质量 - 平均新息: {metrics['avg_innovation']:.4f}, "
+                          f"平均不确定性: {metrics['avg_uncertainty']:.4f}")
+                    print(f"已保存 {img_idx} 条融合位姿数据")
 
                 if img_idx >= MAX_SAVE_IMG:
                     print("达到最大保存数量，退出")
@@ -387,47 +548,109 @@ def main():
                 # 显示原始图像
                 cv2.imshow('RGB Camera', img)
 
-            # 避障智能体控制（保持不变）
+            # 增强型避障智能体控制
             if agent.done():
-                destination = random.choice(spawn_points).location
+                destination = select_forward_destination(vehicle, spawn_points)
                 agent.set_destination(destination)
-                print(f"已到达，新目标：({destination.x:.1f}, {destination.y:.1f})")
-            control = agent.run_step()
-            control.manual_gear_shift = False
-            vehicle.apply_control(control)
+                print(f"✓ 已到达目标，设置新目标：({destination.x:.1f}, {destination.y:.1f}, {destination.z:.1f})")
+            
+            try:
+                control = agent.run_step()
+                control.manual_gear_shift = False
+                vehicle.apply_control(control)
+            except Exception as e:
+                print(f"警告：控制命令执行失败 - {e}")
+                control = carla.VehicleControl()
+                control.brake = 1.0
+                vehicle.apply_control(control)
 
-            # 停滞检测与重置
-            vel = vehicle.get_velocity()
-            speed = math.sqrt(vel.x**2 + vel.y**2)
+            # 碰撞检测与重置（优先级高）
             reset_needed = False
+            reset_reason = ""
+            
+            if collision_sensor.has_major_collision():
+                print(f"❌ 检测到多次碰撞({collision_sensor.collision_count}次)，重置车辆...")
+                reset_needed = True
+                reset_reason = "碰撞过多"
+            
+            # 停滞检测与重置（次要）
+            vel = vehicle.get_velocity()
+            speed = math.sqrt(vel.x**2 + vel.y**2 + vel.z**2)
             if speed < 0.1:
                 stagnant_count += 1
-                if stagnant_count > 100:
-                    print("车辆停滞，重新生成...")
+                if stagnant_count > 150:  # 增加容忍度到150帧（约7.5秒）
+                    print(f"⏸️  车辆长时间停滞（{stagnant_count}帧），重置...")
                     reset_needed = True
+                    reset_reason = "停滞"
             else:
                 stagnant_count = 0
 
             if reset_needed:
-                camera.stop()
-                imu.stop()
-                camera.destroy()
-                imu.destroy()
-                vehicle.destroy()
-                vehicle, _ = safe_spawn_vehicle(world, bp_lib)
+                print(f"🔄 开始重置流程（原因: {reset_reason})...")
                 try:
+                    # 清理旧传感器
+                    camera.stop()
+                    imu.stop()
+                    collision_sensor.sensor.stop()
+                    camera.destroy()
+                    imu.destroy()
+                    collision_sensor.sensor.destroy()
+                    vehicle.destroy()
+                    time.sleep(0.5)  # 等待清理完成
+                    
+                    # 生成新车辆
+                    vehicle, _ = safe_spawn_vehicle(world, bp_lib)
+                    
+                    # 配置车辆物理参数
                     physics_control = vehicle.get_physics_control()
                     physics_control.use_sweep_wheel_collision = True
                     vehicle.apply_physics_control(physics_control)
-                except:
-                    pass
-                agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
-                agent.set_max_speed(AGENT_MAX_SPEED / 3.6)
-                agent.set_destination(random.choice(spawn_points).location)
-                camera, _ = create_rgb_camera(world, bp_lib, vehicle, sensor_queue)  # 重新初始化相机（使用同步参数）
-                imu = create_imu_sensor(world, bp_lib, vehicle, sensor_queue, cam_transform)
-                collision_sensor = CollisionSensor(vehicle)
-                stagnant_count = 0
+                    
+                    # 重新初始化智能体（使用更安全的配置）
+                    agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
+                    agent.follow_speed_limits(False)  # 禁用限速
+                    
+                    # 兼容不同CARLA版本的速度设置
+                    try:
+                        agent.set_max_speed(AGENT_MAX_SPEED / 3.6)
+                    except AttributeError:
+                        try:
+                            agent.set_target_speed(AGENT_MAX_SPEED / 3.6)
+                        except AttributeError:
+                            agent._max_speed = AGENT_MAX_SPEED / 3.6
+                    
+                    # 设置避障参数（兼容性处理）
+                    try:
+                        if hasattr(agent, '_vehicle_controller') and agent._vehicle_controller is not None:
+                            if hasattr(agent._vehicle_controller, '_args_lateral_dict'):
+                                agent._vehicle_controller._args_lateral_dict['K_P'] = 0.8
+                                agent._vehicle_controller._args_lateral_dict['K_I'] = 0.02
+                                agent._vehicle_controller._args_lateral_dict['K_D'] = 0.0
+                        if hasattr(agent, '_min_distance'):
+                            agent._min_distance = AGENT_SAFE_DISTANCE
+                        if hasattr(agent, '_max_brake'):
+                            agent._max_brake = 0.8
+                    except (AttributeError, KeyError, TypeError):
+                        pass
+                    
+                    # 选择前方目标点
+                    destination = select_forward_destination(vehicle, spawn_points)
+                    agent.set_destination(destination)
+                    print(f"新目标: ({destination.x:.1f}, {destination.y:.1f}, {destination.z:.1f})")
+                    
+                    # 重新创建传感器
+                    camera, cam_transform = create_rgb_camera(world, bp_lib, vehicle, sensor_queue)
+                    imu = create_imu_sensor(world, bp_lib, vehicle, sensor_queue, cam_transform)
+                    collision_sensor = CollisionSensor(vehicle)
+                    
+                    # 重置计数器
+                    stagnant_count = 0
+                    
+                    print(f"✓ 重置完成，继续采集数据")
+                    
+                except Exception as e:
+                    print(f"❌ 重置失败: {e}")
+                    print("尝试继续运行...")
 
             # 跟随视角
             spec_transform = carla.Transform(
@@ -444,6 +667,7 @@ def main():
         print(f"主循环错误: {e}")
     finally:
         fusion_log.close()
+        gt_log.close()
         camera.stop()
         imu.stop()
         collision_sensor.sensor.stop()
