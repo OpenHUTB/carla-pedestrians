@@ -10,7 +10,9 @@ clear all; close all; clc;
 %% 1. 添加路径
 fprintf('========== IMU-Visual Fusion SLAM Test ==========\n');
 fprintf('[1/9] 添加依赖路径...\n');
-rootDir = '/home/dream/neuro_111111/carla-pedestrians/neuro';
+% 动态获取neuro根目录
+currentDir = fileparts(mfilename('fullpath'));
+rootDir = fileparts(fileparts(currentDir));
 addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/3d_grid_cells_network'));
 addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/yaw_height_hdc_network'));
 addpath(fullfile(rootDir, '04_visual_template'));
