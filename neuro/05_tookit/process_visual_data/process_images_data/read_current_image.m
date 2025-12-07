@@ -33,7 +33,8 @@ function [curImg] = read_current_image(curFolderPath, imgFilesPathList, iCurImg)
     curImgName = imgFilesPathList(iCurImg).name;
     
     % read current image
-    curImg =  imread(strcat(curFolderPath,curImgName));
+    % 使用fullfile正确拼接路径（自动添加分隔符）
+    curImg =  imread(fullfile(curFolderPath, curImgName));
 
 end
 

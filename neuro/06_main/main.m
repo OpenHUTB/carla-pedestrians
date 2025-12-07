@@ -33,7 +33,8 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     clear EXP_NODES_LINKS
     %% 1. 添加所有依赖路径（确保能找到辅助函数）
     disp('[1/12] 开始添加依赖路径...');
-    rootDir = '/home/dream/Neuro_WS/carla-pedestrians/neuro';
+    % 动态获取neuro根目录（main.m在neuro/06_main/下）
+    rootDir = fileparts(fileparts(mfilename('fullpath')));
     addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/3d_grid_cells_network'));
     addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/yaw_height_hdc_network'));
     addpath(fullfile(rootDir, '04_visual_template'));
@@ -58,9 +59,47 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     global VT_IMG_X_RANGE; VT_IMG_X_RANGE = 30:130;
     global VT_IMG_RESIZE_Y_RANGE; VT_IMG_RESIZE_Y_RANGE = 32;
     global VT_IMG_RESIZE_X_RANGE; VT_IMG_RESIZE_X_RANGE = 32;
+    
+    % ===== 增强视觉特征提取器配置 (HART+CORnet) =====
+    global USE_NEURO_FEATURE_EXTRACTOR;
+    global NEURO_FEATURE_METHOD;
+    % 配置选项：
+    % USE_NEURO_FEATURE_EXTRACTOR = true:  使用增强特征提取器 (5.92倍速度，强鲁棒性)
+    % USE_NEURO_FEATURE_EXTRACTOR = false: 使用原始patch normalization
+    USE_NEURO_FEATURE_EXTRACTOR = true;   % 推荐：true
+    NEURO_FEATURE_METHOD = 'matlab';      % 'matlab' 或 'python'
+    
+    if USE_NEURO_FEATURE_EXTRACTOR
+        disp('[配置] 使用增强视觉特征提取器 (HART+CORnet, 5.92x速度)');
+    else
+        disp('[配置] 使用原始视觉模板方法');
+    end
 
-    % HDC（偏航-高度细胞）相关
+    % 视觉模板（VT）相关全局变量
     global VT; VT = [];
+    global NUM_VT; NUM_VT = 0;
+    global VT_HISTORY; VT_HISTORY = [];
+    global VT_HISTORY_FIRST; VT_HISTORY_FIRST = [];
+    global VT_HISTORY_OLD; VT_HISTORY_OLD = [];
+    global PREV_VT_ID; PREV_VT_ID = -1;
+    global SUB_VT_IMG; SUB_VT_IMG = [];
+    global MIN_DIFF_CURR_IMG_VTS; MIN_DIFF_CURR_IMG_VTS = [];
+    global DIFFS_ALL_IMGS_VTS; DIFFS_ALL_IMGS_VTS = [];
+    global VT_MATCH_THRESHOLD; VT_MATCH_THRESHOLD = 0.1;
+    global VT_GLOBAL_DECAY; VT_GLOBAL_DECAY = 0.1;
+    global VT_ACTIVE_DECAY; VT_ACTIVE_DECAY = 1.0;
+    
+    % VT图像裁剪和缩放参数
+    global VT_IMG_CROP_Y_RANGE; VT_IMG_CROP_Y_RANGE = 1:120;  % 全高度
+    global VT_IMG_CROP_X_RANGE; VT_IMG_CROP_X_RANGE = 1:160;  % 全宽度
+    global VT_IMG_RESIZE_Y_RANGE; VT_IMG_RESIZE_Y_RANGE = 64;
+    global VT_IMG_RESIZE_X_RANGE; VT_IMG_RESIZE_X_RANGE = 64;
+    global VT_IMG_X_SHIFT; VT_IMG_X_SHIFT = 0;
+    global VT_IMG_Y_SHIFT; VT_IMG_Y_SHIFT = 0;
+    global VT_IMG_HALF_OFFSET; VT_IMG_HALF_OFFSET = [0 floor(160 / 2)];
+    global VT_PANORAMIC; VT_PANORAMIC = 0;
+    
+    % HDC（偏航-高度细胞）相关
     global HDC_CELLS; HDC_CELLS = zeros(36, 36);
     global HDC_LEARNING_RATE; HDC_LEARNING_RATE = 0.1;
     global HDC_THRESHOLD; HDC_THRESHOLD = 0.3;
@@ -69,6 +108,30 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     global YAW_HEIGHT_HDC_H_DIM; YAW_HEIGHT_HDC_H_DIM = 36;
     global YAW_HEIGHT_HDC_Y_TH_SIZE; YAW_HEIGHT_HDC_Y_TH_SIZE = 2*pi/36;
     global MAX_ACTIVE_YAW_HEIGHT_HIS_PATH; MAX_ACTIVE_YAW_HEIGHT_HIS_PATH = [];
+    
+    % HDC额外参数
+    global YAW_HEIGHT_HDC_EXCIT_Y_DIM; YAW_HEIGHT_HDC_EXCIT_Y_DIM = 7;
+    global YAW_HEIGHT_HDC_EXCIT_H_DIM; YAW_HEIGHT_HDC_EXCIT_H_DIM = 7;
+    global YAW_HEIGHT_HDC_EXCIT_Y_VAR; YAW_HEIGHT_HDC_EXCIT_Y_VAR = 1.9;
+    global YAW_HEIGHT_HDC_EXCIT_H_VAR; YAW_HEIGHT_HDC_EXCIT_H_VAR = 1.9;
+    global YAW_HEIGHT_HDC_INHIB_Y_DIM; YAW_HEIGHT_HDC_INHIB_Y_DIM = 5;
+    global YAW_HEIGHT_HDC_INHIB_H_DIM; YAW_HEIGHT_HDC_INHIB_H_DIM = 5;
+    global YAW_HEIGHT_HDC_INHIB_Y_VAR; YAW_HEIGHT_HDC_INHIB_Y_VAR = 3.0;
+    global YAW_HEIGHT_HDC_INHIB_H_VAR; YAW_HEIGHT_HDC_INHIB_H_VAR = 3.0;
+    global YAW_HEIGHT_HDC_GLOBAL_INHIB; YAW_HEIGHT_HDC_GLOBAL_INHIB = 0.0002;
+    global YAW_HEIGHT_HDC_VT_INJECT_ENERGY; YAW_HEIGHT_HDC_VT_INJECT_ENERGY = 0.001;
+    
+    % HDC查找表（Lookup Tables）
+    global YAW_HEIGHT_HDC_Y_SIZE; YAW_HEIGHT_HDC_Y_SIZE = YAW_HEIGHT_HDC_Y_TH_SIZE;
+    global YAW_HEIGHT_HDC_H_SIZE; YAW_HEIGHT_HDC_H_SIZE = (2 * pi) / YAW_HEIGHT_HDC_H_DIM;
+    global YAW_HEIGHT_HDC_Y_SUM_SIN_LOOKUP; 
+    YAW_HEIGHT_HDC_Y_SUM_SIN_LOOKUP = sin((1:YAW_HEIGHT_HDC_Y_DIM) .* YAW_HEIGHT_HDC_Y_TH_SIZE);
+    global YAW_HEIGHT_HDC_Y_SUM_COS_LOOKUP;
+    YAW_HEIGHT_HDC_Y_SUM_COS_LOOKUP = cos((1:YAW_HEIGHT_HDC_Y_DIM) .* YAW_HEIGHT_HDC_Y_TH_SIZE);
+    global YAW_HEIGHT_HDC_H_SUM_SIN_LOOKUP;
+    YAW_HEIGHT_HDC_H_SUM_SIN_LOOKUP = sin((1:YAW_HEIGHT_HDC_H_DIM) .* YAW_HEIGHT_HDC_H_SIZE);
+    global YAW_HEIGHT_HDC_H_SUM_COS_LOOKUP;
+    YAW_HEIGHT_HDC_H_SUM_COS_LOOKUP = cos((1:YAW_HEIGHT_HDC_H_DIM) .* YAW_HEIGHT_HDC_H_SIZE);
 
     % 3D网格细胞相关
     global GRIDCELLS; GRIDCELLS = zeros(36, 36, 36);
@@ -81,14 +144,33 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     global gcY; gcY = 18;
     global gcZ; gcZ = 18;
     global MAX_ACTIVE_XYZ_PATH; MAX_ACTIVE_XYZ_PATH = [];
+    
+    % GC额外参数
+    global GC_EXCIT_X_DIM; GC_EXCIT_X_DIM = 7;
+    global GC_EXCIT_Y_DIM; GC_EXCIT_Y_DIM = 7;
+    global GC_EXCIT_Z_DIM; GC_EXCIT_Z_DIM = 7;
+    global GC_EXCIT_X_VAR; GC_EXCIT_X_VAR = 1.5;
+    global GC_EXCIT_Y_VAR; GC_EXCIT_Y_VAR = 1.5;
+    global GC_EXCIT_Z_VAR; GC_EXCIT_Z_VAR = 1.5;
+    global GC_INHIB_X_DIM; GC_INHIB_X_DIM = 5;
+    global GC_INHIB_Y_DIM; GC_INHIB_Y_DIM = 5;
+    global GC_INHIB_Z_DIM; GC_INHIB_Z_DIM = 5;
+    global GC_INHIB_X_VAR; GC_INHIB_X_VAR = 2;
+    global GC_INHIB_Y_VAR; GC_INHIB_Y_VAR = 2;
+    global GC_INHIB_Z_VAR; GC_INHIB_Z_VAR = 2;
+    global GC_GLOBAL_INHIB; GC_GLOBAL_INHIB = 0.0002;
+    global GC_VT_INJECT_ENERGY; GC_VT_INJECT_ENERGY = 0.1;
+    global GC_HORI_TRANS_V_SCALE; GC_HORI_TRANS_V_SCALE = 0.8;
+    global GC_VERT_TRANS_V_SCALE; GC_VERT_TRANS_V_SCALE = 0.8;
 
     % 经验图相关
     global EXPERIENCES; EXPERIENCES = [];
     global EXP_HISTORY; EXP_HISTORY = [];
     global NUM_EXPS; NUM_EXPS = 0;
-    global EXP_CORRECTION; EXP_CORRECTION = [];
-    global EXP_LOOPS; EXP_LOOPS = [];
+    global EXP_CORRECTION; EXP_CORRECTION = 0.5;
+    global EXP_LOOPS; EXP_LOOPS = 1;
     global DELTA_EM; DELTA_EM = 0;
+    global DELTA_EXP_GC_HDC_THRESHOLD; DELTA_EXP_GC_HDC_THRESHOLD = 15;
 
     % 视觉里程计（VO）相关
     global ODO_IMG_YAW_ROT_Y_RANGE; ODO_IMG_YAW_ROT_Y_RANGE = 20:100;
@@ -175,21 +257,26 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
     [gcX, gcY, gcZ] = get_gc_initial_pos();
     disp(['[5/12] 网格细胞初始位置：gcX=', num2str(gcX), ', gcY=', num2str(gcY), ', gcZ=', num2str(gcZ)]);
 
-    %% 6. 读取视觉数据（手动指定路径，兼容自动解析）
+    %% 6. 读取视觉数据（使用传入的visualDataFile参数）
     disp('[6/12] 读取视觉数据文件夹...');
-    subFoldersPathSet = {
-        %'/home/dream/Neuro_WS/carla-pedestrians/neuro/data/01_NeuroSLAM_Datasets/Town01Data',
-        '/home/dream/Neuro_WS/carla-pedestrians/neuro/data/01_NeuroSLAM_Datasets/Town10Data'
-    };
-    % 验证路径有效性
-    numSubFolders = length(subFoldersPathSet);
-    for i = 1:numSubFolders
-        if ~exist(subFoldersPathSet{i}, 'dir')
-            warning('子文件夹不存在：%s，尝试自动解析', subFoldersPathSet{i});
-            [subFoldersPathSet, numSubFolders] = get_images_data_info(visualDataFile);
-            break;
+    
+    % 直接使用传入的visualDataFile路径
+    % Town01Data_IMU_Fusion包含图像在主目录，不在子文件夹
+    if exist(visualDataFile, 'dir')
+        % 检查是否直接包含图像（Town01/Town10 IMU_Fusion格式）
+        imageFiles = dir(fullfile(visualDataFile, '*.png'));
+        if ~isempty(imageFiles)
+            % 图像直接在visualDataFile目录中
+            subFoldersPathSet = {visualDataFile};
+        else
+            % 尝试自动解析子文件夹
+            [subFoldersPathSet, ~] = get_images_data_info(visualDataFile);
         end
+    else
+        error('视觉数据路径不存在: %s', visualDataFile);
     end
+    
+    numSubFolders = length(subFoldersPathSet);
     disp(['[6/12] 共识别 ', num2str(numSubFolders), ' 个子文件夹，准备处理图像！']);
 
     %% 7. 初始化绘图和轨迹变量
@@ -241,7 +328,36 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
         disp(['='*30]);
         disp(['[9/12] 处理第 ', num2str(iSubFolder), '/', num2str(numSubFolders), ' 个子文件夹']);
         
-        [curFolderPath, imgFilesPathList, numImgs] = get_cur_img_files_path_list(subFoldersPathSet, IMG_TYPE, iSubFolder);
+        % 调试：显示调用参数
+        fprintf('[DEBUG] 调用参数:\n');
+        fprintf('  subFoldersPathSet{%d} = %s\n', iSubFolder, subFoldersPathSet{iSubFolder});
+        fprintf('  IMG_TYPE = %s\n', IMG_TYPE);
+        
+        % 调试：手动测试dir
+        testPattern = fullfile(subFoldersPathSet{iSubFolder}, IMG_TYPE);
+        testFiles = dir(testPattern);
+        fprintf('  手动dir测试: %d 张图像\n', length(testFiles));
+        
+        % 强制清除函数缓存并重新加载
+        clear get_cur_img_files_path_list;
+        
+        % 直接内联实现（绕过函数调用）
+        curFolderPath = subFoldersPathSet{iSubFolder};
+        searchPattern = fullfile(curFolderPath, IMG_TYPE);
+        fprintf('[INLINE] searchPattern = %s\n', searchPattern);
+        
+        imgFilesPathList = dir(searchPattern);
+        fprintf('[INLINE] dir() 返回 %d 个文件\n', length(imgFilesPathList));
+        
+        if ~isempty(imgFilesPathList)
+            fprintf('[INLINE] 开始排序...\n');
+            [~, sortIdx] = sort({imgFilesPathList.name});
+            imgFilesPathList = imgFilesPathList(sortIdx);
+            fprintf('[INLINE] 排序后 %d 个文件\n', length(imgFilesPathList));
+        end
+        
+        numImgs = length(imgFilesPathList);
+        fprintf('[INLINE] 最终 numImgs = %d\n', numImgs);
         disp(['[9/12] 子文件夹路径：', curFolderPath]);
         disp(['[9/12] 子文件夹包含 ', num2str(numImgs), ' 张图像']);
         
@@ -249,8 +365,11 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
             for indFrame = startFrame : ODO_STEP : min(numImgs-1, endFrame)
                 disp(['[10/12] 处理第 ', num2str(indFrame), '/', num2str(numImgs), ' 帧']);
                 
-                % 读取并预处理图像
-                [curImg] = read_current_image(curFolderPath, imgFilesPathList, indFrame);
+                % 读取并预处理图像（内联实现，避免缓存问题）
+                curImgName = imgFilesPathList(indFrame).name;
+                curImgPath = fullfile(curFolderPath, curImgName);
+                fprintf('[INLINE] 读取图像: %s\n', curImgPath);
+                curImg = imread(curImgPath);
                 curGrayImg = rgb2gray(curImg);
                 curGrayImg = im2double(curGrayImg);
                 disp(['[10/12] 图像预处理完成，尺寸：', num2str(size(curGrayImg))]);
@@ -295,7 +414,21 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
                         vtcurGrayImg = preImg;
                     end
                 end
-                [vt_id] = visual_template(vtcurGrayImg, gcX, gcY, gcZ, curYawTheta, curHeightValue);
+                % 视觉模板匹配（支持增强特征提取器）
+                global USE_NEURO_FEATURE_EXTRACTOR NEURO_FEATURE_METHOD;
+                if USE_NEURO_FEATURE_EXTRACTOR
+                    % 使用增强的特征提取器 (HART+CORnet)
+                    if strcmp(NEURO_FEATURE_METHOD, 'python')
+                        % Python版本（需要Python环境）
+                        [vt_id] = visual_template_neuro_enhanced(vtcurGrayImg, gcX, gcY, gcZ, curYawTheta, curHeightValue);
+                    else
+                        % MATLAB纯净版本（推荐，无Python依赖）
+                        [vt_id] = visual_template_neuro_matlab_only(vtcurGrayImg, gcX, gcY, gcZ, curYawTheta, curHeightValue);
+                    end
+                else
+                    % 使用原始方法
+                    [vt_id] = visual_template(vtcurGrayImg, gcX, gcY, gcZ, curYawTheta, curHeightValue);
+                end
                 disp(['[11/12] 视觉模板ID：vt_id=', num2str(vt_id)]);
 
                 %% 12. HDC迭代

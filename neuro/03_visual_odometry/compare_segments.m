@@ -35,6 +35,7 @@ function [out_minimum_offset, out_minimum_difference_intensity] = compare_segmen
 
     % assume a large difference
     minimum_difference_intensity = 1e6;
+    minimum_offset = 0;
 
     % initial the matrix
     differencs = zeros(shift_length);

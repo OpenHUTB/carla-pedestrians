@@ -166,3 +166,4 @@ neuro/00_collect_data/COLLISION_AVOIDANCE_CONFIG.md
 
 # MATLAB临时文件
 *.asv
+*.fig

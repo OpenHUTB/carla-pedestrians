@@ -32,12 +32,26 @@ function [curFolderPath, imgFilesPathList, numImgs] = get_cur_img_files_path_lis
     curFolderPath =  subFoldersPathSet{iSubFolder}; 
     
     % get all image file path list in current sub folder
-    imgFilesPathList = dir(strcat(curFolderPath,imgType));
+    % 使用fullfile正确拼接路径（自动添加分隔符）
+    searchPattern = fullfile(curFolderPath, imgType);
+    fprintf('[FUNC DEBUG] searchPattern = %s\n', searchPattern);
+    
+    imgFilesPathList = dir(searchPattern);
+    fprintf('[FUNC DEBUG] dir() 返回 %d 个文件\n', length(imgFilesPathList));
     
     % sort the path list by sequence
-    imgFilesPathList = sortObj(imgFilesPathList);
+    % 使用MATLAB内置sort替代sortObj（避免natsort依赖问题）
+    if ~isempty(imgFilesPathList)
+        fprintf('[FUNC DEBUG] 开始排序...\n');
+        [~, sortIdx] = sort({imgFilesPathList.name});
+        imgFilesPathList = imgFilesPathList(sortIdx);
+        fprintf('[FUNC DEBUG] 排序后 %d 个文件\n', length(imgFilesPathList));
+    else
+        fprintf('[FUNC DEBUG] imgFilesPathList 为空！\n');
+    end
 
     % get the num of all images in current sub folder
-    numImgs = length(imgFilesPathList); 
+    numImgs = length(imgFilesPathList);
+    fprintf('[FUNC DEBUG] 最终返回 numImgs = %d\n', numImgs); 
     
 end

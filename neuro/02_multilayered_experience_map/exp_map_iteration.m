@@ -107,6 +107,11 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     delta_em = sqrt((minDeltaX).^2 + (minDeltaY).^2 + (minDeltaZ).^2 + (minDeltaYaw).^2 + (minDeltaHeight).^2);
     DELTA_EM = [DELTA_EM delta_em];
     
+    % 确保delta_em是标量（处理可能的数组情况）
+    if numel(delta_em) > 1
+        delta_em = max(delta_em);  % 取最大值作为判断依据
+    end
+    
     % if the visual template is new or the 3d grid cells (x,y,z) and head direction cells (yaw, height)
     % has changed enough create a new experience
     if VT(vt_id).numExp == 0 || delta_em > DELTA_EXP_GC_HDC_THRESHOLD
