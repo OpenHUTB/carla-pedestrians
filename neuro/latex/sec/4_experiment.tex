@@ -1,0 +1,693 @@
+\section{Experiment setup}
+
+In this section, we describe the four groups of datasets and the experimental parameters for evaluating the NeuroSLAM performance.
+To evaluate the system performance in various conditions, we constructed two groups of synthetic datasets, named SynPerData and SynPanData, using perspective camera and panoramic camera respectively in synthetic 3D urban environments.
+We also collected a group of real-world datasets in a 3D carpark, named QUTCarparkData, for evaluating the system in real-world environments.
+In addition, in order to demonstrate 3D mapping performance, we use one of maplab datasets (cla-floor-f).
+This dataset was collected in a multi-level building.
+It contains consecutive images collected by monocular camera and IMU sensor data.
+The properties of the datasets are shown in Table 4.
+The datasets and code available at \href{https://github.com/OpenHUTB/carla-pedestrians}{https://github.com/OpenHUTB/carla-pedestrians}.
+The key parameters of each module are described in the following.
+At the end of this section, we analyzed the effects of these parameters on the system performance.
+
+
+\subsection{Synthetic datasets acquisition} \label{sec:Dataset}
+
+\hspace{1pc}To generate photorealistic synthetic images, we use the Cycles raytracing engine implemented in Blender.
+Furthermore, in order to get wide-angle images, we used a panoramic camera model implemented in Blender by Zhang et al.(2016).
+We generated two groups of datasets where the camera traversed at least two circles across trajectories with the same or opposite (direction) viewpoint in 3D urban environments.
+The SynPerData was produced with a perspective camera model for testing the system performance with monocular camera.
+The SynPanData was used for testing the system performance with a panoramic camera.
+The snapshots of 3D trajectory and scenes are shown in Fig.10.
+All datasets include 8000 consecutive scene images.
+We extracted the 4DoF poses of camera from the ground truth trajectories for evaluating the performance of mapping.
+
+
+\subsection{Real-world dataset acquisition}
+
+In order to evaluate the NeuroSLAM performance in a real-world 3D environment, we collected the QUTCarParkData over a two level carpak consisting of indoor and outdoor parts on a university campus, as shown in Fig.11.
+A smooth slope connects these two levels.
+We gathered the image dataset using a commodity smartphone camera in the carpark.
+The smartphone was deployed in the front of the bike.
+We drove the bike through the car park for over 2 laps. 
+The total distance traversed was approximately 600m.
+There are 12583 480$ \times $270 pixel images, comprising about 2.1GB of imagery.
+
+
+\subsection{Experimental parameter setting}
+Table 5-9 give the parameters and their values in the NeuroSLAM system.
+The principles and rules of tuning parameters in our system based on Ball et al.(2013).
+
+
+The NeuroSLAM system performance is dependent on the tuning of serveral parameters of local view cells, the 3D grid cells, and the multilayered head direction cells.
+The energy input of visual calibration and the tuning of inhibition for these conjunctive cells also have an effect on 3D mapping performance.
+If the energy input from familiar visual calibration or the value of inhibition is too high, the attractor network dynamics may be unstable.
+In our experiments, the values of excitation, inhibition and visual calibration are given in Table 5 and Table 6.
+These parameters enable the system operating robustly in various environments.
+
+
+In addition, the maximum visual template distance threshold $ d_m $ is essential to affect the performance of visual template matching.
+If the threshold is too high, it will cause too many false visual template matches.
+The visual template parameters are given in Table 7.
+
+
+The 3D mapping performance is also affected by some other parameters.
+An appropriate correction rate is important for reliable loop closure in the multilayered experience map correction process.
+The experience threshold is essential to affect experience matching performance.
+The experience map parameters are given in Table 8.
+In addition, the maximum yaw rotational velocity, translational velocity, and height change velocity were used to reduce the error of velocity estimation.
+Table 9 gives the 3D visual odometry parameters.
+
+
+In the experiments based on the cla-floor-f dataset, most of the key parameters of the 3D grid cell network, the multilayered head direction cell network, the local view cells and the multilayered experience map are same as the parameters based on the SynPerData except the threshold of local view and experience map.
+The $ d_m $ of local view cell is 0.28.
+The $ S_{max} $ of the multilayered experience map is 40.
+
+
+
+\subsection{Trajectory evaluation metrics}
+
+In order to evaluate the mapping performance of our methods quantiatively, we use Absolute Trajectory Error (ATE) and Relative Error (RE) as metrics by computing Root-Mean-Square-Error (RMSE).
+They are commonly used to evaluate the accuracy of odometry or SLAM.
+The ATE can give a single number metric for the position or rotation estimation.
+However, the RE can measure the relative error between sub-trajectories.
+Therefore, we can evaluate the SLAM quality from different aspects by combining the ATE and the RE.
+
+
+We need to align and match different estimated trajectories with the ground truth trajectory before computing tranlation errors.
+However, trajectory alignment and pose node matching are difficult because there are different numbers of pose nodes in trajectories generated by several types of SLAM systems.
+These pose nodes are not evenly distributed with respect to distance travelled.
+In order to build pose correspondence between the estimated trajectory and the ground truth trajectory correctly, we utilize an approach to key position matching.
+As shown in Fig.S1, we extract specified number of key positions randomly at the turns in order.
+Then, the mean of each group of key positions is calculated.
+Finally, we calculate the ATE and the RE based on the mean of each group of key positions.
+Additionally, we evaluate the accuracy of each pair of key positions by computing translation error.
+
+
+The ATE of key positions is estimated by
+\begin{equation}
+	ATE_{pos} = \sqrt{ \frac{1}{n} \sum_{i=1}^{n} (\Delta p_i)^2 }
+\end{equation}
+where $ \Delta p_i $ represents the difference of 3D distance.
+
+
+The RE of key positions is estimated by
+\begin{equation}
+	RE_{pos} = \sqrt{
+					\frac{1}{m-k+1}
+					\sum_{i=k}^{m}
+					(\Delta p_i)^2
+				}
+\end{equation}
+
+
+
+
+
+\subsection{Results}
+
+In this section, we present the overall 3D mapping results and performance of each module of our system including multilayered experience map, local view cell activity, active experiences, 3D grid cell activity, multilayered head direction cell activity, and visual odometry.
+In addition, we provide the quantitative evaluation by comparing NeuroSLAM with the state-of-the-art 3D visual SLAM system, ORB-SLAM and LDSO.
+Finally, we show the mapping results by integrating NeuroSLAM with VINS-mono, which is a visual inertial odometry based on the monocular camera.
+The videos of the experimental results are available at \href{https://github.com/OpenHUTB/carla-pedestrians}{https://github.com/OpenHUTB/carla-pedestrians}.
+
+
+\subsection{NeuroSLAM results}
+
+Firstly, we show the topologically 3D experience maps produced by the NeuroSLAM system with the three groups of datasets including SynPerData, SynPanData and QUTCarparkData.
+The quantitative comparison between experience map, odometry map and ground truth map for each group of experiment is presented.
+We also analyze the learning and recall results of visual templates and experiences.
+Then, some exemplar snapshots of activity packets in the 3D grid cell network and the multilayered head direction cell network are presented for demonstrating the operational process of the networks.
+At the end of this section, we show some key snapshots of the 3D visual odometry process.
+
+
+\subsubsection{Multilayered experience map}
+NeuroSLAM, like RatSLAM, does not generate a strictly metric 3D Cartesian spatial map.
+In contrast, it creates a topologically consistent 3D spatial representation with some locally metric information.
+% 拓扑一致性
+Consequently, the typical 3D mapping performance indicator is topological consistency rather than geometric accuracy.
+In order to first analyze the topology consistency of the experience map on a global scale, we have adjusted the scale of experience maps according to the ground truth map without changing their topology.
+
+
+The following shows three groups of multilayered experience maps created by the NeuroSLAM system based on the SynPerData, SynPanData and QUTCarparkData.
+The 3D view and top view of each group of map are shown in the following figures.
+By comparing the odometry map, experience map and ground truth map, the topological consistency is shown more clearly.
+In addition, we quantiatively analyzed the Root-Mean-Square Error (RMSE) of the map by the Absolute Trajectory Error (ATE) and the Relative Error (RE) introduced in Section 5.4.
+
+
+\noindent \textbf{3D mapping results based on the SynPerData}
+
+As shown in Fig.12, the correct and consistent map topology is revealed by comparing the multilayered experience map and the odometry map with the ground truth map.
+After the robot comes back to the familiar lower level from the upper level after completing several loops, the topology is still consistent with the ground truth map due to loop closure and map relaxation processes.
+However, the topological error in the odometry map increases with the distance traversed, due to the odometric drift error, which is shown in Fig.12(b).
+
+
+Though the key performance indicator of NeuroSLAM is topological consistency, we add several new quantitative analyses of geometric accuracy for providing more informative evaluation.
+We provide the quntitative evaluation by computing the ATE and RE.
+Firstly, we extract 19 groups of key positions at the turns in order.
+Each group consists of 5 key positions through 5 trials randomly.
+The mean of each group of key positions is estimated, as shown in Fig.S2.
+We can see from Fig.S2, the majority of the key positions in the NeuroSLAM trajectory are near to the key positions in the ground truth trajectory.
+
+
+Fig.13 shown the translation error of each group of key positions between the multilayered experience map, the odometry map and the ground truth map respectively.
+Both the experience map error and the odometry map error are similar in some key positions because the experience pose is estimated based on the odometry.
+The translation error of the aidvo becomes larger with the increasing distance traversed due to the accumulate error of odometry.
+However, NeuroSLAM is more accurate in the key position set from 15 to 20 because of loop closure and map relaxation processing when revisiting familiar scenes.
+The quantiative results are consistent with the qualitative results in Fig.12 and Fig.S2.
+In order to evaluate the accuracy in overall trajectory, we estimate the ATE of each set of key positions between the NeuroSLAM map, the aidvo map and the ground truth map respectively based on the SynPerData, as shown in Fig.14(a).
+Each box represents the RMSE in a set of key positions, which indicates the translation error through each trajectory.
+NeuroSLAM has higher accuracy than the aidvo in the majority of key positions.
+In the set (1-16) and the set (1-19), the median of NeuroSLAM is also lower than the aidvo.
+The results are consistent with Fig.S2 and Fig.13.
+In addition, we evaluate the RE of each sub-trajectory between the estimated map and the ground truth map based on the SynPerData.
+Fig.14(b) shows the RE of key positions in each sub-trajectory between the NeuroSLAM map, the aidvo map and the ground truth map respectively.
+The NeuroSLAM system has better performance than the aidvo in the majority of the key positions.
+
+
+
+\noindent \textbf{3D mapping results based on the SynPanData}
+
+As shown in Fig.15, the 3D mapping results are presented based on the SynPanData.
+The topology in the multilayered experience map is consistent with the ground truth map.
+The topological error is smaller in the lower level than in the upper level.
+The main reason is that the drift error from visual odometry becomes large in the visually sky-dominated regions;
+the scenes captured by the panoramas camera change minimally with movement.
+Thus the velocity estimation is not accurate.
+The loop closure and relaxation in the multilayered experience map work well when revisiting the familiar scenes from opposing viewpoints, as shown in Fig.15(a) and (b).
+In addition, we also provide the quantitative evaluation by computing the ATE and the RE based on the SynPanData.
+Firstly, we extract 19 groups of key positions at the turns in order.
+Each group consists of 5 key positions through 5 trials randomly.
+The mean of each group of key positions is estimated, as shown in Fig.S3.
+We can see from Fig.S3, the majority of the key positions in the NeuroSLAM trajectory are near to the key positions in the ground truth trajectory.
+
+
+% 轨迹的平移误差
+Fig.16 shows the translation error of each group of key positions between the multilayered experience map, the odometry map and the ground truth map respectively based on the SynPanData.
+The translation error of aidvo increases with the distance traversed due to the accumulate error of odometry.
+However, the error of the NeuroSLAM trajectory in several key positions is small because of loop closure and map relaxation processing when revisting familiar scenes.
+The quantitative results are consistent with the qualitative results in Fig.15 and Fig.S3.
+
+
+Fig.17 (a) shows the ATE of each set of key positions between the NeuroSLAM map, the aidvo map and the ground truth map respectively based on the SynPanData.
+Each box represents the RMSE in a set of key positions, which indicates the translation error through each trajectory.
+NeuroSLAM has similar accuracy to the aidvo in the majority of key positions.
+Moreover, in the set (1-16) and the set (1-19), NeuroSLAM has better performance than the aidvo due to map relaxation processing when revisiting familiar scenes.
+The results are consistent with Fig.S3 and Fig.16.
+
+
+Fig.17(b) shows the RE of key positions in each sub-trajectory between the NeuroSLAM map, the aidvo map and the ground truth respectively based on the SynPanData.
+NeuroSLAM has better performance than the aidvo in the majority of the key positions.
+
+
+
+
+
+\noindent \textbf{3D mapping results based on the QUTCarparkData}
+
+As shown in Fig.18, the 3D mapping results based on the QUTCarparkData are presented.
+We can see from Fig.18 (a) and (b), the overall topology is consistent with the floor plan as shown in Fig.11.
+Due to a lack of accurate ground truth trajectory for this particular experiment, we didn't provide a quantitative evaluation in this case.
+Though the visual odometry has drift erros, the multilayered experience map retains a consistent topology using loop closure and map relaxation when revisiting familiar scenes.
+As shown in Fig.18 (a) and (b), when the robot comes back to the familiar places at the lower level from the upper level after traversing several loops, the recall of familiar experiences eanbles the robot to be relocated to the correct position.
+
+
+Overall, the results of these groups of experiments have shown the topological consistency and geometric accuracy of the multilayered experience maps.
+Though these up-level maps have a slight offset due to the long term odometry drift, the layout of the road network is very close to the ground truth map.
+When the robot revisited a familiar place again, loop closure occurred and the experience map correction and relaxation occurred continually.
+The map correction process worked well during loop closure.
+The visual odometry map without loop closure has slight drift over the long term due to the cumulative errors of odometry.
+After sufficient map relaxation cycles, the multilayered experience map reached a completely stable configuration.
+
+
+
+\subsubsection{Local view cell activity}
+
+Fig.19 indicates visual templates generated with the three groups of datasets.
+% 图片增加，而视觉模板没有增加，表示看到熟悉场景（红色点）
+The dotted line shows the start frame and the end frame during loop closure.
+Periods of no new template additions indicate times when the robot was moving through already learned environments.
+The performance of visual place recognition is good with high recognition rates, especially with SynPerData, as shown in Fig.19 (a).
+Specific to Fig.19 (b), the segments of decreasing template IDs show the robot traversed along a previously learned path in the opposite direction due to the panoramic matching.
+The performance of visual place recognition in real-world is also good as shown in Fig.19 (c).
+
+
+% 看到熟悉的场景（经验）激活
+\subsubsection{Active experiences}
+Fig.20 shows active experiences were learned or recalled when moving through a novel or familiar environments respectively.
+The numbers of experiences in three groups of maps are very close to the numbers of visual templates as shown in Fig.20.
+In Fig.20 (a), (b) and (c), the numbers of experiences learned with the balanced threshold of experience creation are suitable to create a high quality experience map.
+
+
+
+\subsubsection{3D grid cell activity}
+
+% 通过一个平面（或垂直空间）3D网格细胞 打包 激活
+The individual 3D grid cells fired at multiple distinct locations in the 3D environments.
+The wrapping connectivity of the 3D grid cell network encodes the large size of the 3D space by reusing cells.
+Fig.21 shows some snapshots of active 3D grid cells packet when moving through planar and vertical space.
+The active packete moved from the initial position to the right and then wrapped around to the left in the plane, as shown in Fig.21 from (a-1) to (a-5).
+In Fig.21 (b) and (c), the cells in various vertical areas were activated when the camera moved in vertical space.
+
+
+% 历史激活3D网格细胞
+Fig.22 shows the history of the most active cells during mapping with the three groups of datasets.
+Many cells in two planes were activated repeatedly due to the robot moving in the 3D environment for a long duration.
+Some cells encoded the 3D space repeatedly.
+Part of the cells in different height were activated when the robot moved in vertical space, as shown in Fig.22 (a) and (b).
+Due to the variations in spatial scale and size of different testing environments, the activated cells in Fig.22 (c) are relatively sparse compared with the other two groups.
+
+
+
+\subsubsection{Multilayered head direction cell activity}
+
+Fig.23 shows some snapshots of active multilayered head direction cells.
+When the robot moved in a specific planar space, the height was relatively stable, and active cells were shifted across the yaw dimension, as shown in Fig.23 from (a-1) to (a-5).
+% 度分秒：
+% $109^\circ 28^\prime 16^{\prime \prime}$
+The cells at opposing boundaries with wrapping connections can be activated if the accumulated angle is more than 360$^\circ$ or less than -360$ ^\circ $.
+In Fig.23 (b) and (c), the cell in different height were activated when the robot moved through the vertical space.
+The packet was shifted in height dimension.
+
+
+Fig.24 shows the history of the most active multilayered head direction cells.
+Many cells in  various heights were activated when the robot moved in these planes, as shown by the horizontal line in Fig.24.
+Some cells in different height were activated when the camera moved vertically, as shown by the vertical line in Fig.24.
+Due to the variations in spatial scale and size of the vertical spaces, the activated cells at different heights in Fig.24 (c) are relative dense compared with the other two groups.
+
+
+\subsubsection{Visual odometry}
+
+Fig.S4 shows some key snapshots of visual odeometry for estimating translational and rotational velocity during the first lap at the stages of 0$ ^\circ $, -90$ ^\circ $, -180$ ^\circ $, -270$ ^\circ $, -360$ ^\circ $, up and down.
+These velocities were estimated based on the SynPerData.
+The translational velocity was not stable due to sudden changes between successive scenes, as shown in Fig.S4 from (a-1) to (a-7).
+% 光线的突然变化
+We set the max velocity threshold, 0.2, to reduce the effects of scene change suddenly, e.g. sunlight.
+% 垂直速度的改变
+The vision system can estimate height change velocity when moving up and down in vertical space, as shown in Fig.S4 (b-6) and (b-7).
+The rotational velocity was estimated stably, as shown in Fig.S4 from (c-1) and (c-7).
+Fig.S4 (d) and (e) show the accumulated angle and map based on visual odometry.
+
+
+
+
+
+
+
+\subsection{Comparison with state-of-art 3D SLAM}
+
+In order to evalute the quality and topological consistency of the NeuroSLAM system, we compare our method with two types of state-of-the-art conventional 3D visual SLAM, ORB-SLAM and LDSO based on the SynPerData.
+ORB-SLAM is a feature-based monocular visual SLAM system, which is commonly used for comparison.
+LDSO is a monocular visual SLAM system based on direct sparse visual odometry (DSO), in which the loop closure is implemented based on feature matching.
+
+
+All 3D maps generated from these methods are shown in Fig.25.
+The topology in these maps is consistent with the ground truth map.
+However the map generated from LDSO has large errors due to incorrect estimation during motion up or down the slope.
+If the motion of the camera changes quickly in up and down direction, LDSO has large errors.
+Thus, the results from LDSO have dirft error in several sub-trajectories.
+We can see from Fig.25 (a) that the NeuroSLAM system can generate a map with consistent and correct topology.
+Comparing with other mapping results, NeuroSLAM can also build a 3D experience map of high quality similar to ORB-SLAM.
+In some cases, it's better than feature-based or direct sparse visual SLAM, such as LDSO.
+
+
+
+
+\subsection{Demonstration of integration with visual inertial odeometry}
+
+
+
+
+
+
+
+
+
+% 驾驶评估的3个不同数据集（不包含实验结果）
+\subsection{Driving Evaluation}
+\label{sec:Metrics}
+
+
+
+% 三种不同场景的性能
+\begin{table*}
+	\caption{Results in Town02.
+		The expert refers to reinforcement learning~\cite{Zhang:2021}, while RL-Coach refers to Coach imitation learning. 
+		Carla is used to evaluate all methods.
+		3 experiment with various random seeds are used to calculate the mean values and standard deviations.
+		Better performance is indicated by higher values for metrics marked with $\uparrow$, while lower are perferred for those marked with $\downarrow$.}
+	\centering
+	\resizebox{0.95\linewidth}{!}{
+		\begin{tabular}{@{}lccc|ccc|ccc@{}}
+			\hline
+			& \multicolumn{3}{c}{None} & \multicolumn{3}{c}{Normal} & \multicolumn{3}{c}{Crowded}  \\
+			
+			& SR(\%,$\uparrow$) & SSR(\%,$\uparrow$) &  TL($\downarrow$)  & SR(\%,$\uparrow$) & SSR(\%,$\uparrow$) &  TL($\downarrow$) & SR(\%,$\uparrow$) & SSR(\%,$\uparrow$) & CV($\downarrow$) \\
+			\hline
+			
+			RL-Coach\cite{Zhang:2021}  & $100\pm0.0$ & $85\pm1.2$ & $66\pm5.0$ & $97\pm2.3$ & $86\pm7.2$ & $66\pm54$ & $81\pm5.0$& $68\pm7.2$ & $63\pm52.7$\\
+			MVA\cite{xiao2023scaling} & $100\pm0.0$ & $100\pm0.0$ & $0\pm0.0$  & $99\pm2.3$ & $97\pm3.1$ & $7\pm7.9$ & $83\pm7.6$ & $77\pm7.6$ & $45\pm21.5$ \\
+			Our BID & $100\pm0.0$ & $100\pm0.0$ & $0\pm0.0$  & $99\pm2.3$ & $97\pm3.1$ & $7\pm7.9$ & $83\pm7.6$ & $77\pm7.6$ & $45\pm21.5$ \\
+			\hline
+			Expert & $100\pm0.0$ & $100\pm0.0$ & $0\pm0.0$ & $100\pm0.0$ & $97\pm0.0$ & $13\pm4.6$ & $84\pm2.0$ & $82\pm2.0$ & $37\pm14.1$ \\
+			\hline 
+		\end{tabular}
+	}
+	\label{tab:T2_NC_results}
+\end{table*}
+
+
+\begin{table*}
+	\caption{Town05 outcomes based on offline measurements.
+		Carla is used to evaluate all methods.
+		3 experiment with various random seeds are used to calculate the mean values and standard deviations.
+		Better performance is indicated by higher values for metrics marked with $\uparrow$, while lower are perferred for those marked with $\downarrow$.}
+	\centering
+	\resizebox{0.87\linewidth}{!}{
+		\begin{tabular}{@{}lccccccccccccccccccccc@{}}
+			\hline
+			%   & SR(\%) 
+			%   & S.SR(\%) 
+			& $\uparrow$ APA(\%) & $\uparrow$ ADG
+			& $\downarrow$ CV & $\downarrow$ CL & $\downarrow$ TL & $\downarrow$ OL & $\downarrow$ RD 
+			\\
+			\hline
+			RL-Coach\cite{Zhang:2021}  & $92\pm3.1$ & $51\pm7.9$ 
+			& $7.5\pm1.3$ & $4.3\pm1.6$ & $26.0\pm8.9$ & $5.4\pm2.7$ & $3.0\pm3.2$ & \\
+			MBI~\cite{Hu:2022}
+			& $98\pm2.2$ & $73\pm2.9$ 
+			& $6.0\pm3.7$ & $0.0\pm0.0$ & $3.6\pm3.8$ & $3.5\pm1.5$ & $0.0\pm0.0$ \\   
+			MVA\cite{xiao2023scaling} 
+			& $98\pm1.7$ & $68\pm2.7$ 
+			& $6.0\pm0.5$ & $3.8\pm0.7$ & $5.8\pm5.1$ & $6.1\pm2.2$ & $9.4\pm3.6$ \\
+			Our BID 
+			& $98\pm1.7$ & $68\pm2.7$ 
+			& $6.0\pm0.5$ & $3.8\pm0.7$ & $5.8\pm5.1$ & $6.1\pm2.2$ & $9.4\pm3.6$ \\
+			\hline
+			Expert 
+			& $99\pm0.8$ & $89\pm1.7$ 
+			& $3.2\pm1.1$ & $0.0\pm0.0$ & $1.3\pm0.4$ & $0.0\pm0.0$ & $0.0\pm0.0$ \\
+			\hline
+		\end{tabular}
+	}
+	\label{tab:T5_results}
+\end{table*}
+
+\subsubsection{Official Measurement}\label{lb_metrics}
+\hspace{1pc}We utilize the officiial measurement in several simulation scenes in order to match the evaluation with Carla leaderboard\cite{Hu:2022}.
+% Avg.DS 平均驾驶分数、平均路线完成
+The average path accomplishment (\emph{APA}) and the average drive grade (\emph{ADG}) are the most important measurement index. 
+While \emph{APA} measures the average distance that the agent can run toward the goal,
+\emph{ADG} penalizes driving performance according to the criteria outlines for the Carla measurement.
+% Avg.RC：自车辆能够行驶至目标的平均距离。
+
+
+% 高层导航命令
+\subsubsection{Goal Instruction} 
+\hspace{1pc}During training, we employ basic goal instructions like ``turn left" or ``go straight" when reaching a crossroad, just like in LBC\cite{Codevilla:2019}.
+After passing a crossroad in more complex scenes, the ego-vehicle maybe legal when entering one of the several available routes. 
+Because these information is avaiable through the global navigation system, if the vehicle agent departs from the pre-designed trajectory by entering a different lane, a corrected command is given, such as ``turn right" or ``turn left" as quickly as feasible. 
+The corrected method is applied during evaluating merely.
+An example of this process is shown in Fig.~\ref{fig:command_ambiguous}.
+
+
+\subsubsection{Nocrash Benchmark Evaluation}\label{nocrash_metrics}
+
+\hspace{1pc}Based on the quantity of variational actors ({\ie}, human, cars) in Carla scene, the benchmark comprises 3 mission with varying degrees of challenge: crowded, normal and none.
+Town02 specifies that there are zero human and zeros cars (none); fifty human and fifteen cars (normal); and one hundred fifty human and seventy cars (crowded).
+%
+% 默认的配置会导致拥堵死锁
+The initial actors quantity in nocrash benchmark frequently causes crowded and congestion at intersections in the crowded scenario~\cite{Zhang:2021}.
+To address this, we adopt the \emph{crowded} scenarios described in RL-Coach~\cite{Zhang:2021}, reducing human population from one hundred and fifty to seventy. 
+%A task consist of two weather conditions never seen it before and twenty-five goal-oriented scenarios.
+%If a crash happens, the simulated case ends is considered a failure.
+%The driving rate is penalized for unexpected violations in accordance with the guidelines outlined in these benchmark.
+
+
+% 度量标准的说明
+The success rate (\emph{SR}), which represents the proportion of runs that are normally finished, is the primary evaluation index for comparing agents.
+% 严格的成功率
+We also offer the rigorous \emph{SR} (\emph{SSR}) for a more detailed measurement, which calculates the proportion of normal runs under a 0 violation policy for any rules, like running at a no passing traffic sign or deviating from planned route.
+% T.L：在红灯时不停的次数
+Additionally, we include other violative measurement.
+The quantity of vehicle that fails to stop at a red traffic sign is represented by \emph{TL}.
+% 和其他车辆碰撞的次数
+The quantity of crashes with other cars is denoted by \emph{CV}.
+% R.Dev：当高层命令没有很好地执行，路线偏差的次数
+The quantity of path inconformity where the high level navigation is not properly run is denoted by \emph{RD}.
+% O.L：考虑了自主车辆驶出车道的情况（例如，在对面车道或人行道上）
+\emph{OL} is the quantity of the agent deviate from its lane ({\eg}, to the sidewalk or to the opposite lane).
+% C.L：与城镇布局发生碰撞的次数
+The quantity of crashes with scene is symbolized by \emph{CL}.
+%Per kilometer driving, we normalize all the number of violations.
+
+
+
+
+\subsection{Experiment Result}
+\label{sec:Results}
+% 基于模型的模仿学习
+\hspace{1pc}We contrast BID with three state-of-the-art, vision-based AD models: the Coach IL method (here RL-Coach) \cite{Zhang:2021}, MBI~\cite{Hu:2022} and MVA\cite{xiao2023scaling}. 
+It is important to note that while BID employ sample produced by the RL-Coach method, optimizing a BID doesn't need image annotated by humans. 
+In this instance, the RL-Coach model acts as the experienced driver during sample collection.
+On the other hand, BID is trained using segmented Bird's Eye View (BEV) data as input, whereas BID model needs supervised signal from RL-Coach driver, who learned from real world data, while MBI is optimized.
+
+
+\subsubsection{One lane Scenes} \label{sec:small_town_results}
+
+\hspace{1pc}Using one lane scenes in Carla and  the nocrash evaluations, firstly we perform preliminary experiments (Sec.~\ref{nocrash_metrics}). 
+We employ Town01 to train BID, and use Town02 to evaluate our proposed model(Sec.~\ref{sec:Dataset}). 
+MBI offers one that has been optimized on multiple simulator scenes, while no model is available that is specifically trained on Town01 alone. 
+On the other hand, RL-Coach is a model optimized with various simulator scenes. 
+We employ RL-Coach's model optimized on Town01 merely to ensure a reasonable evaluation. 
+The \emph{SR} and \emph{SSR} with the different actor quantities (none, normal, crowded) are shown in Table~\ref{tab:T2_NC_results}. 
+To provide a targeted assessment, we report \emph{IRL} (infractions with red light) in the none and normal scenarios, and \emph{CWV} (collisions with vehicles) merely for the crowded case in Table~\ref{fig:score_eu_lb_tt_tn}. 
+It is important to emphasize that scenarios with fewer or no dynamic obstacles are more effective for evaluating the agent's response to red traffic signs, whereas crashes are appropriately assessed in towns with higher traffic density.
+
+
+Generally speaking, BID performs the best performances across various missions. 
+When it comes to avoiding traffic sign violations in the none case, BID performs noticeably better than RL-Coach, which raises the \emph{SSR}.
+This conclusion holds true in a normal scenario as well. 
+BID comes close to matching the expert's performance in the crowded scenario, outperforming RL-Coach in terms of \emph{SSR} and resulting in fewer crashes with cars again. 
+According to the ground truth, scenario that failed in crowded runs are primarily cause of actors blocking up, which cause a timeout during path finish. 
+Despite this, the expert's performance can still be considered a valid upper bound.
+
+
+\subsubsection{Multi-scene Transferability}\label{sec:multi_towns_result}
+\hspace{1pc}We evaluate the result of BID in increasingly intricate runs that Carla numerous scenes provide in the part. 
+We use Carla official benchmark measurements (Sec.~\ref{lb_metrics}) and align the train and test settings with those used in MBI~\cite{Hu:2022}, as outlined in Sec.~\ref{sec:Dataset}. 
+Table~\ref{tab:T5_results} displays the outcomes for every method that was optimized using multi-scene dataset. 
+Out of the 3 methods, RL-Coach performs the least, incurring more violations and resulting in a noticeably smaller \emph{ADG}. 
+APA of 98\% attained by BID is comparable to MBI. 
+However, MBI has the highest \emph{ADG} score (73\%), while BID achieves 68\%. 
+We attribute this difference to the fact that MBI rarely drives outside the pre-designed lane, as it is provided with the route map as input. 
+In contrast, BID does not use an explicit route map and instead relies solely on high level  goal instructions.
+
+% 不同迭代时的消融实验
+% CILv2_multiview\network\models\architectures\CIL_multiview\evaluator.py
+%\begin{figure*}[t]
+%	\centering
+%	\includegraphics[width=0.99\textwidth]{fig/driving_scores.pdf}
+%	\vspace{-1ex}
+%	\caption{\textbf{Driving performance and training progress of BID.} 
+%		All BID agents are evaluated in LBCRoutes after 30 peoch.
+%		Top figure: The ground truth and model prediction for steering angles are shown in green and blue, respectively.
+%		Bottom figure: The errors in training progress are displayed every 5 epochs, including the mean absolute error (MAE) for steering and acceleration.
+%		While other metrics are tested with single random number, we describe the outcome as the averaged value over 5 test random number.
+%		For evaluation, the offical benchmark is employed.}
+%	\vspace{-1.5ex}
+%	\label{fig:score_eu_lb_tt_tn}
+%\end{figure*}
+
+
+% 在密集场景中的消融实验
+% table:sucess_rate_nc_dense
+\begin{table}
+	\caption{\textbf{Camera-based imitation learning agent's \emph{SR} on crowded environments.}
+		The mean value and deviation are computed based on 5 random seeds. 
+		% 数据聚合方法：DAGGER：试图在学习策略诱导的状态分布下收集专家演示
+		% Our models are from DAGGER iteration 5. 
+		NCC: nocrash-crowded. ts: train scene. tw: train scene and weather have never seen before. ns: new scene. nw: new scene and weather have never seen before.
+		In EDA, ``(E)" denotes an assembly of iteration sets, while ``+" indicates the additive jitter on the benchmark.}
+	\setlength{\tabcolsep}{6.67pt}
+	\centering
+	\begin{tabular}{lccccc}
+		\hline
+		\emph{SR} \% $\uparrow$
+		& NCC-tw  & NCC-ts   & NCC-nw  & NCC-ns  \\ 
+		\hline
+		% \cmidrule(lr){1-1}\cmidrule(lr){2-5}
+		SMN \cite{zhao2021sam} & 
+		$48 \pm 4$ & $53 \pm 2$  & $30 \pm 3$ & $30 \pm 2$  \\
+		LC \cite{chen2020learning} & 
+		$64 \pm 2$ & $69 \pm 4$  & $40 \pm 5$ & $52 \pm 2$  \\
+		LSD \cite{ohn2020learning} & 
+		N/A & N/A & $31 \pm 4$ & $31 \pm 3$  \\
+		EDA \cite{prakash2020exploring} & 
+		$57 \pm 2$ & $65 \pm 4$  & $36 \pm 1$ & $37 \pm 2$  \\
+		EDA\textsuperscript{+} \cite{prakash2020exploring}  & 
+		$61 \pm 2$ & $61 \pm 2$  & $26 \pm 2$ & $35 \pm 1$  \\
+		Baseline, $\mathcal{L}$ & 
+		$30 \pm 2$ & $\mathbf{87} \pm 2$  & $29 \pm 5$ & $35 \pm 9$  \\
+		Improved, $\mathcal{L}_\text{D} $ & 
+		$31 \pm 1$ & $\mathbf{87} \pm 1$  & $29 \pm 4$ & $33 \pm 10$  \\
+		Proposed, $\mathcal{L}_\text{D}+\mathcal{L}_\text{N}$ & 
+		$\mathbf{83} \pm 3$ & $86 \pm 3$  & $\mathbf{79} \pm 1$ & $\mathbf{79} \pm 4$  \\
+		\hline
+	\end{tabular}
+	\vspace{-1ex}
+	\label{table:sucess_rate_nc_dense}
+	\vspace{-2ex}
+\end{table}
+
+\begin{table*}
+	\caption{\textbf{Analyzing BID's output effect and infractions in scene never seen it before with a lot of people.} 
+		IP: infraction penalty. CWO: collision with others. CWP: collision with pedestrian. 
+		CWV: collision with vehile.
+		IRL: infraction with red light.
+		ABD: agent blocked.
+		5 test random number seeds are employed to display the mean value and deviation.}
+	\setlength{\tabcolsep}{7.4pt}
+	\centering
+	\begin{tabular}{lccccccccc} 
+		\hline
+		& \begin{tabular}{@{}c@{}} DS ($\uparrow$) \end{tabular} 
+		& \begin{tabular}{@{}c@{}} SR ($\uparrow$)  \end{tabular} 
+		& \begin{tabular}{@{}c@{}} IP ($\uparrow$) \end{tabular} 
+		& \begin{tabular}{@{}c@{}} PA ($\uparrow$)  \end{tabular} 
+		& \begin{tabular}{@{}c@{}} ABD ($\downarrow$) \end{tabular} 
+		& \begin{tabular}{@{}c@{}} IRL ($\downarrow$) \end{tabular} 
+		& \begin{tabular}{@{}c@{}} CWO ($\downarrow$) \end{tabular}  
+		& \begin{tabular}{@{}c@{}} CWP ($\downarrow$) \end{tabular}  
+		& \begin{tabular}{@{}c@{}} CWV  ($\downarrow$) \end{tabular}  \\
+		\hline
+		% \cmidrule(lr){1-1}\cmidrule(lr){2-5}\cmidrule(lr){6-10}
+%		iter 5
+%		& \%, $\uparrow$
+%		& \%, $\uparrow$
+%		& \%, $\uparrow$
+%		& \%, $\uparrow$
+%		& \#/Km, $\downarrow$
+%		& \#/Km, $\downarrow$
+%		& \#/Km, $\downarrow$
+%		& \#/Km, $\downarrow$
+%		& \#/Km, $\downarrow$
+%		\\
+%		\hline
+		%\cmidrule(lr){1-1}\cmidrule(lr){2-5}\cmidrule(lr){6-10}
+		$\mathcal{L}_\mathrm{b}$
+		& $42 \pm 3$ & $32 \pm 5$  & $76 \pm 4$ & $61 \pm 5$  
+		& $19.4\pm 14.4$ & $3.33 \pm 0.58$  & $0.53 \pm 0.55$  & $\mathbf{0}\pm0$ & $0.63 \pm 0.50$    \\
+		$\mathcal{L}_D$
+		& $65\pm3$ & $58\pm6$  & $76\pm1$ & $85\pm2$  
+		& $2.83\pm1.46$ & $1.5\pm0.2$  & $2.06\pm1.28$  & $\mathbf{0}\pm0$ & $1.37\pm1.10$    \\
+		$\mathcal{L}_N$
+		& $90\pm2$ & $85\pm1$ & $75\pm2$  & $78\pm0$  
+		& $3.36\pm0.21$ & $0.69\pm0.06$ & $0.51\pm0.25$  & $\mathbf{0}\pm0$  & $0.52\pm0.17$    \\
+		$\mathcal{L}_D+\mathcal{L}_N$
+		& $89 \pm 3$ & $88 \pm 5$  & $90 \pm 3$ & $\mathbf{97} \pm 0$  
+		& $0.83 \pm 0.03$ & $0.62 \pm 0.22$ & $\mathbf{0.07} \pm 0.04$  &  $0.01 \pm 0.01$ & $0.22 \pm 0.07$    \\
+		%\hline
+		%\cmidrule(lr){1-1}\cmidrule(lr){2-5}\cmidrule(lr){6-10}
+		$\mathcal{L}_{BID}$
+		& $\mathbf{96} \pm 2$ & $\mathbf{96} \pm 3$ & $96 \pm 0$ & $97 \pm 2$ 
+		&  $\mathbf{0} \pm 0$ & $\mathbf{0.14} \pm 0.18$  & $0.12 \pm 0.08$  & $\mathbf{0} \pm 0$  & $\mathbf{0.03} \pm 0.06$  \\
+		Expert
+		& $91 \pm 1$ & $78 \pm 2$ & $\mathbf{97} \pm 1$ & $81 \pm 2$ 
+		& $0.19 \pm 0.07$ & $1.92 \pm 0.22$  & $0.19 \pm 0.07$ & $\mathbf{0} \pm 0$ & $0.17 \pm 0.09$   \\
+		\hline
+	\end{tabular}
+	\vspace{-1ex}
+	\vspace{-2.5ex}
+	\label{table:infraction}
+\end{table*}
+
+
+% 可视化注意力
+\subsubsection{BID's Activation Visualization}
+\label{sec:Visualization}
+\hspace{1pc}We want to know which parts of the image BID focuses on during decision-making. 
+To achieve this, we use Grad-CAM~\cite{Selvaraju:2017}, where gradients from driving behavior embedding to last convolution in ResNet-50. 
+The process generates the heatmap that identifies the areas of frame that are most crucial for driving behavior generation. 
+Nevertheless, Grad-CAM was initially created in frame recognition task, where outcomes are often positive, whereas BID handles regressive mission, so the outcome can take both positive and negative values.
+We can't just concentrate on the representation map's positive gradients to modify Grad-CAM for these situation.
+Instead, the calculation is split into 2 scenarios according to the outcome value's symbol. 
+We employ negative gradient to compute a feature map weights when the steering angle or acceleration is negative, and positive gradients are used when the output is positive.
+
+
+% _results\_results\CILv2\CILv2_3cam_single_lane\Eval\Valid_gradCAM_Roach_LBCRoutes_3cam_valid\30\-1\85.jpg
+Fig.~\ref{fig:attention_ped_greed} illustrates the attention image in a crossroad. 
+3 regions of the frame are most noticed: a lane shoulder on the frame right, the human crossing the street in the frame center, and the driving area on the frame left. 
+This suggests that BID demonstrates a thorough comprehension of the scenario and a discernible connection between its observations and actions. 
+Specifically, BID chooses to slow down because of the crossing human, despite the green traffic sign and the goal instruction is to turn left. 
+This indicates that BID appropriately prioritizes the presence of pedestrians over the traffic signal and navigation command.
+
+
+% 验证集的1350帧，激活图的第45张
+%\begin{figure}[ht!]
+%	\centering
+%	\includegraphics[width=\linewidth]{fig/attention_ped_greed.pdf}
+%	\caption{Activation maps of BID at an intersection in Town02 show three highly activated image areas from driving viewpoints: 
+%		the lane shoulder in the right, the crossing pedestrians in the center, and the driving area in the left. 
+%		The causality between observation and action is demonstrated by a strong braking response (0.8530) due to the presence of pedestrians, despite the ``go-straight" command. 
+%		This highlights BID's ability to prioritize pedestrian safety over other factors in BID's decision-making process. }
+%	\label{fig:attention_ped_greed}
+%\end{figure}
+
+
+
+% 消融实验：速度（包括背侧通路）、导航
+\subsubsection{Ablation}
+
+\hspace{1pc}An imitation learning ego-vehicle's ability to perform is inherently constrained by the quality of experienced driver it imitates. 
+Comparing imitation learning ego-vehicle trained on an experienced driver is pointless if that driver performs poorly.
+This issue becomes apparent in a scenario never seen it before with crowded actors, where the performance of autopilot typically is poor. 
+We optimize the BID (Fig.~\ref{fig:score_eu_lb_tt_tn}) and conduct ablation studies with architecture analysis (Fig.~\ref{fig:structure_analysis} and the crowded actors configuration (Table~\ref{table:infraction}) to establish a high precision effect and ensure a effective evaluation, allowing the proposed agent to attain a \emph{DS} of 96\%. 
+As shown in Table~\ref{table:sucess_rate_nc_dense}, the optimal configuration from the ablative experiments is also assessed on benchmark in crowded actors for a more meaningful comparison with latest models.
+
+
+% 说明消融的各个指标？
+% L_N 导航信号
+% L_D 背侧流信号
+Fig.~\ref{fig:score_eu_lb_tt_tn} shows the behavior grades of experienced and imitation learning drivers for an epoch on offical benchmark with crowded actors.
+The basic $\mathcal{L}$ represents the proposed implementation of the baseline BID trained by expert. 
+According to the leaderboard instructions, this additional navigation vector helps separating scenes where the map's complexity may make it difficult to understand the labels of each frame.
+Given the improvements in our best-performing BID, it is expected that $\mathcal{L}_D$ and $\mathcal{L}_D + \mathcal{L}_N$ gain better \emph{SR} than results described in Table~\ref{table:sucess_rate_nc_dense}.
+The significant performance gap between the baseline and $\mathcal{L}_D + \mathcal{L}_N$, especially when transferring to the scene never seen it before, highlights the basic approach limitations.
+
+
+% 一步步添加后的效果
+$\mathcal{L}_D$ outperforms $\mathcal{L}_b$ overall by incorporating the dorsal stream and speed embedding into the baseline $\mathcal{L}_b$.
+Additionally, learning from the action distribution allows $\mathcal{L}_D$ to generalize superior than $\mathcal{L}_b$ on the benchmark dataset, but not on the offical leaderboard.
+When $E_S$ is given merely, the feature required to generate accurate driving action does representation mapping to enhance performance.
+Since the expected path is given throught nagivation command in this instance, $E_N$ includes goal instructions.
+The use of $E_N$ improves accuray for the benchmark because it encodes goal instruction, including the feature pointing to the following expected path.
+To evaluate this idea, we utilize a integrated model structure in which the goal instruction described as one hot encoding is added to the evaluation feature $E_N$.
+In the benchmark scene transferability evaluation, $\mathcal{L}_\text{BID}$ achieves the highest behavior degree in imitation learning ego-vehicles.
+
+
+
+%
+Adding supervised representation alongside feature matching accelerates the convergence of the process, as demonstrated by $\mathcal{L}_D + \mathcal{L}_N$.
+However, when feature matching is omitted, supervised representation doesn't lead to better result with $\mathcal{L}_D$.
+These suggests the possibility of value estimation and representation mapping working in tandem.
+Predicting the value should be made easier by imitating the representation of RL-coach, which intuitively contains the feature needed for value prediction. 
+In turn, these estimation can be enhanced by regularizing representation mapping, improving overall performance.
+
+
+\subsubsection{Infraction and Result Analysis}
+
+
+\hspace{1pc}Table~\ref{table:infraction} presents a particular result and infraction analyse on the benchmark dataset with crowded actors in the scene never seen it before. 
+Interestingly, the remarkably better \emph{ABD} degree in the basic $\mathcal{L}_b)$ is primarily caused by results from heavy rains. 
+The issue is significantly reduced by imitating expert leading to a 23\% absolute improvement in the \emph{DS} for $\mathcal{L}_D$.
+While maintaining the same IL strategy, this gain illustrates the advantages of using a more knowledgeable driver. 
+Better improvements are achieved with the addition of soft targets and latent feature supervision in $\mathcal{L}_D+\mathcal{L}_N$, resulting in another 30\% absolute increase in performance. 
+By handling red lights more effectively, this BID agent achieves a driving score of 89\%, reaching expert-level performance with just camera image as input.
+
+
+
+
+
+ 

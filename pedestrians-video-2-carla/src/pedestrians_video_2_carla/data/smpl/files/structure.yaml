@@ -1,0 +1,23 @@
+structure:
+  - Pelvis:
+    - Spine1:
+      - Spine2:
+        - Spine3:
+          - L_Collar:
+            - L_Shoulder:
+              - L_Elbow:
+                - L_Wrist: null
+          - Neck:
+            - Head: null
+          - R_Collar:
+            - R_Shoulder:
+              - R_Elbow:
+                - R_Wrist: null
+    - R_Hip:
+      - R_Knee:
+        - R_Ankle:
+          - R_Foot: null
+    - L_Hip:
+      - L_Knee:
+        - L_Ankle:
+          - L_Foot: null

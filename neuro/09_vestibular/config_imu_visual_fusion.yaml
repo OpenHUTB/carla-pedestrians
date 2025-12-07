@@ -1,0 +1,288 @@
+# IMU-Visual Fusion SLAM Configuration File
+# 用于调整融合参数和系统行为
+
+# =========================
+# 数据采集参数
+# =========================
+data_collection:
+  # CARLA仿真参数
+  carla:
+    map: "Town10HD"                    # 可选: Town01, Town03, Town10HD等
+    max_save_images: 5000              # 最大采集图像数
+    output_dir: "../data/01_NeuroSLAM_Datasets/Town10Data_IMU_Fusion/"
+    
+  # 传感器采样率
+  sensors:
+    imu_sample_rate: 60                # IMU采样率 (Hz)
+    camera_sample_rate: 20             # 相机采样率 (Hz)
+    sensor_tick: 0.05                  # 相机采样间隔 (s) = 1/camera_sample_rate
+    
+  # 相机参数
+  camera:
+    image_width: 640                   # 原始图像宽度
+    image_height: 480                  # 原始图像高度
+    output_width: 160                  # 输出图像宽度
+    output_height: 120                 # 输出图像高度
+    exposure_mode: "manual"
+    exposure_compensation: "0.0"
+    fstop: "4.0"
+    iso: "250"
+    gamma: "2.2"
+    # 图像增强关闭（避免色彩失真）
+    bloom_intensity: "0.0"
+    chromatic_aberration: "0.0"
+    lens_flare: "0.0"
+    
+  # IMU参数
+  imu:
+    noise_accel_stddev_x: 0.1          # 加速度计X轴噪声标准差
+    noise_accel_stddev_y: 0.1          # 加速度计Y轴噪声标准差
+    noise_accel_stddev_z: 0.1          # 加速度计Z轴噪声标准差
+    noise_gyro_stddev_x: 0.001         # 陀螺仪X轴噪声标准差
+    noise_gyro_stddev_y: 0.001         # 陀螺仪Y轴噪声标准差
+    noise_gyro_stddev_z: 0.001         # 陀螺仪Z轴噪声标准差
+
+# =========================
+# 时间戳对齐参数
+# =========================
+time_alignment:
+  time_threshold: 0.02                 # 时间戳匹配容差 (s), 默认20ms
+  imu_buffer_size: 100                 # IMU数据缓冲区大小
+  image_buffer_size: 10                # 图像数据缓冲区大小
+
+# =========================
+# EKF融合参数
+# =========================
+ekf_fusion:
+  dt: 0.05                             # 时间步长 (s)
+  
+  # 初始协方差矩阵 (P)
+  initial_covariance:
+    position: 0.05                     # 位置初始不确定性 (m^2)
+    velocity: 0.2                      # 速度初始不确定性 (m^2/s^2)
+    attitude: 0.005                    # 姿态初始不确定性 (rad^2)
+  
+  # 过程噪声协方差矩阵 (Q) - 越小越相信模型预测
+  process_noise:
+    position: 0.005                    # 位置过程噪声
+    velocity: 0.05                     # 速度过程噪声
+    attitude: 0.0005                   # 姿态过程噪声
+    
+  # 观测噪声协方差矩阵 (R) - 越小越相信观测
+  observation_noise:
+    position: 0.02                     # 位置观测噪声
+    attitude: 0.002                    # 姿态观测噪声
+  
+  # 质量监控
+  quality_monitor:
+    innovation_window: 100             # 新息统计窗口大小
+    uncertainty_window: 100            # 不确定性统计窗口大小
+    print_interval: 100                # 打印间隔（帧）
+
+# =========================
+# 互补滤波器参数
+# =========================
+complementary_filter:
+  # 融合权重 (0-1之间，越大越信任IMU)
+  weights:
+    yaw_rotation: 0.7                  # 偏航速度 (IMU更可靠)
+    translation: 0.3                   # 平移速度 (视觉更可靠)
+    height: 0.5                        # 高度变化 (平衡权重)
+  
+  # 阈值
+  thresholds:
+    visual_yaw_min: 0.1                # 视觉旋转检测最小阈值
+    visual_trans_min: 0.01             # 视觉平移检测最小阈值
+    visual_height_min: 0.01            # 视觉高度检测最小阈值
+
+# =========================
+# 视觉里程计参数
+# =========================
+visual_odometry:
+  # 图像裁剪范围
+  image_ranges:
+    trans_y_range: [31, 90]
+    trans_x_range: [16, 145]
+    height_y_range: [11, 110]
+    height_x_range: [11, 150]
+    yaw_y_range: [31, 90]
+    yaw_x_range: [16, 145]
+  
+  # 图像缩放尺寸
+  resize_ranges:
+    trans: [60, 130]
+    yaw: [60, 130]
+    height: [100, 140]
+  
+  # 速度缩放因子
+  velocity_scales:
+    translation: 30
+    yaw_rotation: 1
+    height: 20
+  
+  # 速度阈值
+  velocity_thresholds:
+    max_translation: 0.5
+    max_yaw_rotation: 2.5
+    max_height: 0.45
+  
+  # 匹配参数
+  matching:
+    shift_match_horizontal: 26
+    shift_match_vertical: 20
+    fov_horizontal_degree: 81.5
+    fov_vertical_degree: 50
+
+# =========================
+# 视觉模板参数
+# =========================
+visual_template:
+  image_pattern: "*.png"
+  match_threshold: 0.15
+  crop_y_range: [1, 120]
+  crop_x_range: [1, 160]
+  resize_x: 16
+  resize_y: 12
+  x_shift: 5
+  y_shift: 3
+  global_decay: 0.1
+  active_decay: 2.0
+  patch_size_y: 5
+  patch_size_x: 5
+  panoramic: 0
+  step: 1
+
+# =========================
+# 头部朝向细胞参数
+# =========================
+head_direction_cells:
+  yaw_dim: 36
+  height_dim: 36
+  excitation:
+    yaw_dim: 8
+    height_dim: 8
+    yaw_variance: 1.9
+    height_variance: 1.9
+  inhibition:
+    yaw_dim: 5
+    height_dim: 5
+    yaw_variance: 3.0
+    height_variance: 3.0
+  global_inhibition: 0.0002
+  vt_inject_energy: 0.001
+  velocity_scales:
+    yaw: 1
+    height: 1
+  packet_size: 5
+
+# =========================
+# 3D网格细胞参数
+# =========================
+grid_cells:
+  dimensions:
+    x: 36
+    y: 36
+    z: 36
+  excitation:
+    x_dim: 7
+    y_dim: 7
+    z_dim: 7
+    x_variance: 1.5
+    y_variance: 1.5
+    z_variance: 1.5
+  inhibition:
+    x_dim: 5
+    y_dim: 5
+    z_dim: 5
+    x_variance: 2.0
+    y_variance: 2.0
+    z_variance: 2.0
+  global_inhibition: 0.0002
+  vt_inject_energy: 0.1
+  velocity_scales:
+    horizontal: 1
+    vertical: 1
+  packet_size: 4
+
+# =========================
+# 经验地图参数
+# =========================
+experience_map:
+  delta_threshold: 40                  # 创建新经验的阈值
+  loops: 1                             # 回环次数
+  correction: 0.5                      # 回环校正强度
+
+# =========================
+# 可视化参数
+# =========================
+visualization:
+  render_rate: 2                       # 渲染频率（每N帧渲染一次）
+  figure_size: [1600, 1000]            # 图像尺寸 (宽, 高)
+  save_format: "png"                   # 保存格式
+  dpi: 150                             # 图像分辨率
+
+# =========================
+# 精度评估参数
+# =========================
+accuracy_evaluation:
+  segment_count: 10                    # 轨迹分段数量
+  error_histogram_bins: 50             # 误差直方图箱数
+  metrics:
+    - "ate"                            # 绝对轨迹误差
+    - "rpe"                            # 相对位姿误差
+    - "drift_rate"                     # 漂移率
+    - "final_error"                    # 终点误差
+
+# =========================
+# 调试与日志
+# =========================
+debug:
+  verbose: true                        # 详细输出
+  log_level: "INFO"                    # 日志级别: DEBUG, INFO, WARNING, ERROR
+  save_intermediate_results: false     # 保存中间结果
+  plot_realtime: true                  # 实时绘图
+
+# =========================
+# 性能优化
+# =========================
+performance:
+  use_multiprocessing: false           # 使用多进程
+  num_workers: 4                       # 工作进程数
+  batch_processing: false              # 批处理模式
+  batch_size: 50                       # 批处理大小
+
+# =========================
+# 场景预设配置
+# =========================
+presets:
+  # 高精度模式（慢但准确）
+  high_accuracy:
+    ekf_fusion.observation_noise.position: 0.01
+    ekf_fusion.observation_noise.attitude: 0.001
+    complementary_filter.weights.yaw_rotation: 0.8
+    data_collection.sensors.imu_sample_rate: 100
+    
+  # 高速模式（快但可能不够准确）
+  high_speed:
+    ekf_fusion.process_noise.position: 0.01
+    data_collection.sensors.imu_sample_rate: 30
+    visual_odometry.velocity_scales.translation: 40
+    performance.batch_processing: true
+    
+  # 平衡模式（默认）
+  balanced:
+    # 使用上述默认值
+
+# =========================
+# 实验记录
+# =========================
+experiment:
+  name: "IMU_Visual_Fusion_Test"
+  date: "2024-XX-XX"
+  description: "测试IMU-视觉融合SLAM性能"
+  notes: |
+    在此记录实验观察和参数调整记录。
+    例如：
+    - 降低observation_noise后精度提升了15%
+    - Town10HD上效果最好
+    - 快速转弯时需要提高yaw_rotation权重

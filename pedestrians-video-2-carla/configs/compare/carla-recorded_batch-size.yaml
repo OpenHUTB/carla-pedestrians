@@ -1,0 +1,27 @@
+common_params:
+  mode: train
+  flow: autoencoder
+  data_module_name: CarlaRecorded
+  trajectory_model_name: ZeroTrajectory
+  seed: 22742
+  log_every_n_steps: 10
+  renderers: none
+  skip_metadata: null
+  mask_missing_joints: True
+  num_sanity_val_steps: 1
+  clip_offset: 15
+  clip_length: 15
+  max_epochs: 750
+  transform: hips_neck
+  noise_param: 1.0
+  enable_progress_bar: False
+  movements_model_name: LinearAE2D
+  noise: zero
+  missing_point_probability: 0.0
+compare_params:
+  batch_size:
+    - 256
+    - 512
+    - 1024
+    - 2048
+    - 4096

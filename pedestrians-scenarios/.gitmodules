@@ -1,0 +1,12 @@
+[submodule "third_party/scenario_runner"]
+	path = third_party/scenario_runner
+	url = https://github.com/carla-simulator/scenario_runner.git
+	ignore = all
+[submodule "third_party/carla_roach"]
+	path = third_party/carla_roach
+	url = https://github.com/maciekwielgosz/carla-roach.git
+	ignore = all
+[submodule "third_party/leaderboard"]
+	path = third_party/leaderboard
+	url = https://github.com/carla-simulator/leaderboard.git
+	ignore = all
