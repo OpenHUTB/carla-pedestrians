@@ -30,18 +30,22 @@ function [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz] = load_ground_truth_da
 
     %% 初始变量
     delimiter = ',';
-    startRow = 1;
+    startRow = 2;  % 跳过CSV标题行
 
     %% 每一行文档的字符串格式：
-    %   column1: double (%d)
-    %	column2: double (%f)
-    %   column3: double (%f)
-    %	column4: double (%f)
-    %   column5: double (%f)
-    %	column6: double (%f)
-    %   column7: double (%f)
+    %   column1: timestamp (double %f)
+    %	column2: pos_x (double %f)
+    %   column3: pos_y (double %f)
+    %	column4: pos_z (double %f)
+    %   column5: roll (double %f)
+    %	column6: pitch (double %f)
+    %   column7: yaw (double %f)
+    %   column8: vel_x (double %f) - 忽略
+    %   column9: vel_y (double %f) - 忽略
+    %   column10: vel_z (double %f) - 忽略
     % For more information, see the TEXTSCAN documentation.
-    formatSpec = '%d%f%f%f%f%f%f%[^\n\r]';
+    % 注意：新格式有10列，只读取前7列（timestamp和6-DOF位姿）
+    formatSpec = '%f%f%f%f%f%f%f%*f%*f%*f%[^\n\r]';
 
     %% Open the text file.
     fileID = fopen(groundTruthFile,'r');
@@ -56,7 +60,9 @@ function [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz] = load_ground_truth_da
     fclose(fileID);
 
     %% Allocate imported array to column variable names
-    frameId = dataArray{:, 1};
+    % 注意：第一列是timestamp，需要转换为frameId（1-based索引）
+    % timestamps = dataArray{:, 1};  % 如果需要保留timestamp
+    frameId = (1:length(dataArray{1}))';  % 生成1-based帧号
     gt_x = dataArray{:, 2};
     gt_y = dataArray{:, 3};
     gt_z = dataArray{:, 4};

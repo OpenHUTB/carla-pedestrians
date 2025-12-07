@@ -57,10 +57,10 @@ function [transV, yawRotV, heightV] = imu_aided_visual_odometry(rawImg, imu_data
         % 从加速度计估计平移速度(简化版,需要积分)
         % 注意:这里使用加速度的模长作为速度变化的指示
         accel_magnitude = sqrt(sum(accel.^2));
-        imu_trans_vel = max(0, (accel_magnitude - 9.81) * dt * 30);  % 简化的速度估计
+        imu_trans_vel = max(0, (accel_magnitude - 9.81) * dt * 0.5);  % 简化的速度估计（修正系数）
         
         % 从加速度计Z轴估计高度变化
-        imu_height_vel = (accel(3) - 9.81) * dt * 20;
+        imu_height_vel = (accel(3) - 9.81) * dt * 0.3;  % 修正高度系数
         
         prev_frame_idx = frame_idx;
     end

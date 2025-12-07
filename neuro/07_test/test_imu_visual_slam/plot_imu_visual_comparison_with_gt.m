@@ -143,6 +143,12 @@ function plot_imu_visual_comparison_with_gt(fusion_data, odo_trajectory, exp_tra
     
     %% 保存图像
     save_path = fullfile(save_dir, 'imu_visual_slam_comparison.png');
-    saveas(gcf, save_path);
+    
+    % 隐藏工具栏后再保存
+    set(gcf, 'ToolBar', 'none');
+    
+    % 使用print命令获得更好的输出质量
+    print(gcf, save_path, '-dpng', '-r300');
+    
     fprintf('对比图已保存: %s\n', save_path);
 end
