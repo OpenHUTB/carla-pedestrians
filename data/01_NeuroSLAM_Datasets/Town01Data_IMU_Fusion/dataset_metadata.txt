@@ -1,0 +1,6 @@
+# IMU-Visual SLAM Dataset
+# Map: Town01
+# Camera Rate: 20 Hz
+# IMU Rate: 60 Hz
+# Image Size: 160x120
+# Total Frames: 5000

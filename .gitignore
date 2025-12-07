@@ -1,0 +1,150 @@
+# NeuroSLAM .gitignore
+
+# ============================================
+# 数据文件 (太大，不上传到GitHub)
+# ============================================
+# 数据集（用户需自行下载或采集）
+data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/*.png
+data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/*.jpg
+data/01_NeuroSLAM_Datasets/Town10Data_IMU_Fusion/*.png
+data/01_NeuroSLAM_Datasets/Town10Data_IMU_Fusion/*.jpg
+
+# 但保留数据集结构和说明文件
+!data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/README.md
+!data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/*.txt
+!data/01_NeuroSLAM_Datasets/Town10Data_IMU_Fusion/README.md
+!data/01_NeuroSLAM_Datasets/Town10Data_IMU_Fusion/*.txt
+
+# ============================================
+# MATLAB生成的文件
+# ============================================
+# MATLAB缓存
+*.asv
+*.m~
+slprj/
+*.autosave
+
+# MATLAB结果文件（太大）
+*.mat
+!**/weights/*.mat  # 保留权重文件（如果有）
+
+# MATLAB编译文件
+*.mex*
+*.p
+
+# ============================================
+# Python生成的文件
+# ============================================
+# Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# ============================================
+# 结果和输出文件
+# ============================================
+# SLAM结果
+**/slam_results/*.png
+**/slam_results/*.jpg
+**/slam_results/*.fig
+**/slam_results/*.eps
+**/slam_results/*.mat
+**/slam_results_*/
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+temp/
+tmp/
+
+# ============================================
+# IDE和编辑器
+# ============================================
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# MATLAB
+*.prj
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ============================================
+# 操作系统
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ============================================
+# 其他
+# ============================================
+# 备份文件
+*.bak
+*.backup
+*_backup/
+
+# 压缩文件（除非是必要的资源）
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# 大型媒体文件
+*.avi
+*.mp4
+*.mov
+
+# ============================================
+# 保留的重要文件（覆盖上面的规则）
+# ============================================
+# 确保文档和说明被上传
+!README.md
+!**/README.md
+!*.md
+
+# 确保配置文件被上传
+!requirements.txt
+!setup.py
+!*.json
+!*.yaml
+!*.yml
+
+# 确保示例数据被上传（如果很小）
+# !examples/**/*.png
