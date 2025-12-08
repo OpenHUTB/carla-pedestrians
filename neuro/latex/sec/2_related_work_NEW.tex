@@ -111,7 +111,6 @@ RatSLAM successfully demonstrated suburb-scale mapping and long-term navigation,
 However, the original RatSLAM operates primarily in 2D environments and uses hand-crafted visual features that limit performance in complex scenarios.
 
 Extensions of RatSLAM include BatSLAM \cite{Steckel2013}, which incorporates sonar sensing for navigation in darkness, and various improvements to the visual processing pipeline \cite{Milford2011a, Milford2011b}.
-Tang et al. \cite{Tang2018} integrated episodic memory mechanisms to enhance context-dependent navigation.
 
 \subsubsection{3D Navigation and Spatial Representation}
 
@@ -121,18 +120,17 @@ Recent neuroscientific discoveries of 3D grid cells and 3D head direction cells 
 3D head direction cells encode the animal's orientation in 3D space through combinations of azimuth and pitch \cite{Finkelstein2015, Page2018, Shinder2019}.
 3D grid cells exhibit periodic firing patterns in volumetric space, potentially providing a universal metric for 3D path integration \cite{Finkelstein2016, Casali2019}.
 
-Mathematical models of these 3D spatial cells have been proposed \cite{Jeffery2013, Jeffery2015, Hayman2015, Laurens2018}, including face-centered cubic (FCC) and hexagonal close-packed (HCP) lattice organizations for 3D grid cells.
+Mathematical models of these 3D spatial cells have been proposed \cite{Jeffery2013, Jeffery2015}, including face-centered cubic (FCC) and hexagonal close-packed (HCP) lattice organizations for 3D grid cells.
 Soman et al. \cite{Soman2018} developed a hierarchical network model of 3D spatial cells, demonstrating the computational principles underlying volumetric navigation.
 
 Silveira et al. \cite{Silveira2013, Silveira2015} extended RatSLAM to underwater 3D environments using a 3D place cell model, though without explicit directional representation.
-Yu et al. \cite{Yu2019} proposed NeuroSLAM for 3D environments by modeling 3D grid cells and multi-layered head direction cells, demonstrating 4-DOF pose estimation.
 
 \subsubsection{Deep Learning and Neuromorphic Approaches}
 
 Recent work has explored combining bio-inspired principles with modern deep learning.
 Kreiser et al. \cite{Kreiser2018a, Kreiser2018b} developed spiking neural network (SNN) implementations of spatial cells running on neuromorphic hardware, achieving energy-efficient place recognition.
 
-Attention mechanisms, inspired by selective visual processing in the brain, have shown promise in visual place recognition \cite{Chen2017, Kim2018}.
+Attention mechanisms, inspired by selective visual processing in the brain, have shown promise in visual place recognition \cite{Chen2017}.
 However, these approaches typically focus on individual components (e.g., place recognition) rather than complete SLAM systems.
 
 \subsubsection{Limitations and Opportunities}

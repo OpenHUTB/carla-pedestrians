@@ -71,18 +71,31 @@ function normImg = hart_cornet_feature_extractor(img, prev_state)
     v1_features = edge_magnitude;  % 用于注意力计算
     v4_features = img_enhanced;    % 用于注意力计算
     
-    %% ========== 禁用HART增强（调试模式） ==========
-    % 修复尝试3: 完全禁用注意力和LSTM，只使用基础特征
-    % 原因: HART增强仍然导致特征过于相似
+    %% ========== HART时序跟踪（主要） + CORnet特征（辅助） ==========
+    % 重新启用HART：动态场景跟踪的关键
+    % SLAM是连续帧处理，HART的时序建模非常重要
     
-    % 直接使用基础特征，不加任何增强
-    normImg = normalize_features(it_features);
+    % 1. HART空间注意力（层次化注意力机制）
+    attention_map = compute_spatial_attention(img, v1_features, v4_features);
+    attended_features = it_features .* (1.0 + 0.5 * attention_map);  % 注意力调制
     
-    % 注释掉HART处理，等VT数量正常后再启用
-    % attention_map = compute_spatial_attention(img, v1_features, v4_features);
-    % attended_features = it_features .* attention_map;
-    % [lstm_hidden_state, lstm_cell_state, temporal_features] = lstm_update(...);
-    % fused_features = 0.9 * attended_features + 0.1 * temporal_features;
+    % 2. HART时序建模（LSTM递归状态更新）
+    if isempty(lstm_hidden_state) || any(size(lstm_hidden_state) ~= size(attended_features))
+        % 初始化LSTM状态
+        lstm_hidden_state = attended_features;
+        lstm_cell_state = attended_features;
+        temporal_features = attended_features;
+    else
+        % LSTM更新
+        [lstm_hidden_state, lstm_cell_state, temporal_features] = ...
+            lstm_update(attended_features, lstm_hidden_state, lstm_cell_state);
+    end
+    
+    % 3. 融合空间和时序特征（更平衡的配置，避免过度平滑）
+    fused_features = 0.5 * temporal_features + 0.5 * attended_features;
+    
+    % 4. 归一化输出
+    normImg = normalize_features(fused_features);
 end
 
 
@@ -214,10 +227,11 @@ function [h_new, c_new, output] = lstm_update(x, h_prev, c_prev)
     % 简化的LSTM单元，用于时序建模
     % 参考HART的递归结构
     
-    % LSTM门控参数（简化版，减少历史影响）
-    forget_rate = 0.3;   % 遗忘门（保留30%历史，减少平滑）
-    input_rate = 0.7;    % 输入门（接受70%新信息）
-    output_rate = 0.9;   % 输出门
+    % LSTM门控参数（调整为更敏感的配置）
+    % 降低历史保留，增加对新场景的响应
+    forget_rate = 0.4;   % 遗忘门（保留40%历史）
+    input_rate = 0.6;    % 输入门（接受60%新信息，增强场景区分）
+    output_rate = 0.9;   % 输出门（控制特征输出强度）
     
     % === 遗忘门：决定保留多少历史信息 ===
     c_forgotten = forget_rate * c_prev;

@@ -5,10 +5,46 @@
 %  本脚本测试IMU-视觉融合的NeuroSLAM系统
 %  对比纯视觉SLAM和IMU-视觉融合SLAM的性能
 
-clear all; close all; clc;
+% 【重要】先检查是否为快速测试模式，避免被clear all清除
+global FAST_TEST_MODE FAST_TEST_FRAMES DATASET_NAME;
+fast_test_active = false;
+fast_test_num_frames = 5000;  % 默认完整测试
+dataset_name = 'Town01Data_IMU_Fusion';  % 默认Town01
+try
+    % 尝试读取全局变量
+    if ~isempty(FAST_TEST_MODE) && FAST_TEST_MODE
+        fast_test_active = true;
+        if ~isempty(FAST_TEST_FRAMES)
+            fast_test_num_frames = FAST_TEST_FRAMES;
+        end
+        fprintf('⚡ 检测到快速测试模式：%d帧\n', fast_test_num_frames);
+    end
+    % 检查是否设置了数据集名称
+    if ~isempty(DATASET_NAME)
+        dataset_name = DATASET_NAME;
+        fprintf('📍 使用数据集: %s\n', dataset_name);
+    end
+catch
+    % 如果读取失败，说明没有设置快速测试模式
+    fast_test_active = false;
+end
+
+% 使用clearvars而不是clear all，保留快速测试标志和数据集名称
+clearvars -except fast_test_active fast_test_num_frames dataset_name;
+close all; clc;
+
+% 恢复快速测试模式全局变量和数据集名称
+if fast_test_active
+    global FAST_TEST_MODE FAST_TEST_FRAMES;
+    FAST_TEST_MODE = true;
+    FAST_TEST_FRAMES = fast_test_num_frames;
+end
+global DATASET_NAME;
+DATASET_NAME = dataset_name;
 
 %% 1. 添加路径
 fprintf('========== IMU-Visual Fusion SLAM Test ==========\n');
+fprintf('数据集: %s\n', dataset_name);
 fprintf('[1/9] 添加依赖路径...\n');
 % 动态获取neuro根目录
 currentDir = fileparts(mfilename('fullpath'));
@@ -27,6 +63,8 @@ fprintf('[2/9] 初始化全局变量...\n');
 global PREV_VT_ID; PREV_VT_ID = -1;
 global VT_TEMPLATES; VT_TEMPLATES = [];
 global VT_ID_COUNT; VT_ID_COUNT = 0;
+global NUM_VT; NUM_VT = 0;  % 增强VT方法使用NUM_VT
+global VT; VT = [];  % VT数组
 global YAW_HEIGHT_HDC; YAW_HEIGHT_HDC = zeros(36, 36);
 global GRIDCELLS; GRIDCELLS = zeros(36, 36, 36);
 global EXPERIENCES; EXPERIENCES = [];
@@ -65,9 +103,9 @@ visual_odo_initial( ...
     'FOV_VERT_DEGREE', 50, ...
     'ODO_STEP', 1);
 
-% 视觉模板初始化
+% 视觉模板初始化（HART+Transformer Plan B最优配置）
 vt_image_initial('*.png', ...
-    'VT_MATCH_THRESHOLD', 0.15, ...
+    'VT_MATCH_THRESHOLD', 0.06, ...  % Plan B验证的最优阈值
     'VT_IMG_CROP_Y_RANGE', 1:120, ...
     'VT_IMG_CROP_X_RANGE', 1:160, ...
     'VT_IMG_RESIZE_X_RANGE', 16, ...
@@ -80,6 +118,8 @@ vt_image_initial('*.png', ...
     'PATCH_SIZE_X_K', 5, ...
     'VT_PANORAMIC', 0, ...
     'VT_STEP', 1);
+
+fprintf('  VT方法: HART+Transformer Plan B最优 (阈值: %.3f，权重0.15，已验证)\n', 0.06);
 
 % 偏航-高度头部朝向细胞初始化
 yaw_height_hdc_initial( ...
@@ -131,8 +171,8 @@ exp_initial( ...
 fprintf('经验地图阈值: DELTA_EXP_GC_HDC_THRESHOLD = 15 (降低以创建更多经验节点)\n');
 
 %% 4. 读取IMU-视觉融合数据
-fprintf('[4/9] 读取IMU-视觉融合数据...\n');
-data_path = fullfile(rootDir, 'data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion');
+fprintf('[4/9] 读取IMU-视觉融合数据 (%s)...\n', dataset_name);
+data_path = fullfile(rootDir, 'data/01_NeuroSLAM_Datasets', dataset_name);
 
 if ~exist(data_path, 'dir')
     error('数据路径不存在: %s\n请先运行Python脚本采集数据', data_path);
@@ -180,7 +220,15 @@ end
 %% 5. 运行IMU-视觉融合SLAM
 fprintf('[5/9] 开始运行IMU-Visual Fusion SLAM...\n');
 
-num_frames = min(length(img_files), length(fusion_data.timestamp));
+% 支持快速测试模式（通过全局变量控制）
+global FAST_TEST_MODE FAST_TEST_FRAMES;
+if ~isempty(FAST_TEST_MODE) && FAST_TEST_MODE && ~isempty(FAST_TEST_FRAMES)
+    num_frames = min([length(img_files), length(fusion_data.timestamp), FAST_TEST_FRAMES]);
+    fprintf('⚡ 快速测试模式：处理 %d 帧（完整数据集有 %d 帧）\n', ...
+        num_frames, min(length(img_files), length(fusion_data.timestamp)));
+else
+    num_frames = min(length(img_files), length(fusion_data.timestamp));
+end
 odo_trajectory = zeros(num_frames, 3);
 exp_trajectory = zeros(num_frames, 3);
 odo_x = 0; odo_y = 0; odo_z = 0;
@@ -231,9 +279,9 @@ for frame_idx = 1:num_frames
         curr_height = odo_z;
     end
     
-    vtId = visual_template(rawImg, curr_x, curr_y, curr_z, curr_yaw, curr_height);
-    
-    % 计算VT识别率（简化版）
+    % 使用简化类脑特征提取（论文验证方法）
+    vtId = visual_template_neuro_matlab_only(rawImg, curr_x, curr_y, curr_z, curr_yaw, curr_height);
+    % 计算VT识别率
     if vtId > 0 && vtId == PREV_VT_ID
         vtRecog = 1;
     else
@@ -247,7 +295,7 @@ for frame_idx = 1:num_frames
     % 转换为弧度用于GC迭代
     curYawThetaInRadian = curYawTheta * YAW_HEIGHT_HDC_Y_TH_SIZE;
     
-    % 更新3D网格细胞（使用正确函数名gc_iteration）
+    % 更新3D网格细胞
     gc_iteration(vtId, transV, curYawThetaInRadian, heightV);
     [gcX, gcY, gcZ] = get_gc_xyz();
     
@@ -269,7 +317,7 @@ end
 
 fprintf('[5/9] SLAM处理完成！\n');
 fprintf('  经验地图节点数: %d\n', NUM_EXPS);
-fprintf('  视觉模板数: %d\n', VT_ID_COUNT);
+fprintf('  视觉模板数: %d\n', NUM_VT);  % 使用NUM_VT（增强方法）而不是VT_ID_COUNT
 if NUM_EXPS < 10
     warning('经验地图节点数过少（%d个），可能导致轨迹异常！', NUM_EXPS);
     fprintf('  建议：降低DELTA_EXP_GC_HDC_THRESHOLD参数\n');
