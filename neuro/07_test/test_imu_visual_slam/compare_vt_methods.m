@@ -11,7 +11,7 @@ fprintf('========================================\n\n');
 %% 公共设置
 % 动态获取neuro根目录（当前脚本在neuro/07_test/test_imu_visual_slam/下）
 currentDir = fileparts(mfilename('fullpath'));
-rootDir = fileparts(fileparts(currentDir));  % 向上两级到neuro/
+rootDir = fileparts(fileparts(currentDir));
 addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/3d_grid_cells_network'));
 addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/yaw_height_hdc_network'));
 addpath(fullfile(rootDir, '04_visual_template'));
@@ -31,7 +31,8 @@ imu_data = read_imu_data(dataPath);
 imgFiles = dir(fullfile(dataPath, '*.png'));
 [~, sortIdx] = sort({imgFiles.name});
 imgFiles = imgFiles(sortIdx);
-num_frames = min([length(imgFiles), gt_data.count, 5000]);
+% 测试阶段只用1000帧，加快迭代速度
+num_frames = min(1000, length(imgFiles));
 fprintf('  将处理 %d 帧图像\n', num_frames);
 
 %% ========== 运行1: 原始VT方法 ==========
@@ -50,7 +51,8 @@ fprintf('\n========== 生成对比图表 ==========\n');
 % 对齐轨迹
 fprintf('对齐轨迹到相同坐标系...\n');
 gt_pos = gt_data.pos(1:num_frames, :);
-[fusion_pos_aligned, gt_aligned] = align_trajectories(fusion_data.pos, gt_pos, 'simple');
+fusion_pos = fusion_data.pos(1:num_frames, :);  % 截取对应帧数
+[fusion_pos_aligned, gt_aligned] = align_trajectories(fusion_pos, gt_pos, 'simple');
 [odo_original_aligned, ~] = align_trajectories(odo_traj_original, gt_pos, 'simple');
 [exp_original_aligned, ~] = align_trajectories(exp_traj_original, gt_pos, 'simple');
 [odo_enhanced_aligned, ~] = align_trajectories(odo_traj_enhanced, gt_pos, 'simple');
@@ -80,8 +82,23 @@ fprintf('  增强SLAM: X[%.2f, %.2f], Y[%.2f, %.2f]\n', ...
 
 fprintf('\nRMSE结果:\n');
 fprintf('  融合位姿 RMSE: %.2f m\n', mean(errors_fusion));
-fprintf('  原始VT RMSE: %.2f m\n', stats_original.rmse);
-fprintf('  增强VT RMSE: %.2f m\n', stats_enhanced.rmse);
+fprintf('  原始VT RMSE: %.2f m (Max: %.2f, Min: %.2f)\n', ...
+    stats_original.rmse, max(errors_original), min(errors_original));
+fprintf('  增强VT RMSE: %.2f m (Max: %.2f, Min: %.2f)\n', ...
+    stats_enhanced.rmse, max(errors_enhanced), min(errors_enhanced));
+
+% 分段误差分析
+fprintf('\n分段误差分析 (每1000帧):\n');
+seg_size = 1000;
+for seg = 1:floor(num_frames/seg_size)
+    seg_start = (seg-1)*seg_size + 1;
+    seg_end = seg*seg_size;
+    rmse_orig_seg = mean(errors_original(seg_start:seg_end));
+    rmse_enh_seg = mean(errors_enhanced(seg_start:seg_end));
+    fprintf('  第%d段 [%d-%d]: 原始=%.2fm, 增强=%.2fm, 改善=%.1f%%\n', ...
+        seg, seg_start, seg_end, rmse_orig_seg, rmse_enh_seg, ...
+        (rmse_orig_seg - rmse_enh_seg) / rmse_orig_seg * 100);
+end
 
 % 创建对比图（使用原始脚本风格）
 figure('Name', '原始VT vs 增强VT vs Fusion 对比', 'Position', [100 100 1600 900]);
@@ -132,7 +149,12 @@ xlabel('帧数'); ylabel('位置误差 (m)');
 title('位置误差随时间变化（相对于GT）');
 legend('Location', 'best');
 
-%% ========== 性能对比表 ==========
+%% ========== 保存和输出结果 ==========
+% 保存对比图
+saveas(gcf, 'vt_comparison_optimized.png');
+fprintf('\n对比图已保存到: vt_comparison_optimized.png\n');
+
+% 性能对比表
 fprintf('\n========================================\n');
 fprintf('             性能对比\n');
 fprintf('========================================\n');
