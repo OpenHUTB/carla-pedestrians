@@ -111,26 +111,57 @@ function [metrics] = evaluate_slam_accuracy(estimated_trajectory, ground_truth, 
     fprintf('漂移率:     %.4f%% (终点误差/轨迹长度)\n', metrics.drift_rate * 100);
     fprintf('======================================\n\n');
     
-    % 8. 绘制增强的误差分析图（2x3布局）
-    figure('Name', 'SLAM Accuracy Evaluation', 'Position', [50, 50, 1600, 900]);
+    % 8. 绘制增强的误差分析图（2x3布局）- 专业高级设计
+    fig = figure('Name', 'SLAM Accuracy Evaluation', 'Position', [50, 50, 1600, 900]);
+    set(fig, 'Color', [0.96 0.96 0.98]);  % 极淡灰蓝背景
     
-    % 子图1: ATE随时间变化
+    % 子图1: ATE随时间变化 - 专业对比度
     subplot(2, 3, 1);
-    plot(1:N, pos_errors, 'b-', 'LineWidth', 1.5);
     hold on;
-    plot([1, N], [metrics.ate.mean, metrics.ate.mean], 'r--', 'LineWidth', 2);
-    plot([1, N], [metrics.ate.rmse, metrics.ate.rmse], 'g--', 'LineWidth', 1.5);
-    xlabel('Frame', 'FontSize', 10);
-    ylabel('Position Error (m)', 'FontSize', 10);
-    title('Absolute Trajectory Error (ATE)', 'FontSize', 11, 'FontWeight', 'bold');
-    legend('ATE', 'Mean', 'RMSE', 'Location', 'best', 'FontSize', 9);
-    grid on;
     
-    % 子图2: 误差累积分布函数(CDF)
+    % 专业网格 - 中等对比度
+    grid on;
+    set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+    set(gca, 'Box', 'on', 'LineWidth', 1.2);
+    set(gca, 'Color', 'w');  % 纯白背景
+    
+    % 高对比度配色 - 深蓝/深橙/深绿
+    plot(1:N, pos_errors, '-', 'Color', [0.00 0.45 0.74], 'LineWidth', 3.0);
+    plot([1, N], [metrics.ate.mean, metrics.ate.mean], '--', 'Color', [0.85 0.33 0.10], 'LineWidth', 3.0);
+    plot([1, N], [metrics.ate.rmse, metrics.ate.rmse], '--', 'Color', [0.47 0.67 0.19], 'LineWidth', 3.0);  % 深绿
+    
+    % 加强坐标轴文字
+    xlabel('Frame Index', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    ylabel('Position Error (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    title('Trajectory Error Evolution', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    
+    % 专业图例
+    leg = legend('ATE', 'Mean', 'RMSE', 'Location', 'best', 'FontSize', 10);
+    set(leg, 'Box', 'on', 'Color', [1 1 1 0.95], 'EdgeColor', [0.3 0.3 0.3], 'LineWidth', 0.5);
+    
+    set(gca, 'FontSize', 10, 'FontName', 'Arial');
+    ax = gca;
+    ax.XAxis.Color = [0.2 0.2 0.2];
+    ax.YAxis.Color = [0.2 0.2 0.2];
+    ax.LineWidth = 1.2;
+    
+    % 子图2: 误差累积分布函数(CDF) - 渐变填充
     subplot(2, 3, 2);
     sorted_errors = sort(pos_errors);
     cdf_values = (1:N) / N;
-    plot(sorted_errors, cdf_values, 'b-', 'LineWidth', 2);
+    hold on;
+    
+    grid on;
+    set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+    set(gca, 'Box', 'on', 'LineWidth', 1.2);
+    set(gca, 'Color', 'w');
+    
+    % 深色渐变填充
+    x_fill = [sorted_errors; max(sorted_errors); 0];
+    y_fill = [cdf_values'; 0; 0];
+    fill(x_fill, y_fill, [0.00 0.45 0.74], 'FaceAlpha', 0.25, 'EdgeColor', 'none');
+    
+    plot(sorted_errors, cdf_values, '-', 'Color', [0.00 0.45 0.74], 'LineWidth', 3.5);
     hold on;
     % 标注关键百分位点
     percentiles = [50, 75, 95];
@@ -145,25 +176,44 @@ function [metrics] = evaluate_slam_accuracy(estimated_trajectory, ground_truth, 
                 'FontSize', 8, 'Color', colors(i));
         end
     end
-    xlabel('Position Error (m)', 'FontSize', 10);
-    ylabel('Cumulative Probability', 'FontSize', 10);
-    title('Error CDF (Cumulative Distribution)', 'FontSize', 11, 'FontWeight', 'bold');
-    grid on;
+    xlabel('Position Error (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    ylabel('Cumulative Probability', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    title('Error Distribution (CDF)', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
     xlim([0, max(sorted_errors)]);
     ylim([0, 1]);
+    set(gca, 'FontSize', 10, 'FontName', 'Arial');
+    ax = gca;
+    ax.XAxis.Color = [0.2 0.2 0.2];
+    ax.YAxis.Color = [0.2 0.2 0.2];
+    ax.LineWidth = 1.2;
     
-    % 子图3: XYZ轴误差分解
+    % 子图3: XYZ轴误差分解 - 高对比三色
     subplot(2, 3, 3);
-    xyz_errors = abs(estimated_trajectory - ground_truth);
-    plot(1:N, xyz_errors(:,1), 'r-', 'LineWidth', 1, 'DisplayName', 'X-axis');
     hold on;
-    plot(1:N, xyz_errors(:,2), 'g-', 'LineWidth', 1, 'DisplayName', 'Y-axis');
-    plot(1:N, xyz_errors(:,3), 'b-', 'LineWidth', 1, 'DisplayName', 'Z-axis');
-    xlabel('Frame', 'FontSize', 10);
-    ylabel('Axis Error (m)', 'FontSize', 10);
-    title('Error Decomposition (X/Y/Z)', 'FontSize', 11, 'FontWeight', 'bold');
-    legend('Location', 'best', 'FontSize', 9);
+    
     grid on;
+    set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+    set(gca, 'Box', 'on', 'LineWidth', 1.2);
+    set(gca, 'Color', 'w');
+    
+    xyz_errors = abs(estimated_trajectory - ground_truth);
+    % 高对比配色 - 鲜红/鲜蓝/鲜绿
+    plot(1:N, xyz_errors(:,1), '-', 'Color', [0.93 0.11 0.14], 'LineWidth', 3.2, 'DisplayName', 'X-axis');
+    plot(1:N, xyz_errors(:,2), '-', 'Color', [0.00 0.45 0.74], 'LineWidth', 3.2, 'DisplayName', 'Y-axis');
+    plot(1:N, xyz_errors(:,3), '-', 'Color', [0.47 0.67 0.19], 'LineWidth', 3.2, 'DisplayName', 'Z-axis');  % 鲜绿
+    
+    xlabel('Frame Index', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    ylabel('Absolute Error (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    title('3D Error Decomposition', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    
+    leg = legend('Location', 'best', 'FontSize', 10);
+    set(leg, 'Box', 'on', 'Color', [1 1 1 0.95], 'EdgeColor', [0.3 0.3 0.3], 'LineWidth', 0.5);
+    
+    set(gca, 'FontSize', 10, 'FontName', 'Arial');
+    ax = gca;
+    ax.XAxis.Color = [0.2 0.2 0.2];
+    ax.YAxis.Color = [0.2 0.2 0.2];
+    ax.LineWidth = 1.2;
     
     % 子图4: 误差箱线图（整体+分段）
     subplot(2, 3, 4);
@@ -176,17 +226,63 @@ function [metrics] = evaluate_slam_accuracy(estimated_trajectory, ground_truth, 
             end_idx = min(i*segment_size, N);
             segment_data{i} = pos_errors(start_idx:end_idx);
         end
-        boxplot([segment_data{:}], 'Labels', cellstr(num2str((1:length(metrics.segment_errors))')));
-        xlabel('Trajectory Segment', 'FontSize', 10);
-        ylabel('Position Error (m)', 'FontSize', 10);
-        title('Error Statistics by Segment', 'FontSize', 11, 'FontWeight', 'bold');
+        h = boxplot([segment_data{:}], 'Labels', cellstr(num2str((1:length(metrics.segment_errors))' )), ...
+            'Symbol', 'o');
+        
+        % 多色搭配 - 给每个箱体不同颜色
+        colors_boxplot = [
+            0.00, 0.45, 0.74;  % 蓝
+            0.85, 0.33, 0.10;  % 橙
+            0.47, 0.67, 0.19;  % 绿
+            0.93, 0.11, 0.14;  % 红
+            0.56, 0.27, 0.68;  % 紫
+            0.09, 0.75, 0.81;  % 青
+            0.89, 0.47, 0.76;  % 粉
+            0.50, 0.50, 0.50;  % 灰
+            0.74, 0.60, 0.42;  % 棕
+            0.09, 0.45, 0.27   % 墨绿
+        ];
+        
+        % 设置每个箱体的颜色
+        box_handles = findobj(h, 'Tag', 'Box');
+        for i = 1:length(box_handles)
+            color_idx = mod(length(box_handles) - i, size(colors_boxplot, 1)) + 1;
+            patch(get(box_handles(i), 'XData'), get(box_handles(i), 'YData'), ...
+                colors_boxplot(color_idx, :), 'FaceAlpha', 0.5);
+        end
+        
+        set(h, 'LineWidth', 2.5);
+        
         grid on;
+        set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+        set(gca, 'Box', 'on', 'LineWidth', 1.2);
+        set(gca, 'Color', 'w');
+        
+        xlabel('Trajectory Segment', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        ylabel('Position Error (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        title('Segmented Error Analysis', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        set(gca, 'FontSize', 10, 'FontName', 'Arial');
+        ax = gca;
+        ax.XAxis.Color = [0.2 0.2 0.2];
+        ax.YAxis.Color = [0.2 0.2 0.2];
+        ax.LineWidth = 1.2;
     else
-        boxplot(pos_errors);
-        xlabel('Full Trajectory', 'FontSize', 10);
-        ylabel('Position Error (m)', 'FontSize', 10);
-        title('Overall Error Statistics', 'FontSize', 11, 'FontWeight', 'bold');
+        h = boxplot(pos_errors, 'Colors', [0.00 0.45 0.74], 'Symbol', 'o');
+        set(h, 'LineWidth', 2.5);
+        
         grid on;
+        set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+        set(gca, 'Box', 'on', 'LineWidth', 1.2);
+        set(gca, 'Color', 'w');
+        
+        xlabel('Full Trajectory', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        ylabel('Position Error (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        title('Overall Error Statistics', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        set(gca, 'FontSize', 10, 'FontName', 'Arial');
+        ax = gca;
+        ax.XAxis.Color = [0.2 0.2 0.2];
+        ax.YAxis.Color = [0.2 0.2 0.2];
+        ax.LineWidth = 1.2;
     end
     
     % 子图5: RPE vs 距离段分析
@@ -204,29 +300,68 @@ function [metrics] = evaluate_slam_accuracy(estimated_trajectory, ground_truth, 
                 rpe_by_dist(i) = mean(pos_errors(idx));
             end
         end
-        bar(dist_centers, rpe_by_dist, 'FaceColor', [0.3, 0.6, 0.9], 'EdgeColor', 'k');
-        xlabel('Distance Interval (m)', 'FontSize', 10);
-        ylabel('Average Error (m)', 'FontSize', 10);
-        title('Error vs. Distance Intervals', 'FontSize', 11, 'FontWeight', 'bold');
+        % 专业柱状图
+        b = bar(dist_centers, rpe_by_dist, 'FaceColor', [0.12 0.47 0.71], 'EdgeColor', [0.08 0.35 0.55], 'LineWidth', 1.2);
+        
         grid on;
+        set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+        set(gca, 'Box', 'on', 'LineWidth', 1.2);
+        set(gca, 'Color', 'w');
+        
+        xlabel('Distance Traveled (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        ylabel('Position Error (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        title('Distance-based Error Analysis', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        set(gca, 'FontSize', 10, 'FontName', 'Arial');
+        ax = gca;
+        ax.XAxis.Color = [0.2 0.2 0.2];
+        ax.YAxis.Color = [0.2 0.2 0.2];
+        ax.LineWidth = 1.2;
     end
     
-    % 子图6: 误差热力图（2D轨迹+误差着色）
+    % 子图6: 误差热力图（2D轨迹+误差着色）- 专业热力图
     subplot(2, 3, 6);
     if size(ground_truth, 2) >= 2
-        scatter(ground_truth(:,1), ground_truth(:,2), 30, pos_errors, 'filled');
-        colorbar;
-        colormap(jet);
-        xlabel('X (m)', 'FontSize', 10);
-        ylabel('Y (m)', 'FontSize', 10);
-        title('Error Heatmap on Trajectory', 'FontSize', 11, 'FontWeight', 'bold');
-        axis equal;
-        grid on;
-        % 添加起点和终点标记
         hold on;
-        plot(ground_truth(1,1), ground_truth(1,2), 'go', 'MarkerSize', 12, 'LineWidth', 2, 'DisplayName', 'Start');
-        plot(ground_truth(end,1), ground_truth(end,2), 'rs', 'MarkerSize', 12, 'LineWidth', 2, 'DisplayName', 'End');
-        legend('Location', 'best', 'FontSize', 8);
+        
+        grid on;
+        set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+        set(gca, 'Box', 'on', 'LineWidth', 1.2);
+        set(gca, 'Color', 'w');
+        
+        % 高对比度热力图
+        scatter(ground_truth(:,1), ground_truth(:,2), 50, pos_errors, 'filled', ...
+            'MarkerEdgeColor', 'none', 'MarkerFaceAlpha', 0.7);
+        
+        % 使用彩色热力图渐变（蓝-青-绿-黄-红）
+        colormap(subplot(2,3,6), jet);
+        
+        cb = colorbar;
+        cb.Label.String = 'Position Error (m)';
+        cb.Label.FontSize = 11;
+        cb.Label.FontWeight = 'bold';
+        cb.Color = [0 0 0];
+        cb.Box = 'on';
+        cb.LineWidth = 0.5;
+        
+        % 高对比度起点/终点标记
+        scatter(ground_truth(1,1), ground_truth(1,2), 150, [0.17 0.63 0.17], 'filled', ...
+            'MarkerEdgeColor', 'k', 'LineWidth', 2.5, 'DisplayName', 'Start', 'Marker', '^');
+        scatter(ground_truth(end,1), ground_truth(end,2), 150, [0.84 0.15 0.16], 'filled', ...
+            'MarkerEdgeColor', 'k', 'LineWidth', 2.5, 'DisplayName', 'End', 'Marker', 'v');
+        
+        xlabel('X Position (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        ylabel('Y Position (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        title('Spatial Error Heatmap', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        axis equal;
+        
+        leg = legend('Location', 'best', 'FontSize', 9);
+        set(leg, 'Box', 'on', 'Color', [1 1 1 0.95], 'EdgeColor', [0.3 0.3 0.3], 'LineWidth', 0.5);
+        
+        set(gca, 'FontSize', 10, 'FontName', 'Arial');
+        ax = gca;
+        ax.XAxis.Color = [0.2 0.2 0.2];
+        ax.YAxis.Color = [0.2 0.2 0.2];
+        ax.LineWidth = 1.2;
     end
     
     % 根据方法名生成不同的文件名
@@ -239,37 +374,63 @@ function [metrics] = evaluate_slam_accuracy(estimated_trajectory, ground_truth, 
     saveas(gcf, save_path);
     fprintf('精度评估图已保存: %s\n', save_path);
     
-    % 9. 生成统计摘要图
-    figure('Name', 'SLAM Statistics Summary', 'Position', [100, 100, 1400, 500]);
+    % 9. 生成统计摘要图 - 专业风格
+    figure('Name', 'SLAM Statistics Summary', 'Position', [100, 100, 1400, 500], 'Color', [0.96 0.96 0.98]);
     
-    % 子图1: 多维度误差对比
+    % 子图1: 多维度误差对比 - 专业配色
     subplot(1, 3, 1);
+    
+    grid on;
+    set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+    set(gca, 'Box', 'on', 'LineWidth', 1.2);
+    set(gca, 'Color', 'w');
+    
     categories = {'RMSE', 'Mean', 'Median', 'Std', 'Max'};
     values = [metrics.ate.rmse, metrics.ate.mean, metrics.ate.median, metrics.ate.std, metrics.ate.max];
-    bar(values, 'FaceColor', [0.2, 0.6, 0.8]);
+    bar(values, 'FaceColor', [0.12 0.47 0.71], 'EdgeColor', [0.08 0.35 0.55], 'LineWidth', 1.2);
     set(gca, 'XTickLabel', categories);
-    ylabel('Error (m)', 'FontSize', 11);
-    title('ATE Statistics Overview', 'FontSize', 12, 'FontWeight', 'bold');
-    grid on;
+    
+    ylabel('Error (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    title('ATE Statistical Metrics', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    set(gca, 'FontSize', 10, 'FontName', 'Arial');
+    ax = gca;
+    ax.XAxis.Color = [0.2 0.2 0.2];
+    ax.YAxis.Color = [0.2 0.2 0.2];
+    ax.LineWidth = 1.2;
+    
     % 在每个柱子上标注数值
     for i = 1:length(values)
         text(i, values(i), sprintf('%.2f', values(i)), ...
-            'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontSize', 9);
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+            'FontSize', 9, 'FontWeight', 'bold', 'Color', [0 0 0]);
     end
     
-    % 子图2: 轨迹长度对比
+    % 子图2: 轨迹长度对比 - 专业绿色
     subplot(1, 3, 2);
-    length_data = [metrics.trajectory_length.ground_truth, metrics.trajectory_length.estimated];
-    bar_h = bar(length_data, 'FaceColor', [0.4, 0.7, 0.4]);
-    set(gca, 'XTickLabel', {'Ground Truth', 'Estimated'});
-    ylabel('Trajectory Length (m)', 'FontSize', 11);
-    title(sprintf('Trajectory Length (Error: %.2f%%)', metrics.trajectory_length.error_ratio*100), ...
-        'FontSize', 12, 'FontWeight', 'bold');
+    
     grid on;
+    set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+    set(gca, 'Box', 'on', 'LineWidth', 1.2);
+    set(gca, 'Color', 'w');
+    
+    length_data = [metrics.trajectory_length.ground_truth, metrics.trajectory_length.estimated];
+    bar_h = bar(length_data, 'FaceColor', [0.17 0.63 0.17], 'EdgeColor', [0.12 0.45 0.12], 'LineWidth', 1.2);
+    set(gca, 'XTickLabel', {'Ground Truth', 'Estimated'});
+    
+    ylabel('Path Length (m)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    title(sprintf('Path Length (Error: %.2f%%)', metrics.trajectory_length.error_ratio*100), ...
+        'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
+    set(gca, 'FontSize', 10, 'FontName', 'Arial');
+    ax = gca;
+    ax.XAxis.Color = [0.2 0.2 0.2];
+    ax.YAxis.Color = [0.2 0.2 0.2];
+    ax.LineWidth = 1.2;
+    
     % 标注数值
     for i = 1:length(length_data)
         text(i, length_data(i), sprintf('%.2fm', length_data(i)), ...
-            'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontSize', 9);
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+            'FontSize', 9, 'FontWeight', 'bold', 'Color', [0 0 0]);
     end
     
     % 子图3: 性能雷达图（归一化）
@@ -286,17 +447,29 @@ function [metrics] = evaluate_slam_accuracy(estimated_trajectory, ground_truth, 
         scores = [accuracy_score, precision_score, consistency_score, length_score, drift_score];
         score_labels = {'Accuracy', 'Precision', 'Consistency', 'Length', 'Drift Control'};
         
-        bar(scores * 100, 'FaceColor', [0.8, 0.4, 0.4]);
+        grid on;
+        set(gca, 'GridLineStyle', '-', 'GridAlpha', 0.25, 'GridColor', [0.75 0.75 0.75]);
+        set(gca, 'Box', 'on', 'LineWidth', 1.2);
+        set(gca, 'Color', 'w');
+        
+        bar(scores * 100, 'FaceColor', [0.90 0.40 0.00], 'EdgeColor', [0.65 0.30 0.00], 'LineWidth', 1.2);
         set(gca, 'XTickLabel', score_labels);
         xtickangle(45);
-        ylabel('Performance Score (%)', 'FontSize', 11);
-        title('Performance Metrics', 'FontSize', 12, 'FontWeight', 'bold');
+        
+        ylabel('Performance (%)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', [0 0 0]);
+        title('Performance Scores', 'FontSize', 13, 'FontWeight', 'bold', 'Color', [0 0 0]);
         ylim([0, 100]);
-        grid on;
+        set(gca, 'FontSize', 10, 'FontName', 'Arial');
+        ax = gca;
+        ax.XAxis.Color = [0.2 0.2 0.2];
+        ax.YAxis.Color = [0.2 0.2 0.2];
+        ax.LineWidth = 1.2;
+        
         % 标注数值
         for i = 1:length(scores)
             text(i, scores(i)*100, sprintf('%.1f%%', scores(i)*100), ...
-                'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontSize', 8);
+                'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+                'FontSize', 8, 'FontWeight', 'bold', 'Color', [0 0 0]);
         end
     end
     

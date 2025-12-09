@@ -39,8 +39,10 @@ function [vt_id] = visual_template_hart_cornet(rawImg, x, y, z, yaw, height)
     subImg = rawImg(VT_IMG_CROP_Y_RANGE, VT_IMG_CROP_X_RANGE);
     vtResizedImg = imresize(subImg, [VT_IMG_RESIZE_Y_RANGE VT_IMG_RESIZE_X_RANGE]);
     
-    %% HART+CORnet特征提取（使用简化版V2，减少过度平滑）
-    normVtImg = extract_features_hart_cornet_v2(vtResizedImg);
+    %% HART+CORnet特征提取（HART为主，CORnet为辅）
+    % HART: 动态场景跟踪（时序建模 + 注意力机制）
+    % CORnet: 静态特征提取（层次化特征）
+    normVtImg = hart_cornet_feature_extractor(vtResizedImg);
     
     % 保存用于显示
     SUB_VT_IMG = normVtImg;
