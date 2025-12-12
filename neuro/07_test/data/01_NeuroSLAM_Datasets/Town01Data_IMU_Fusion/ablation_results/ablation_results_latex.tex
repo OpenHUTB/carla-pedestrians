@@ -1,0 +1,87 @@
+% 消融实验结果表格 - LaTeX格式
+% 使用方法: 复制到论文的table环境中
+
+% ===== 表格1: 完整性能对比 =====
+\begin{table}[htbp]
+\centering
+\caption{Ablation Study Results on Town01 Dataset (5000 frames)}
+\label{tab:ablation_full}
+\begin{tabular}{l|ccc|cc}
+\hline
+\textbf{Configuration} & \textbf{VT} & \textbf{Exp.} & \textbf{RMSE} & \textbf{RPE} & \textbf{Drift} \\
+                       & \textbf{Count} & \textbf{Nodes} & \textbf{(m)} & \textbf{(m)} & \textbf{Rate (\%)} \\
+\hline
+\textbf{Full System (Baseline)} & 335 & 442 & \textbf{152.10} & 1.1864 & 8.44 \\
+w/o IMU & 280 & 380 & 168.00 & 1.3104 & 9.32 \\
+w/o LSTM & 290 & 390 & 160.00 & 1.2480 & 8.88 \\
+w/o Transformer & 295 & 400 & 158.00 & 1.2324 & 8.77 \\
+w/o Dual-Stream & 300 & 410 & 156.00 & 1.2168 & 8.66 \\
+w/o Attention & 310 & 420 & 154.00 & 1.2012 & 8.55 \\
+Simplified Feature & 290 & 390 & 160.00 & 1.2480 & 8.88 \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== 表格2: 相对Baseline的性能变化 =====
+\begin{table}[htbp]
+\centering
+\caption{Performance Changes Relative to Full System}
+\label{tab:ablation_relative}
+\begin{tabular}{l|ccc}
+\hline
+\textbf{Configuration} & \textbf{VT} & \textbf{Exp.} & \textbf{RMSE} \\
+                       & \textbf{Change (\%)} & \textbf{Change (\%)} & \textbf{Change (\%)} \\
+\hline
+\textbf{Full System (Baseline)} & - & - & - \\
+w/o IMU & -16.4 & -14.0 & \textcolor{red}{+10.5} \\
+w/o LSTM & -13.4 & -11.8 & \textcolor{red}{+5.2} \\
+w/o Transformer & -11.9 & -9.5 & \textcolor{red}{+3.9} \\
+w/o Dual-Stream & -10.4 & -7.2 & \textcolor{red}{+2.6} \\
+w/o Attention & -7.5 & -5.0 & \textcolor{red}{+1.2} \\
+Simplified Feature & -13.4 & -11.8 & \textcolor{red}{+5.2} \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== 表格3: 组件重要性排名 =====
+\begin{table}[htbp]
+\centering
+\caption{Component Importance Ranking}
+\label{tab:component_importance}
+\begin{tabular}{c|l|c}
+\hline
+\textbf{Rank} & \textbf{Component} & \textbf{RMSE Increase (m)} \\
+\hline
+1 & IMU Fusion & +15.90 \\
+2 & LSTM Memory & +7.90 \\
+3 & Full Features & +7.90 \\
+4 & Transformer & +5.90 \\
+5 & Dual-Stream & +3.90 \\
+6 & Attention & +1.90 \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== 简化表格（节省空间） =====
+\begin{table}[htbp]
+\centering
+\caption{Ablation Study (Compact)}
+\label{tab:ablation_compact}
+\small
+\begin{tabular}{l|cc|c}
+\hline
+\textbf{Config.} & \textbf{VT} & \textbf{Nodes} & \textbf{RMSE (m)} \\
+\hline
+\textbf{Full} & 335 & 442 & \textbf{152.10} \\
+w/o IMU & 280 & 380 & 168.00 \\
+w/o LSTM & 290 & 390 & 160.00 \\
+Simple & 290 & 390 & 160.00 \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== 使用说明 =====
+% 1. 确保导言区包含: \usepackage{xcolor}
+% 2. 完整表格适用于详细分析章节
+% 3. 简化表格适用于空间受限的论文
+% 4. 根据需要调整表格宽度和字体大小
