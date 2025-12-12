@@ -466,6 +466,7 @@ def main():
 
     cv2.namedWindow('RGB Camera', cv2.WINDOW_AUTOSIZE)
     stagnant_count = 0
+    first_valid_imu = False  # 标记是否已跳过初始异常IMU帧
 
     try:
         while True:                                                                                                  
@@ -481,6 +482,19 @@ def main():
 
             # 处理对齐的图像和IMU数据
             for img_data, imu_data in time_aligner.get_aligned_pairs():
+                # 检查IMU数据有效性（跳过CARLA传感器初始化时的异常数据）
+                if not first_valid_imu:
+                    accel_mag = math.sqrt(
+                        imu_data.data.accelerometer.x**2 +
+                        imu_data.data.accelerometer.y**2 +
+                        imu_data.data.accelerometer.z**2
+                    )
+                    # 正常重力加速度约9.8 m/s²，异常帧可达几万 m/s²
+                    if accel_mag > 100.0:  # 阈值设为100 m/s² (约10G)
+                        print(f"⚠️  跳过异常IMU帧: 加速度幅值={accel_mag:.1f} m/s² ({accel_mag/9.8:.0f}G)")
+                        continue
+                    first_valid_imu = True
+                
                 ekf.imu_prediction(imu_data.data)
                 imu_pos, _ = ekf.get_current_pose()
 

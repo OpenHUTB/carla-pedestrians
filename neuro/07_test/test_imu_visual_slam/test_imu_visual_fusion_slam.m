@@ -335,10 +335,31 @@ end
 % 如果有Ground Truth，先进行轨迹对齐
 if has_ground_truth
     fprintf('正在对齐轨迹到相同坐标系...\n');
+    
+    % 自动裁剪到最短长度（处理融合数据和GT长度不匹配的情况）
+    fprintf('  融合轨迹: %d 帧\n', size(fusion_data.pos, 1));
+    fprintf('  Ground Truth: %d 帧\n', size(gt_data.pos, 1));
+    fprintf('  视觉里程计: %d 帧\n', size(odo_trajectory, 1));
+    fprintf('  经验地图: %d 帧\n', size(exp_trajectory, 1));
+    
+    min_len = min([size(fusion_data.pos, 1), size(gt_data.pos, 1), ...
+                   size(odo_trajectory, 1), size(exp_trajectory, 1)]);
+    fprintf('  使用最短长度: %d 帧\n', min_len);
+    
+    % 裁剪所有轨迹到相同长度
+    fusion_pos_trim = fusion_data.pos(1:min_len, :);
+    gt_pos_trim = gt_data.pos(1:min_len, :);
+    odo_traj_trim = odo_trajectory(1:min_len, :);
+    exp_traj_trim = exp_trajectory(1:min_len, :);
+    
+    fprintf('  裁剪后 - 融合: %d, GT: %d, 里程计: %d, 经验: %d\n', ...
+            size(fusion_pos_trim, 1), size(gt_pos_trim, 1), ...
+            size(odo_traj_trim, 1), size(exp_traj_trim, 1));
+    
     % 使用增强的simple方法（平移+尺度修正）
-    [fusion_pos_aligned, gt_pos_aligned] = align_trajectories(fusion_data.pos, gt_data.pos, 'simple');
-    [odo_traj_aligned, ~] = align_trajectories(odo_trajectory, gt_data.pos, 'simple');
-    [exp_traj_aligned, ~] = align_trajectories(exp_trajectory, gt_data.pos, 'simple');
+    [fusion_pos_aligned, gt_pos_aligned] = align_trajectories(fusion_pos_trim, gt_pos_trim, 'simple');
+    [odo_traj_aligned, ~] = align_trajectories(odo_traj_trim, gt_pos_trim, 'simple');
+    [exp_traj_aligned, ~] = align_trajectories(exp_traj_trim, gt_pos_trim, 'simple');
     
     % 创建对齐后的数据结构
     fusion_data_aligned = fusion_data;
@@ -364,19 +385,11 @@ if has_ground_truth
     
     % 2. 经验地图 vs Ground Truth (对齐后)
     fprintf('\n--- 经验地图轨迹 vs Ground Truth (对齐后) ---\n');
-    if size(exp_trajectory, 1) == size(gt_data.pos, 1)
-        metrics_exp_gt = evaluate_slam_accuracy(exp_traj_aligned, gt_pos_aligned, result_path, 'experience_map');
-    else
-        fprintf('轨迹长度不匹配\n');
-    end
+    metrics_exp_gt = evaluate_slam_accuracy(exp_traj_aligned, gt_pos_aligned, result_path, 'experience_map');
     
     % 3. 视觉里程计 vs Ground Truth (对齐后)
     fprintf('\n--- 视觉里程计轨迹 vs Ground Truth (对齐后) ---\n');
-    if size(odo_trajectory, 1) == size(gt_data.pos, 1)
-        metrics_odo_gt = evaluate_slam_accuracy(odo_traj_aligned, gt_pos_aligned, result_path, 'visual_odometry');
-    else
-        fprintf('轨迹长度不匹配\n');
-    end
+    metrics_odo_gt = evaluate_slam_accuracy(odo_traj_aligned, gt_pos_aligned, result_path, 'visual_odometry');
 else
     % 没有Ground Truth时，使用经验地图作为参考
     fprintf('\n--- IMU-视觉融合轨迹 vs 经验地图轨迹 ---\n');
