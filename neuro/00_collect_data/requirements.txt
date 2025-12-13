@@ -1,0 +1,25 @@
+# NeuroSLAM Data Collection Requirements
+# Python 3.7+
+
+# CARLA client
+carla==0.9.15
+
+# Numerical computing
+numpy>=1.19.0
+scipy>=1.5.0
+
+# Computer vision
+opencv-python>=4.5.0
+
+# Data processing
+pandas>=1.1.0
+
+# Visualization (optional)
+matplotlib>=3.3.0
+
+# Filtering and estimation
+filterpy>=1.4.5
+
+# Optional: for advanced visualization
+# pillow>=8.0.0
+# seaborn>=0.11.0

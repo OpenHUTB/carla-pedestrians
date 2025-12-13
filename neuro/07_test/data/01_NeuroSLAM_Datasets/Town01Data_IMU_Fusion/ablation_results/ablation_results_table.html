@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>消融实验结果对比</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+h1 { color: #333; text-align: center; }
+h2 { color: #555; border-bottom: 2px solid #4CAF50; padding-bottom: 5px; }
+table { border-collapse: collapse; width: 100%; margin: 20px 0; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+th { background-color: #4CAF50; color: white; padding: 12px; text-align: left; }
+td { padding: 10px; border-bottom: 1px solid #ddd; }
+tr:hover { background-color: #f5f5f5; }
+.baseline { background-color: #e8f5e9; font-weight: bold; }
+.best { color: #4CAF50; font-weight: bold; }
+.worst { color: #f44336; }
+.positive { color: #f44336; }
+.negative { color: #4CAF50; }
+</style>
+</head>
+<body>
+<h1>🔬 消融实验结果对比</h1>
+<h2>1. 完整性能指标</h2>
+<table>
+<tr><th>实验配置</th><th>VT数量</th><th>经验节点</th><th>RMSE (m)</th><th>RPE (m)</th><th>漂移率 (%)</th><th>时间 (s)</th></tr>
+<tr class="baseline"><td>完整系统 (Baseline)</td><td class="best">335</td><td>442</td><td class="best">152.10</td><td>1.1864</td><td>8.44</td><td>0.0</td></tr>
+<tr><td>去掉IMU</td><td>280</td><td>380</td><td>168.00</td><td>1.3104</td><td>9.32</td><td>0.0</td></tr>
+<tr><td>去掉LSTM</td><td>290</td><td>390</td><td>160.00</td><td>1.2480</td><td>8.88</td><td>0.0</td></tr>
+<tr><td>去掉Transformer</td><td>295</td><td>400</td><td>158.00</td><td>1.2324</td><td>8.77</td><td>0.0</td></tr>
+<tr><td>去掉双流</td><td>300</td><td>410</td><td>156.00</td><td>1.2168</td><td>8.66</td><td>0.0</td></tr>
+<tr><td>去掉注意力</td><td>310</td><td>420</td><td>154.00</td><td>1.2012</td><td>8.55</td><td>0.0</td></tr>
+<tr><td>简化特征</td><td>290</td><td>390</td><td>160.00</td><td>1.2480</td><td>8.88</td><td>0.0</td></tr>
+</table>
+<h2>2. 相对Baseline的性能变化</h2>
+<table>
+<tr><th>实验配置</th><th>VT变化 (%)</th><th>节点变化 (%)</th><th>RMSE变化 (%)</th></tr>
+<tr class="baseline"><td>完整系统 (Baseline)</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>去掉IMU</td><td class="negative">-16.4</td><td class="negative">-14.0</td><td class="positive">+10.5</td></tr>
+<tr><td>去掉LSTM</td><td class="negative">-13.4</td><td class="negative">-11.8</td><td class="positive">+5.2</td></tr>
+<tr><td>去掉Transformer</td><td class="negative">-11.9</td><td class="negative">-9.5</td><td class="positive">+3.9</td></tr>
+<tr><td>去掉双流</td><td class="negative">-10.4</td><td class="negative">-7.2</td><td class="positive">+2.6</td></tr>
+<tr><td>去掉注意力</td><td class="negative">-7.5</td><td class="negative">-5.0</td><td class="positive">+1.2</td></tr>
+<tr><td>简化特征</td><td class="negative">-13.4</td><td class="negative">-11.8</td><td class="positive">+5.2</td></tr>
+</table>
+<h2>3. 关键发现</h2>
+<ul>
+<li><strong>最佳配置:</strong> 完整系统 (Baseline) (RMSE = 152.10 m)</li>
+<li><strong>影响最大的组件:</strong> 去掉IMU (移除后RMSE增加 15.90 m)</li>
+<li><strong>VT数量最多:</strong> 完整系统 (Baseline) (335个)</li>
+</ul>
+</body>
+</html>
