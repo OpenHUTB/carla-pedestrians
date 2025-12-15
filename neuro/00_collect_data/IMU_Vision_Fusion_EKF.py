@@ -18,10 +18,13 @@ carla_api_path = os.path.join(current_dir, '../../../../carla-0.9.15/PythonAPI/c
 sys.path.append(carla_api_path)
 from agents.navigation.behavior_agent import BehaviorAgent
 
+# 导入视觉里程计
+from visual_odometry_opencv import VisualOdometry, ScaleEstimator
+
 # -------------------------- 配置参数 --------------------------
-TARGET_MAP = "Town01"
+TARGET_MAP = "Town02"
 MAX_SAVE_IMG = 5000
-OUTPUT_DIR = '../data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/'
+OUTPUT_DIR = '../data/01_NeuroSLAM_Datasets/Town02Data_IMU_Fusion/'
 
 # IMU-视觉融合参数优化
 IMU_SAMPLE_RATE = 60  # Hz
@@ -328,10 +331,14 @@ class EKF_VIO:
             init_pose[3], init_pose[4], init_pose[5]
         ], dtype=np.float64)
         self.dt = dt
-        # 优化协方差矩阵以提高融合精度
-        self.P = np.diag([0.05, 0.05, 0.05, 0.2, 0.2, 0.2, 0.005, 0.005, 0.005])  # 位置、速度、姿态初始协方差
-        self.Q = np.diag([0.005, 0.005, 0.005, 0.05, 0.05, 0.05, 0.0005, 0.0005, 0.0005])  # 过程噪声降低
-        self.R = np.diag([0.02, 0.02, 0.02, 0.002, 0.002, 0.002])  # 视觉观测噪声降低
+        self.init_z = init_pose[2]  # 保存初始Z轴高度（平地车辆固定）
+        
+        # EKF协方差矩阵 - 极度信任视觉，IMU仅用于姿态和短期预测
+        self.P = np.diag([0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.001, 0.001, 0.001])  # 初始不确定性小
+        # 极大过程噪声（完全不信任IMU位置积分，只用IMU姿态）
+        self.Q = np.diag([10.0, 10.0, 10.0, 5.0, 5.0, 5.0, 0.001, 0.001, 0.001])  # 位置噪声极大
+        # 极小视觉观测噪声（几乎完全信任VO）
+        self.R = np.diag([0.01, 0.01, 0.01, 0.001, 0.001, 0.001])  # 极度信任VO
         
         # 统计信息
         self.innovation_history = []
@@ -348,13 +355,17 @@ class EKF_VIO:
 
         R_body2world = R.from_euler('xyz', [roll, pitch, yaw]).as_matrix()
         accel_world = R_body2world @ accel
-        new_vx = self.x[3] + accel_world[0] * self.dt
-        new_vy = self.x[4] + accel_world[1] * self.dt
-        new_vz = self.x[5] + (accel_world[2] - 9.81) * self.dt
+        
+        # 添加速度衰减因子，防止IMU积分漂移
+        velocity_decay = 0.98  # 每帧衰减2%
+        new_vx = velocity_decay * (self.x[3] + accel_world[0] * self.dt)
+        new_vy = velocity_decay * (self.x[4] + accel_world[1] * self.dt)
+        # Z轴：平地行驶不使用加速度计（包含重力，会导致漂移）
+        new_vz = 0.0  # 地面车辆Z轴速度为0
 
         new_x = self.x[0] + new_vx * self.dt
         new_y = self.x[1] + new_vy * self.dt
-        new_z = self.x[2] + new_vz * self.dt
+        new_z = self.x[2]  # Z轴位置保持不变（平地行驶）
 
         self.x = np.array([new_x, new_y, new_z, new_vx, new_vy, new_vz, new_roll, new_pitch, new_yaw])
         self.P += self.Q
@@ -381,6 +392,12 @@ class EKF_VIO:
         I_KH = np.eye(9) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
         self.P = 0.5*(self.P + self.P.T)  # 保持对称性
+        
+        # 平地车辆：强制固定Z轴、roll、pitch
+        self.x[2] = self.init_z  # Z轴固定
+        self.x[5] = 0.0  # Z轴速度为0
+        self.x[6] = 0.0  # roll = 0
+        self.x[7] = 0.0  # pitch = 0
 
     def get_current_pose(self):
         return self.x[:3].copy(), self.x[6:9].copy()
@@ -444,6 +461,19 @@ def main():
                 math.radians(init_pose.rotation.pitch),
                 math.radians(init_pose.rotation.yaw)]
     ekf = EKF_VIO(init_pos+init_att, [0,0,0])
+    
+    # ============ 初始化真正的视觉里程计 ============
+    visual_odom = VisualOdometry()
+    # 使用固定尺度=1.0（VO本身尺度已经接近正确）
+    scale_estimator = ScaleEstimator(alpha=0.95, use_fixed_scale=True, fixed_scale_value=1.0)
+    
+    # 用于累积视觉位姿（相对初始位置）
+    vo_x, vo_y, vo_z = 0.0, 0.0, 0.0
+    vo_roll, vo_pitch, vo_yaw = 0.0, 0.0, 0.0
+    
+    # 保存视觉里程计轨迹
+    vo_log = open(os.path.join(OUTPUT_DIR, 'visual_odometry.txt'), 'w')
+    vo_log.write("timestamp,vo_x,vo_y,vo_z,vo_roll,vo_pitch,vo_yaw,num_matches,scale\n")
 
     # 数据保存参数（每1帧对齐数据保存1帧，确保时间戳同步）
     img_idx = 0
@@ -496,18 +526,70 @@ def main():
                     first_valid_imu = True
                 
                 ekf.imu_prediction(imu_data.data)
-                imu_pos, _ = ekf.get_current_pose()
+                imu_pos, imu_att = ekf.get_current_pose()
 
-                carla_pose = vehicle.get_transform()
-                visual_pose = [
-                    carla_pose.location.x, carla_pose.location.y, carla_pose.location.z,
-                    math.radians(carla_pose.rotation.roll),
-                    math.radians(carla_pose.rotation.pitch),
-                    math.radians(carla_pose.rotation.yaw)
-                ]
+                # ============ 使用真正的视觉里程计，而非Ground Truth ============
+                # 参考代码逻辑：raw_data为RGBA格式，取前3通道作为RGB
+                img = np.reshape(np.copy(img_data.data.raw_data), (480, 640, 4))[:, :, :3]
+                
+                # 运行视觉里程计（返回相对运动）
+                vo_result, num_matches = visual_odom.process_frame(img)
+                
+                if vo_result is not None:
+                    # 获取相对运动 [dx, dy, dz, droll, dpitch, dyaw]
+                    delta_x, delta_y, delta_z, delta_roll, delta_pitch, delta_yaw = vo_result
+                    
+                    # 使用IMU估计的位移来校准VO的尺度（解决单目尺度模糊）
+                    if img_idx > 1:
+                        imu_delta = ekf.get_current_velocity() * ekf.dt
+                        vo_delta = np.array([delta_x, delta_y, delta_z])
+                        scale = scale_estimator.estimate_scale(vo_delta, imu_delta)
+                        visual_odom.scale = scale
+                    else:
+                        scale = 1.0
+                    
+                    # 累积视觉位姿
+                    vo_yaw += delta_yaw
+                    vo_x += delta_x * np.cos(vo_yaw) - delta_y * np.sin(vo_yaw)
+                    vo_y += delta_x * np.sin(vo_yaw) + delta_y * np.cos(vo_yaw)
+                    vo_z += delta_z
+                    vo_roll += delta_roll
+                    vo_pitch += delta_pitch
+                    
+                    # 构建视觉观测位姿（绝对位姿，相对初始位置）
+                    visual_pose = [
+                        init_pos[0] + vo_x,
+                        init_pos[1] + vo_y, 
+                        init_pos[2] + vo_z,
+                        vo_roll,
+                        vo_pitch,
+                        vo_yaw
+                    ]
+                    
+                    # 保存视觉里程计数据
+                    vo_log.write(f"{img_data.timestamp:.6f},"
+                                f"{vo_x:.6f},{vo_y:.6f},{vo_z:.6f},"
+                                f"{vo_roll:.6f},{vo_pitch:.6f},{vo_yaw:.6f},"
+                                f"{num_matches},{scale:.6f}\n")
+                else:
+                    # 首帧或特征不足，使用上一次的位姿
+                    visual_pose = [
+                        init_pos[0] + vo_x,
+                        init_pos[1] + vo_y,
+                        init_pos[2] + vo_z,
+                        vo_roll, vo_pitch, vo_yaw
+                    ]
+                    num_matches = 0
+                    scale = 1.0
 
+                # EKF视觉更新（融合IMU预测和VO观测）
                 ekf.visual_update(visual_pose)
+                
+                # 获取EKF融合后的位姿（真正的IMU-视觉融合）
                 fusion_pos, fusion_att = ekf.get_current_pose()
+                
+                # ============ 保存Ground Truth（仅用于评估，不参与融合） ============
+                carla_pose = vehicle.get_transform()
                 fusion_vel = ekf.get_current_velocity()
                 pos_uncertainty = ekf.get_position_uncertainty()
                 
@@ -518,14 +600,13 @@ def main():
                             f"{carla_pose.rotation.roll:.6f},{carla_pose.rotation.pitch:.6f},{carla_pose.rotation.yaw:.6f},"
                             f"{vehicle_vel.x:.6f},{vehicle_vel.y:.6f},{vehicle_vel.z:.6f}\n")
                 
-                # 每10帧flush一次ground truth数据
+                # 每10帧flush一次ground truth数据和VO数据
                 if img_idx % 10 == 0:
                     gt_log.flush()
-
-                # 参考代码逻辑：raw_data为RGBA格式，取前3通道作为RGB
-                img = np.reshape(np.copy(img_data.data.raw_data), (480, 640, 4))[:, :, :3]  # 仅保留RGB通道
+                    vo_log.flush()
 
                 # 保存图像（保持每1帧对齐数据保存1帧，确保与IMU时间戳同步）
+                # 注意：img已经在VO处理时读取了
                 img_idx += 1
                 save_image_simple(img, OUTPUT_DIR, img_idx)  # 使用同步后的保存函数
                 print(f"保存图像 {img_idx}/{MAX_SAVE_IMG}")
@@ -551,9 +632,10 @@ def main():
                 # 每100帧打印融合质量指标
                 if img_idx % 100 == 0 and img_idx > 0:
                     metrics = ekf.get_fusion_quality_metrics()
-                    print(f"融合质量 - 平均新息: {metrics['avg_innovation']:.4f}, "
-                          f"平均不确定性: {metrics['avg_uncertainty']:.4f}")
-                    print(f"已保存 {img_idx} 条融合位姿数据")
+                    print(f"\n📊 融合质量指标 (第{img_idx}帧):")
+                    print(f"  EKF新息: {metrics['avg_innovation']:.4f}, 不确定性: {metrics['avg_uncertainty']:.4f}")
+                    print(f"  VO特征: {num_matches}匹配点, 尺度: {scale:.4f}")
+                    print(f"  已保存 {img_idx} 条融合位姿数据\n")
 
                 if img_idx >= MAX_SAVE_IMG:
                     print("达到最大保存数量，退出")
@@ -682,6 +764,7 @@ def main():
     finally:
         fusion_log.close()
         gt_log.close()
+        vo_log.close()  # 关闭视觉里程计日志
         camera.stop()
         imu.stop()
         collision_sensor.sensor.stop()
