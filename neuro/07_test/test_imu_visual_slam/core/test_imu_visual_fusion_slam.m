@@ -106,23 +106,23 @@ visual_odo_initial( ...
     'FOV_VERT_DEGREE', 50, ...
     'ODO_STEP', 1);
 
-% 视觉模板初始化（HART+Transformer Plan B最优配置）
+% 视觉模板初始化（最佳配置 v2）
 vt_image_initial('*.png', ...
-    'VT_MATCH_THRESHOLD', 0.06, ...  % Plan B验证的最优阈值
+    'VT_MATCH_THRESHOLD', 0.08, ...  % v2最佳阈值
     'VT_IMG_CROP_Y_RANGE', 1:120, ...
     'VT_IMG_CROP_X_RANGE', 1:160, ...
     'VT_IMG_RESIZE_X_RANGE', 16, ...
     'VT_IMG_RESIZE_Y_RANGE', 12, ...
     'VT_IMG_X_SHIFT', 5, ...
     'VT_IMG_Y_SHIFT', 3, ...
-    'VT_GLOBAL_DECAY', 0.1, ...
-    'VT_ACTIVE_DECAY', 2.0, ...
+    'VT_GLOBAL_DECAY', 0.08, ...
+    'VT_ACTIVE_DECAY', 2.5, ...
     'PATCH_SIZE_Y_K', 5, ...
     'PATCH_SIZE_X_K', 5, ...
     'VT_PANORAMIC', 0, ...
     'VT_STEP', 1);
 
-fprintf('  VT方法: HART+Transformer Plan B最优 (阈值: %.3f，权重0.15，已验证)\n', 0.06);
+fprintf('  VT方法: HART+Transformer (阈值: %.3f，最佳配置)\n', 0.08);
 
 % 偏航-高度头部朝向细胞初始化
 yaw_height_hdc_initial( ...
@@ -142,7 +142,7 @@ yaw_height_hdc_initial( ...
     'HEIGHT_V_SCALE', 1, ...
     'YAW_HEIGHT_HDC_PACKET_SIZE', 5);
 
-% 3D网格细胞初始化（调整尺度以匹配IMU-Fusion）
+% 3D网格细胞初始化（增强VT注入能量）
 gc_initial( ...
     'GC_X_DIM', 36, ...
     'GC_Y_DIM', 36, ...
@@ -160,18 +160,18 @@ gc_initial( ...
     'GC_INHIB_Y_VAR', 2, ...
     'GC_INHIB_Z_VAR', 2, ...
     'GC_GLOBAL_INHIB', 0.0002, ...
-    'GC_VT_INJECT_ENERGY', 0.1, ...
-    'GC_HORI_TRANS_V_SCALE', 0.8, ...  % 从1降到0.8 (1 * 1630/2032 ≈ 0.8)
-    'GC_VERT_TRANS_V_SCALE', 0.8, ...  % 同步调整
+    'GC_VT_INJECT_ENERGY', 0.5, ...  % 进一步增强VT对网格细胞的影响
+    'GC_HORI_TRANS_V_SCALE', 0.8, ...
+    'GC_VERT_TRANS_V_SCALE', 0.8, ...
     'GC_PACKET_SIZE', 4);
 
-% 经验地图初始化（降低阈值以增加经验节点创建）
+% 经验地图初始化（最佳配置 v2）
 exp_initial( ...
-    'DELTA_EXP_GC_HDC_THRESHOLD', 15, ...  % 降低阈值从40到15
-    'EXP_LOOPS', 1, ...
-    'EXP_CORRECTION', 0.5);
+    'DELTA_EXP_GC_HDC_THRESHOLD', 20, ...
+    'EXP_LOOPS', 8, ...
+    'EXP_CORRECTION', 0.4);
 
-fprintf('经验地图阈值: DELTA_EXP_GC_HDC_THRESHOLD = 15 (降低以创建更多经验节点)\n');
+fprintf('经验地图参数: 阈值=20, 迭代=8, 修正力度=0.4 (最佳配置)\n');
 
 %% 4. 读取IMU-视觉融合数据
 fprintf('[4/9] 读取IMU-视觉融合数据 (%s)...\n', dataset_name);
@@ -382,13 +382,13 @@ if has_ground_truth
     % 使用Ground Truth作为参考进行精度评估（使用前面已对齐的轨迹）
     fprintf('\n========== 相对于Ground Truth的精度评估 ==========\n\n');
     
-    % 1. IMU-视觉融合 vs Ground Truth (对齐后)
-    fprintf('\n--- IMU-视觉融合轨迹 vs Ground Truth (对齐后) ---\n');
-    metrics_fusion_gt = evaluate_slam_accuracy(fusion_pos_aligned, gt_pos_aligned, result_path, 'imu_fusion');
+    % 1. 生物启发惯视融合系统 vs Ground Truth (对齐后) - 这是完整系统输出
+    fprintf('\n--- 生物启发惯视融合系统 vs Ground Truth (对齐后) ---\n');
+    metrics_exp_gt = evaluate_slam_accuracy(exp_traj_aligned, gt_pos_aligned, result_path, 'bio_inspired_fusion');
     
-    % 2. 经验地图 vs Ground Truth (对齐后)
-    fprintf('\n--- 经验地图轨迹 vs Ground Truth (对齐后) ---\n');
-    metrics_exp_gt = evaluate_slam_accuracy(exp_traj_aligned, gt_pos_aligned, result_path, 'experience_map');
+    % 2. EKF前端输入 vs Ground Truth (对齐后)
+    fprintf('\n--- EKF前端输入 vs Ground Truth (对齐后) ---\n');
+    metrics_fusion_gt = evaluate_slam_accuracy(fusion_pos_aligned, gt_pos_aligned, result_path, 'ekf_input');
     
     % 3. 视觉里程计 vs Ground Truth (对齐后)
     fprintf('\n--- 视觉里程计轨迹 vs Ground Truth (对齐后) ---\n');
@@ -410,10 +410,11 @@ if ~exist(result_path, 'dir')
     mkdir(result_path);
 end
 
-% 保存轨迹数据
+% 保存轨迹数据（包括对齐后的轨迹用于综合对比）
 if has_ground_truth
     save(fullfile(result_path, 'trajectories.mat'), ...
-        'fusion_data', 'odo_trajectory', 'exp_trajectory', 'imu_data', 'gt_data');
+        'fusion_data', 'odo_trajectory', 'exp_trajectory', 'imu_data', 'gt_data', ...
+        'fusion_pos_aligned', 'odo_traj_aligned', 'exp_traj_aligned', 'gt_pos_aligned');
 else
     save(fullfile(result_path, 'trajectories.mat'), ...
         'fusion_data', 'odo_trajectory', 'exp_trajectory', 'imu_data');
@@ -532,6 +533,16 @@ fclose(fid);
 
 fprintf('性能报告已保存: %s\n', report_file);
 
+%% 10. 生成综合对比报告
+fprintf('[10/10] 生成综合对比报告...\n');
+try
+    generate_comparison_report(result_path, dataset_name);
+    has_comparison_report = true;
+catch ME
+    warning('生成综合对比报告失败: %s', ME.message);
+    has_comparison_report = false;
+end
+
 %% 完成
 fprintf('\n========================================\n');
 fprintf('IMU-Visual Fusion SLAM测试完成!\n');
@@ -541,4 +552,7 @@ fprintf('  1. 对比可视化图: imu_visual_slam_comparison.png\n');
 fprintf('  2. 精度评估图: slam_accuracy_evaluation.png\n');
 fprintf('  3. 轨迹数据: %s/trajectories.mat\n', result_path);
 fprintf('  4. 性能报告: %s/performance_report.txt\n', result_path);
+if has_comparison_report
+    fprintf('  5. 综合对比报告: %s/comprehensive_comparison.png\n', result_path);
+end
 fprintf('========================================\n');
