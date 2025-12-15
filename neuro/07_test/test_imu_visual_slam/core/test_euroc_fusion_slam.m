@@ -150,13 +150,22 @@ end
 
 fprintf('数据路径: %s\n', EUROC_DATA_PATH);
 
-% 读取融合位姿数据
-fusion_file = fullfile(EUROC_DATA_PATH, 'fusion_pose.txt');
-if ~exist(fusion_file, 'file')
-    error('融合数据文件不存在: %s', fusion_file);
+% 读取融合位姿数据（优先使用真正的VO+EKF融合文件）
+fusion_file_vo_ekf = fullfile(EUROC_DATA_PATH, 'fusion_pose_vo_ekf.txt');
+fusion_file_original = fullfile(EUROC_DATA_PATH, 'fusion_pose.txt');
+
+if exist(fusion_file_vo_ekf, 'file')
+    fprintf('使用VO+EKF融合数据（真实融合）...\n');
+    fusion_file = fusion_file_vo_ekf;
+elseif exist(fusion_file_original, 'file')
+    fprintf('使用原始融合数据...\n');
+    fusion_file = fusion_file_original;
+else
+    error('融合数据文件不存在');
 end
-% 跳过第一行标题（从第2行开始读，行索引从1开始，所以是1）
+
 fusion_data_raw = dlmread(fusion_file, ',', 1, 0);
+
 fusion_data.timestamp = fusion_data_raw(:, 1);
 fusion_data.pos = fusion_data_raw(:, 2:4);
 fusion_data.att = fusion_data_raw(:, 5:7);
@@ -359,30 +368,30 @@ fprintf('[8/9] 精度评估...\n');
 if has_ground_truth
     fprintf('\n========== 相对于Ground Truth的精度评估 ==========\n');
     
-    fprintf('\n--- IMU-视觉融合轨迹 vs Ground Truth ---\n');
-    metrics_fusion = evaluate_slam_accuracy(fusion_aligned, gt_aligned, result_path, 'imu_fusion');
+    fprintf('\n--- EKF Fusion (Input) vs Ground Truth ---\n');
+    metrics_fusion = evaluate_slam_accuracy(fusion_aligned, gt_aligned, result_path, 'ekf_input');
     
-    fprintf('\n--- 视觉里程计轨迹 vs Ground Truth ---\n');
+    fprintf('\n--- Visual Odometry vs Ground Truth ---\n');
     metrics_odo = evaluate_slam_accuracy(odo_aligned, gt_aligned, result_path, 'visual_odometry');
     
-    fprintf('\n--- 经验地图轨迹 vs Ground Truth ---\n');
-    metrics_exp = evaluate_slam_accuracy(exp_aligned, gt_aligned, result_path, 'experience_map');
+    fprintf('\n--- Bio-inspired IMU-Visual Fusion (Ours) vs Ground Truth ---\n');
+    metrics_exp = evaluate_slam_accuracy(exp_aligned, gt_aligned, result_path, 'bio_inspired_fusion');
     
     % 打印汇总
     fprintf('\n========== 精度评估汇总 ==========\n');
     traj_length = sum(sqrt(sum(diff(gt_aligned).^2, 2)));
     fprintf('Ground Truth行程: %.2f m\n\n', traj_length);
     
-    fprintf('融合轨迹:\n');
-    fprintf('  RMSE: %.3f m, 平均: %.3f m, 终点: %.3f m\n', ...
+    fprintf('EKF Fusion (Input):\n');
+    fprintf('  RMSE: %.3f m, Mean: %.3f m, End: %.3f m\n', ...
         metrics_fusion.ate.rmse, metrics_fusion.ate.mean, metrics_fusion.final_error);
     
-    fprintf('视觉里程计:\n');
-    fprintf('  RMSE: %.3f m, 平均: %.3f m, 终点: %.3f m\n', ...
+    fprintf('Visual Odometry:\n');
+    fprintf('  RMSE: %.3f m, Mean: %.3f m, End: %.3f m\n', ...
         metrics_odo.ate.rmse, metrics_odo.ate.mean, metrics_odo.final_error);
     
-    fprintf('经验地图:\n');
-    fprintf('  RMSE: %.3f m, 平均: %.3f m, 终点: %.3f m\n', ...
+    fprintf('Bio-inspired Fusion (Ours):\n');
+    fprintf('  RMSE: %.3f m, Mean: %.3f m, End: %.3f m\n', ...
         metrics_exp.ate.rmse, metrics_exp.ate.mean, metrics_exp.final_error);
     
     fprintf('===================================\n\n');

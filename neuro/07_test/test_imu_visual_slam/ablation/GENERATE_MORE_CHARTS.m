@@ -24,8 +24,8 @@ load(results_file);
 
 %% 提取数据
 dataset_names = fieldnames(all_results);
-config_list = {'Complete', 'No_IMU', 'No_Fusion', 'Visual_Template_Only'};
-config_labels = {'完整系统', '去掉IMU', '去掉融合', '仅VT匹配'};
+config_list = {'Complete', 'No_IMU', 'EKF_Baseline'};
+config_labels = {'Bio-inspired IMU-Visual Fusion (Ours)', 'w/o IMU Fusion (Pure VO)', 'EKF Fusion (Baseline Reference)'};
 
 % 构建数据矩阵
 rmse_matrix = [];
@@ -64,9 +64,9 @@ for i = 1:size(rmse_matrix, 1)
 end
 
 h = heatmap(config_labels, dataset_names, normalized_rmse);
-h.Title = '消融实验热图 - RMSE相对退化倍数';
-h.XLabel = '系统配置';
-h.YLabel = '数据集';
+h.Title = 'Ablation Heatmap - RMSE Degradation Ratio';
+h.XLabel = 'Configuration';
+h.YLabel = 'Dataset';
 h.Colormap = hot;
 h.ColorbarVisible = 'on';
 h.CellLabelFormat = '%.1f×';
@@ -106,7 +106,7 @@ for d = 1:length(dataset_names)
     set(gca, 'XTickLabel', config_labels);
     xtickangle(15);
     ylabel('RMSE (m)', 'FontSize', 12, 'FontWeight', 'bold');
-    title(sprintf('%s - 组件去除的影响', dataset_names{d}), ...
+    title(sprintf('%s - Impact of Removing Components', dataset_names{d}), ...
         'FontSize', 14, 'FontWeight', 'bold');
     grid on;
     set(gca, 'GridAlpha', 0.3);
@@ -120,7 +120,7 @@ for d = 1:length(dataset_names)
     end
 end
 
-sgtitle('瀑布图：去除各组件的累积影响', 'FontSize', 16, 'FontWeight', 'bold');
+sgtitle('Waterfall Chart: Cumulative Impact of Removing Components', 'FontSize', 16, 'FontWeight', 'bold');
 saveas(fig2, fullfile(results_dir, 'ablation_waterfall.png'));
 fprintf('  ✓ 保存: ablation_waterfall.png\n');
 
@@ -152,15 +152,15 @@ for d = 1:length(dataset_names)
     end
     
     xlabel('RMSE (m)', 'FontSize', 12, 'FontWeight', 'bold');
-    ylabel('漂移率 (%)', 'FontSize', 12, 'FontWeight', 'bold');
-    title(sprintf('%s - RMSE vs 漂移率', dataset_names{d}), ...
+    ylabel('Drift Rate (%)', 'FontSize', 12, 'FontWeight', 'bold');
+    title(sprintf('%s - RMSE vs Drift Rate', dataset_names{d}), ...
         'FontSize', 14, 'FontWeight', 'bold');
     grid on;
     set(gca, 'GridAlpha', 0.3);
     legend(config_labels, 'Location', 'best', 'FontSize', 10);
 end
 
-sgtitle('气泡图：RMSE vs 漂移率（气泡大小=终点误差）', 'FontSize', 16, 'FontWeight', 'bold');
+sgtitle('Bubble Chart: RMSE vs Drift Rate (Bubble Size = End Error)', 'FontSize', 16, 'FontWeight', 'bold');
 saveas(fig3, fullfile(results_dir, 'ablation_bubble.png'));
 fprintf('  ✓ 保存: ablation_bubble.png\n');
 
@@ -180,11 +180,11 @@ for d = 1:length(dataset_names)
     
     pie(pie_data);
     legend(pie_labels, 'Location', 'best', 'FontSize', 10);
-    title(sprintf('%s - RMSE组成', dataset_names{d}), ...
+    title(sprintf('%s - RMSE Composition', dataset_names{d}), ...
         'FontSize', 14, 'FontWeight', 'bold');
 end
 
-sgtitle('饼图：各配置的RMSE组成分析', 'FontSize', 16, 'FontWeight', 'bold');
+sgtitle('Pie Chart: RMSE Composition Analysis', 'FontSize', 16, 'FontWeight', 'bold');
 saveas(fig4, fullfile(results_dir, 'ablation_pie.png'));
 fprintf('  ✓ 保存: ablation_pie.png\n');
 
@@ -196,10 +196,10 @@ set(fig5, 'Color', [0.95 0.95 0.97]);
 bar3(rmse_matrix');
 set(gca, 'XTickLabel', config_labels);
 set(gca, 'YTickLabel', dataset_names);
-xlabel('系统配置', 'FontSize', 12, 'FontWeight', 'bold');
-ylabel('数据集', 'FontSize', 12, 'FontWeight', 'bold');
+xlabel('Configuration', 'FontSize', 12, 'FontWeight', 'bold');
+ylabel('Dataset', 'FontSize', 12, 'FontWeight', 'bold');
 zlabel('RMSE (m)', 'FontSize', 12, 'FontWeight', 'bold');
-title('3D柱状图：RMSE对比', 'FontSize', 14, 'FontWeight', 'bold');
+title('3D Bar Chart: RMSE Comparison', 'FontSize', 14, 'FontWeight', 'bold');
 colormap('jet');
 colorbar;
 grid on;
@@ -228,7 +228,7 @@ for d = 1:length(dataset_names)
     % 组合三个指标
     combined_scores = [norm_rmse(d,:)', norm_drift(d,:)', norm_final(d,:)'];
     
-    spider_labels = {'RMSE', '漂移率', '终点误差'};
+    spider_labels = {'RMSE', 'Drift Rate', 'End Error'};
     theta = linspace(0, 2*pi, size(combined_scores, 2) + 1);
     
     % 绘制每个配置
@@ -243,7 +243,7 @@ for d = 1:length(dataset_names)
     
     thetaticks(pax, rad2deg(theta(1:end-1)));
     thetaticklabels(pax, spider_labels);
-    title(pax, sprintf('%s - 综合性能雷达图（归一化分数，越高越好）', dataset_names{d}), ...
+    title(pax, sprintf('%s - Comprehensive Radar (Normalized, Higher is Better)', dataset_names{d}), ...
         'FontSize', 14, 'FontWeight', 'bold');
     legend(pax, config_labels, 'Location', 'best', 'FontSize', 11);
     rlim(pax, [0 1]);

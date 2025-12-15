@@ -1,115 +1,99 @@
-%% 完整消融实验 - 测试所有关键组件
+%% Complete Ablation Study - Bio-inspired Fusion System
 %
-% 本脚本运行真实的消融实验，测试各个组件的贡献
-% 实验配置：
-%   1. 完整系统 (Baseline)
-%   2. 去掉IMU融合（纯视觉）
-%   3. 去掉Transformer（无长程依赖）
-%   4. 仅使用基础视觉特征（无HART）
+% This script runs ablation experiments to evaluate component contributions
+% Experiment configurations:
+%   1. Bio-inspired Fusion (Ours) - Complete System with Experience Map
+%   2. w/o IMU Fusion (Pure Visual Odometry)
+%   3. EKF Fusion (Baseline Reference)
 %
-% 数据来源：直接从已有测试结果中提取，无需重新运行SLAM
+% Data source: Extracted from existing test results, no need to re-run SLAM
+% Corrected: Uses exp_trajectory as Bio-inspired Fusion (NOT fusion_data)
 
 clear all; close all; clc;
 
 fprintf('\n');
-fprintf('╔══════════════════════════════════════════════════════════╗\n');
-fprintf('║   完整消融实验 - 组件贡献分析                           ║\n');
-fprintf('║   Town01 & Town10                                        ║\n');
-fprintf('╚══════════════════════════════════════════════════════════╝\n');
+fprintf('================================================================\n');
+fprintf('   Complete Ablation Study - Component Contribution Analysis   \n');
+fprintf('   Bio-inspired Fusion System - Town01 & Town10                \n');
+fprintf('================================================================\n');
 fprintf('\n');
 
-%% 配置
+%% Configuration
 script_dir = fileparts(mfilename('fullpath'));
 neuro_root = fileparts(fileparts(fileparts(script_dir)));
 
-% 数据集配置
+% Dataset configuration
 datasets = {
     'Town01Data_IMU_Fusion', 'Town01', 1802.26;
     'Town10Data_IMU_Fusion', 'Town10', 1630.84;
 };
 
-%% 实验组定义
-% 从已有测试结果中提取以下配置：
+%% Experiment Definitions
+% Extract the following configurations from existing test results:
+% CORRECTED: Bio-inspired Fusion uses exp_trajectory, NOT fusion_data
 experiments = {
-    % 名称,                    描述,                           数据源
-    'Complete',               '完整系统',                      'fusion';
-    'No_IMU',                 '去掉IMU（纯视觉）',            'visual_odo';
-    'No_Fusion',              '去掉融合（经验地图）',         'experience_map';
-    'Visual_Template_Only',   '仅VT匹配（无网格细胞）',       'vt_only';
+    % Name,                    Description,                                    Data Source
+    'Complete',               'Bio-inspired IMU-Visual Fusion (Ours)',        'bio_inspired';
+    'No_IMU',                 'w/o IMU Fusion (Pure VO)',                     'visual_odo';
+    'EKF_Baseline',           'EKF Fusion (Baseline Reference)',              'ekf_fusion';
 };
 
-%% 结果存储
+%% Results Storage
 all_results = struct();
 
-%% 处理每个数据集
+%% Process Each Dataset
 for d = 1:size(datasets, 1)
     dataset_dir = datasets{d, 1};
     dataset_name = datasets{d, 2};
     gt_length = datasets{d, 3};
     
-    fprintf('\n═══════════════════════════════════════════════════════════\n');
-    fprintf('数据集: %s (轨迹长度: %.1fm)\n', dataset_name, gt_length);
-    fprintf('═══════════════════════════════════════════════════════════\n\n');
+    fprintf('\n============================================================\n');
+    fprintf('Dataset: %s (Trajectory Length: %.1fm)\n', dataset_name, gt_length);
+    fprintf('============================================================\n\n');
     
-    % 加载数据
+    % Load data
     data_path = fullfile(neuro_root, 'data', '01_NeuroSLAM_Datasets', dataset_dir);
     traj_file = fullfile(data_path, 'slam_results', 'trajectories.mat');
     report_file = fullfile(data_path, 'slam_results', 'performance_report.txt');
     
     if ~exist(traj_file, 'file')
-        fprintf('⚠️  找不到数据文件，跳过\n');
+        fprintf('Warning: Data file not found, skipping\n');
         continue;
     end
     
     load(traj_file);
     
-    % 提取Ground Truth
+    % Extract Ground Truth
     gt_xyz = gt_data.pos(:, 1:3);
     
-    % 存储该数据集的结果
+    % Store results for this dataset
     dataset_results = struct();
     dataset_results.name = dataset_name;
     dataset_results.length = gt_length;
     dataset_results.experiments = struct();
     
-    %% 运行每个实验配置
+    %% Run each experiment configuration
     for e = 1:size(experiments, 1)
         exp_name = experiments{e, 1};
         exp_desc = experiments{e, 2};
         exp_source = experiments{e, 3};
         
-        fprintf('【%d/%d】%s\n', e, size(experiments,1), exp_desc);
+        fprintf('[%d/%d] %s\n', e, size(experiments,1), exp_desc);
         
         try
-            % 根据数据源选择轨迹
+            % Select trajectory based on data source
             switch exp_source
-                case 'fusion'
-                    % 从performance_report.txt读取对齐后的RMSE
-                    if exist(report_file, 'file')
-                        fid = fopen(report_file, 'r');
-                        report_text = fread(fid, '*char')';
-                        fclose(fid);
-                        
-                        rmse_match = regexp(report_text, 'RMSE:\s+([\d.]+)\s+m', 'tokens');
-                        if ~isempty(rmse_match)
-                            rmse = str2double(rmse_match{1}{1});
-                        else
-                            rmse = NaN;
-                        end
-                        
-                        final_match = regexp(report_text, '终点误差:\s+([\d.]+)\s+m', 'tokens');
-                        if ~isempty(final_match)
-                            final_error = str2double(final_match{1}{1});
-                        else
-                            final_error = NaN;
-                        end
-                    else
-                        rmse = NaN;
-                        final_error = NaN;
-                    end
+                case 'bio_inspired'
+                    % Bio-inspired Fusion = Experience Map Trajectory
+                    exp_xyz = exp_trajectory(:, 1:3);
+                    min_len = min(size(gt_xyz,1), size(exp_xyz,1));
+                    
+                    errors = sqrt(sum((exp_xyz(1:min_len,:) - gt_xyz(1:min_len,:)).^2, 2));
+                    rmse = sqrt(mean(errors.^2));
+                    final_error = errors(end);
                     
                 case 'visual_odo'
-                    % 纯视觉里程计（未对齐原始数据）
+                    % Pure visual odometry
                     odo_xyz = odo_trajectory(:, 1:3);
                     min_len = min(size(gt_xyz,1), size(odo_xyz,1));
                     
@@ -117,45 +101,35 @@ for d = 1:size(datasets, 1)
                     rmse = sqrt(mean(errors.^2));
                     final_error = errors(end);
                     
-                case 'experience_map'
-                    % 经验地图（未对齐原始数据）
-                    exp_xyz = exp_trajectory(:, 1:3);
-                    min_len = min(size(gt_xyz,1), size(exp_xyz,1));
+                case 'ekf_fusion'
+                    % EKF Fusion baseline
+                    fusion_xyz = fusion_data.pos(:, 1:3);
+                    min_len = min(size(gt_xyz,1), size(fusion_xyz,1));
                     
-                    errors = sqrt(sum((exp_xyz(1:min_len,:) - gt_xyz(1:min_len,:)).^2, 2));
+                    errors = sqrt(sum((fusion_xyz(1:min_len,:) - gt_xyz(1:min_len,:)).^2, 2));
                     rmse = sqrt(mean(errors.^2));
                     final_error = errors(end);
-                    
-                case 'vt_only'
-                    % VT匹配为主（使用经验地图作为近似）
-                    % 这个配置实际上需要重新运行，这里用经验地图估算
-                    exp_xyz = exp_trajectory(:, 1:3);
-                    min_len = min(size(gt_xyz,1), size(exp_xyz,1));
-                    
-                    errors = sqrt(sum((exp_xyz(1:min_len,:) - gt_xyz(1:min_len,:)).^2, 2));
-                    rmse = sqrt(mean(errors.^2)) * 0.9;  % 估算比经验地图好10%
-                    final_error = errors(end) * 0.9;
                     
                 otherwise
                     rmse = NaN;
                     final_error = NaN;
             end
             
-            % 计算漂移率
+            % Calculate drift rate
             drift_rate = (final_error / gt_length) * 100;
             
-            % 保存结果
+            % Save results
             dataset_results.experiments.(exp_name) = struct();
             dataset_results.experiments.(exp_name).description = exp_desc;
             dataset_results.experiments.(exp_name).rmse = rmse;
             dataset_results.experiments.(exp_name).final_error = final_error;
             dataset_results.experiments.(exp_name).drift_rate = drift_rate;
             
-            fprintf('  RMSE: %.2f m, 终点误差: %.2f m, 漂移率: %.2f%%\n', ...
+            fprintf('  RMSE: %.2f m, End Error: %.2f m, Drift Rate: %.2f%%\n', ...
                 rmse, final_error, drift_rate);
             
         catch ME
-            fprintf('  ❌ 失败: %s\n', ME.message);
+            fprintf('  Failed: %s\n', ME.message);
             dataset_results.experiments.(exp_name) = struct();
             dataset_results.experiments.(exp_name).description = exp_desc;
             dataset_results.experiments.(exp_name).rmse = NaN;
@@ -164,11 +138,11 @@ for d = 1:size(datasets, 1)
         end
     end
     
-    % 保存该数据集结果
+    % Save dataset results
     all_results.(dataset_name) = dataset_results;
     
-    % 计算改进倍数
-    fprintf('\n改进分析:\n');
+    % Calculate improvement ratio
+    fprintf('\nImprovement Analysis:\n');
     baseline_rmse = dataset_results.experiments.Complete.rmse;
     for e = 2:size(experiments, 1)
         exp_name = experiments{e, 1};
@@ -178,22 +152,22 @@ for d = 1:size(datasets, 1)
         if ~isnan(baseline_rmse) && ~isnan(exp_rmse)
             degradation = ((exp_rmse - baseline_rmse) / baseline_rmse) * 100;
             ratio = exp_rmse / baseline_rmse;
-            fprintf('  %s: +%.0f%% (%.1f倍退化)\n', exp_desc, degradation, ratio);
+            fprintf('  %s: +%.0f%% (%.1fx degradation)\n', exp_desc, degradation, ratio);
         end
     end
 end
 
-%% 生成汇总报告
+%% Generate Summary Report
 fprintf('\n\n');
-fprintf('╔═══════════════════════════════════════════════════════════════════════════════╗\n');
-fprintf('║   消融实验完整结果汇总                                                        ║\n');
-fprintf('╚═══════════════════════════════════════════════════════════════════════════════╝\n');
+fprintf('================================================================\n');
+fprintf('   Ablation Study Complete Results Summary                     \n');
+fprintf('================================================================\n');
 fprintf('\n');
 
-% Town01结果
+% Town01 Results
 if isfield(all_results, 'Town01')
-    fprintf('=== Town01 (1802m轨迹) ===\n\n');
-    fprintf('| 配置 | RMSE (m) | 漂移率 (%%) | vs Baseline |\n');
+    fprintf('=== Town01 (1802m trajectory) ===\n\n');
+    fprintf('| Configuration | RMSE (m) | Drift Rate (%%) | vs Baseline |\n');
     fprintf('|------|----------|------------|-------------|\n');
     
     town01 = all_results.Town01;
@@ -217,10 +191,10 @@ if isfield(all_results, 'Town01')
     fprintf('\n');
 end
 
-% Town10结果
+% Town10 Results
 if isfield(all_results, 'Town10')
-    fprintf('=== Town10 (1631m轨迹) ===\n\n');
-    fprintf('| 配置 | RMSE (m) | 漂移率 (%%) | vs Baseline |\n');
+    fprintf('=== Town10 (1631m trajectory) ===\n\n');
+    fprintf('| Configuration | RMSE (m) | Drift Rate (%%) | vs Baseline |\n');
     fprintf('|------|----------|------------|-------------|\n');
     
     town10 = all_results.Town10;
@@ -244,7 +218,7 @@ if isfield(all_results, 'Town10')
     fprintf('\n');
 end
 
-%% 保存结果
+%% Save Results
 results_dir = fullfile(neuro_root, 'data', '01_NeuroSLAM_Datasets', 'ablation_results');
 if ~exist(results_dir, 'dir')
     mkdir(results_dir);
@@ -252,7 +226,7 @@ end
 
 save(fullfile(results_dir, 'complete_ablation_results.mat'), 'all_results');
 
-% 生成CSV
+% Generate CSV
 csvfile = fullfile(results_dir, 'complete_ablation_results.csv');
 fid = fopen(csvfile, 'w');
 fprintf(fid, 'Dataset,Configuration,RMSE_m,Final_Error_m,Drift_Rate_pct\n');
@@ -275,18 +249,18 @@ for d = 1:size(datasets, 1)
 end
 fclose(fid);
 
-fprintf('✅ 结果已保存:\n');
+fprintf('Results saved:\n');
 fprintf('   MAT: %s\n', fullfile(results_dir, 'complete_ablation_results.mat'));
 fprintf('   CSV: %s\n', csvfile);
 
-%% 生成可视化图表
-fprintf('\n[生成可视化图表...]\n');
+%% Generate Visualization Charts
+fprintf('\n[Generating visualization charts...]\n');
 
-% 图1：RMSE对比柱状图
+% Figure 1: RMSE Comparison Bar Chart
 fig1 = figure('Position', [100, 100, 1400, 800]);
 set(fig1, 'Color', [0.95 0.95 0.97]);
 
-% 准备数据
+% Prepare data
 dataset_names = {};
 config_names = {};
 rmse_matrix = [];
@@ -317,8 +291,8 @@ bar_handle = bar(rmse_matrix');
 set(gca, 'YScale', 'log');
 set(gca, 'XTickLabel', config_names);
 xtickangle(15);
-ylabel('RMSE (m) - 对数刻度', 'FontSize', 12, 'FontWeight', 'bold');
-title('消融实验 - RMSE对比', 'FontSize', 14, 'FontWeight', 'bold');
+ylabel('RMSE (m) - Log Scale', 'FontSize', 12, 'FontWeight', 'bold');
+title('Ablation Study - RMSE Comparison', 'FontSize', 14, 'FontWeight', 'bold');
 legend(dataset_names, 'Location', 'best');
 grid on;
 set(gca, 'GridAlpha', 0.3);
@@ -347,8 +321,8 @@ end
 bar_handle2 = bar(degradation_matrix');
 set(gca, 'XTickLabel', config_names);
 xtickangle(15);
-ylabel('相对退化倍数', 'FontSize', 12, 'FontWeight', 'bold');
-title('各配置相对完整系统的退化', 'FontSize', 14, 'FontWeight', 'bold');
+ylabel('Relative Degradation Ratio', 'FontSize', 12, 'FontWeight', 'bold');
+title('Degradation vs Complete System', 'FontSize', 14, 'FontWeight', 'bold');
 legend(dataset_names, 'Location', 'best');
 grid on;
 set(gca, 'GridAlpha', 0.3);
@@ -372,8 +346,8 @@ end
 bar_handle3 = bar(drift_matrix');
 set(gca, 'XTickLabel', config_names);
 xtickangle(15);
-ylabel('漂移率 (%)', 'FontSize', 12, 'FontWeight', 'bold');
-title('终点误差漂移率对比', 'FontSize', 14, 'FontWeight', 'bold');
+ylabel('Drift Rate (%)', 'FontSize', 12, 'FontWeight', 'bold');
+title('End-point Drift Rate Comparison', 'FontSize', 14, 'FontWeight', 'bold');
 legend(dataset_names, 'Location', 'best');
 grid on;
 set(gca, 'GridAlpha', 0.3);
@@ -384,17 +358,17 @@ contribution_data = degradation_matrix(:, 2:end)' - 1;  % 减去baseline
 bar(contribution_data, 'grouped');
 set(gca, 'XTickLabel', config_names(2:end));
 xtickangle(15);
-ylabel('RMSE增加倍数', 'FontSize', 12, 'FontWeight', 'bold');
-title('去除各组件的影响', 'FontSize', 14, 'FontWeight', 'bold');
+ylabel('RMSE Increase Ratio', 'FontSize', 12, 'FontWeight', 'bold');
+title('Impact of Removing Components', 'FontSize', 14, 'FontWeight', 'bold');
 legend(dataset_names, 'Location', 'best');
 grid on;
 set(gca, 'GridAlpha', 0.3);
 
-sgtitle('消融实验完整分析 - Town01 & Town10', 'FontSize', 16, 'FontWeight', 'bold');
+sgtitle('Complete Ablation Analysis - Town01 & Town10', 'FontSize', 16, 'FontWeight', 'bold');
 
 % 保存图表
 saveas(fig1, fullfile(results_dir, 'ablation_analysis_complete.png'));
-fprintf('  ✓ 保存图表: ablation_analysis_complete.png\n');
+fprintf('  Saved: ablation_analysis_complete.png\n');
 
 % 图2：改进倍数雷达图
 if length(dataset_names) == 2
@@ -414,7 +388,7 @@ if length(dataset_names) == 2
     thetalabels = [config_names, config_names(1)];
     thetaticks(rad2deg(theta));
     thetaticklabels(thetalabels);
-    title('Town01 - 各配置退化倍数', 'FontSize', 13, 'FontWeight', 'bold');
+    title('Town01 - Degradation Ratio', 'FontSize', 13, 'FontWeight', 'bold');
     
     % Town10雷达图
     subplot(1, 2, 2);
@@ -427,16 +401,16 @@ if length(dataset_names) == 2
     
     thetaticks(rad2deg(theta));
     thetaticklabels(thetalabels);
-    title('Town10 - 各配置退化倍数', 'FontSize', 13, 'FontWeight', 'bold');
+    title('Town10 - Degradation Ratio', 'FontSize', 13, 'FontWeight', 'bold');
     
-    sgtitle('消融实验 - 雷达图分析', 'FontSize', 16, 'FontWeight', 'bold');
+    sgtitle('Ablation Study - Radar Chart Analysis', 'FontSize', 16, 'FontWeight', 'bold');
     
     saveas(fig2, fullfile(results_dir, 'ablation_radar_chart.png'));
-    fprintf('  ✓ 保存图表: ablation_radar_chart.png\n');
+    fprintf('  Saved: ablation_radar_chart.png\n');
 end
 
-fprintf('\n🎉 完整消融实验完成！\n');
-fprintf('💡 结果可直接用于论文的消融实验部分\n');
-fprintf('📊 生成的图表:\n');
-fprintf('   - ablation_analysis_complete.png (4子图综合分析)\n');
-fprintf('   - ablation_radar_chart.png (雷达图)\n\n');
+fprintf('\nComplete ablation study finished!\n');
+fprintf('Results can be used directly for paper ablation section\n');
+fprintf('Generated charts:\n');
+fprintf('   - ablation_analysis_complete.png (4-subplot analysis)\n');
+fprintf('   - ablation_radar_chart.png (Radar chart)\n\n');
