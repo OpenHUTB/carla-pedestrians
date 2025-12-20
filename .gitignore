@@ -167,3 +167,20 @@ neuro/00_collect_data/COLLISION_AVOIDANCE_CONFIG.md
 # MATLAB临时文件
 *.asv
 *.fig
+# LaTeX编译产物（无需跟踪，本地可重新生成）
+*.aux
+*.bbl
+*.blg
+*.out
+*.spl
+*.pdf
+# Matlab临时文件
+*.mat
+*.m~
+*.log
+# 文件夹过滤（按需添加）
+neuro/referance/
+neuro/07_test/test_imu_visual_slam/debug/
+neuro/07_test/test_imu_visual_slam/scripts/
+# 其他无用文件
+*.sh

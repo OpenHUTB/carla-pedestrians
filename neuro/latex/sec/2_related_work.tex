@@ -1,6 +1,6 @@
 \section{Related Work}
 
-In this section, we provide a comprehensive review of related research in simultaneous localization and mapping (SLAM), with a focus on three key areas: (1) traditional SLAM algorithms and their evolution, (2) IMU-visual sensor fusion approaches, and (3) brain-inspired SLAM systems. These three research directions represent the foundation upon which our proposed HART+Transformer enhanced NeuroSLAM system is built.
+In this section, we provide a comprehensive review of related research in simultaneous localization and mapping (SLAM), with a focus on three key areas: (1) traditional SLAM algorithms and their evolution, (2) IMU-visual sensor fusion approaches, and (3) brain-inspired SLAM systems. These three research directions represent the foundation upon which our proposed NeuroNav system, a HART+Transformer enhanced NeuroSLAM variant, is built.
 
 \subsection{Traditional SLAM Algorithms}
 
@@ -111,7 +111,6 @@ RatSLAM successfully demonstrated suburb-scale mapping and long-term navigation,
 However, the original RatSLAM operates primarily in 2D environments and uses hand-crafted visual features that limit performance in complex scenarios.
 
 Extensions of RatSLAM include BatSLAM \cite{Steckel2013}, which incorporates sonar sensing for navigation in darkness, and various improvements to the visual processing pipeline \cite{Milford2011a, Milford2011b}.
-Tang et al. \cite{Tang2018} integrated episodic memory mechanisms to enhance context-dependent navigation.
 
 \subsubsection{3D Navigation and Spatial Representation}
 
@@ -121,18 +120,18 @@ Recent neuroscientific discoveries of 3D grid cells and 3D head direction cells 
 3D head direction cells encode the animal's orientation in 3D space through combinations of azimuth and pitch \cite{Finkelstein2015, Page2018, Shinder2019}.
 3D grid cells exhibit periodic firing patterns in volumetric space, potentially providing a universal metric for 3D path integration \cite{Finkelstein2016, Casali2019}.
 
-Mathematical models of these 3D spatial cells have been proposed \cite{Jeffery2013, Jeffery2015, Hayman2015, Laurens2018}, including face-centered cubic (FCC) and hexagonal close-packed (HCP) lattice organizations for 3D grid cells.
+Mathematical models of these 3D spatial cells have been proposed \cite{Jeffery2013, Jeffery2015}, including face-centered cubic (FCC) and hexagonal close-packed (HCP) lattice organizations for 3D grid cells.
 Soman et al. \cite{Soman2018} developed a hierarchical network model of 3D spatial cells, demonstrating the computational principles underlying volumetric navigation.
 
 Silveira et al. \cite{Silveira2013, Silveira2015} extended RatSLAM to underwater 3D environments using a 3D place cell model, though without explicit directional representation.
-Yu et al. \cite{Yu2019} proposed NeuroSLAM for 3D environments by modeling 3D grid cells and multi-layered head direction cells, demonstrating 4-DOF pose estimation.
+Yu et al. proposed NeuroSLAM for 3D environments by modeling 3D grid cells and multi-layered head direction cells, demonstrating 4-DOF pose estimation.
 
 \subsubsection{Deep Learning and Neuromorphic Approaches}
 
 Recent work has explored combining bio-inspired principles with modern deep learning.
 Kreiser et al. \cite{Kreiser2018a, Kreiser2018b} developed spiking neural network (SNN) implementations of spatial cells running on neuromorphic hardware, achieving energy-efficient place recognition.
 
-Attention mechanisms, inspired by selective visual processing in the brain, have shown promise in visual place recognition \cite{Chen2017, Kim2018}.
+Attention mechanisms, inspired by selective visual processing in the brain, have shown promise in visual place recognition \cite{Chen2017}.
 However, these approaches typically focus on individual components (e.g., place recognition) rather than complete SLAM systems.
 
 \subsubsection{Limitations and Opportunities}
@@ -188,20 +187,20 @@ Our system leverages this neural spatial representation through continuous attra
 Despite extensive research in traditional SLAM, visual-inertial fusion, and bio-inspired navigation, several key challenges remain unaddressed:
 
 \begin{enumerate}
-    \item \textbf{Feature representation in bio-inspired SLAM}: Existing brain-inspired systems predominantly use hand-crafted visual features (e.g., intensity scanlines, whole-image matching) that limit performance in complex real-world scenarios. There is a lack of integration between modern deep visual features and bio-inspired spatial representation.
+    \item \textbf{Feature representation in bio-inspired navigation}: Existing brain-inspired systems predominantly use hand-crafted visual features (e.g., intensity scanlines, whole-image matching) that limit performance in complex real-world scenarios. There is a lack of integration between modern deep visual features and bio-inspired spatial representations such as grid-cell and head-direction-cell attractor networks.
     
-    \item \textbf{Attention mechanisms for SLAM}: While biological vision systems employ sophisticated attention mechanisms to focus processing on salient regions, most SLAM systems process all visual information uniformly, leading to computational inefficiency and susceptibility to clutter.
+    \item \textbf{Attention and dual-stream visual processing}: Biological vision employs dorsal/ventral dual streams and sophisticated attention mechanisms to focus on behaviourally relevant information. In contrast, most engineering systems process all pixels uniformly or rely on a single visual pipeline, leading to computational inefficiency and vulnerability to clutter and illumination changes.
     
-    \item \textbf{Long-range dependencies in visual sequences}: Spatial navigation inherently involves temporal dependencies across long sequences of observations. However, existing systems use limited temporal context, failing to leverage long-range correlations that could improve loop closure and mapping accuracy.
+    \item \textbf{Long-range temporal dependencies for inertial-visual fusion}: Spatial navigation inherently involves dependencies across long sequences of multi-modal observations. However, many existing visual-inertial systems exploit only short temporal windows and do not explicitly model long-range correlations that are crucial for drift suppression and robust loop re-localisation.
     
-    \item \textbf{3D bio-inspired SLAM with modern sensors}: While 3D spatial cells have been modeled, practical implementations in real 3D environments with state-of-the-art visual-inertial sensors remain limited.
+    \item \textbf{3D bio-inspired navigation with modern sensors}: While 3D spatial cells have been modeled and implemented in NeuroSLAM-like architectures, practical deployments that tightly fuse these neural representations with modern IMU-visual front-ends in realistic 3D environments are still limited.
     
-    \item \textbf{Real-world validation}: Most bio-inspired SLAM systems are validated in controlled laboratory settings or simulated environments. Comprehensive evaluation on challenging real-world datasets with ground truth is lacking.
+    \item \textbf{End-to-end interpretation of component contributions}: There is a lack of systematic studies that connect cortical-style visual processing, inertial sensing, and hippocampal/entorhinal representations (experience map, grid cells, head-direction cells) within a single, analysable navigation framework.
 \end{enumerate}
 
-This paper addresses these gaps by proposing HART+Transformer enhanced NeuroSLAM, which integrates:
-(1) a biologically-inspired visual attention mechanism (HART) that selectively processes salient visual information,
-(2) Transformer architecture for capturing long-range dependencies in visual sequences,
-(3) tight coupling with IMU measurements for robust 3D navigation, and
-(4) comprehensive evaluation on both simulated and real-world datasets.
-Our approach bridges the gap between bio-inspired navigation principles and modern deep learning, creating a robust and efficient SLAM system for challenging 3D environments.
+This paper addresses these gaps by proposing a \emph{brain-inspired inertial-visual fusion system} built on the NeuroSLAM spatial representation backbone. Concretely, we integrate:
+(1) a biologically-inspired dual-stream visual encoder (dorsal and ventral pathways) with HART-like attention for selectively processing salient motion and appearance cues,
+(2) Transformer and LSTM-based temporal modules for capturing long-range dependencies in visual and inertial sequences,
+(3) fusion of timestamp-aligned IMU measurements and visual odometry to provide vestibular-style self-motion signals to the 3D grid-cell and multilayer head-direction-cell networks, and
+(4) comprehensive evaluation on both simulated CARLA towns and real EuRoC sequences to quantify the benefits of each component via ablation.
+Our approach bridges the gap between bio-inspired navigation principles and modern deep inertial-visual fusion, yielding an interpretable brain-inspired navigation framework for challenging 3D environments.

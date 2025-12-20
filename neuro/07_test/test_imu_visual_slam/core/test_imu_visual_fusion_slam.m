@@ -2,8 +2,8 @@
 %  NeuroSLAM System Copyright (C) 2018-2019
 %  IMU-Visual Integration Test (2024)
 %
-%  本脚本测试IMU-视觉融合的NeuroSLAM系统
-%  对比纯视觉SLAM和IMU-视觉融合SLAM的性能
+%  本脚本测试惯视融合的NeuroSLAM系统
+%  对比纯视觉SLAM和惯视融合SLAM的性能
 
 % 【重要】先检查是否为快速测试模式，避免被clear all清除
 global FAST_TEST_MODE FAST_TEST_FRAMES DATASET_NAME;
@@ -80,7 +80,45 @@ global DEGREE_TO_RADIAN; DEGREE_TO_RADIAN = pi / 180;
 global RADIAN_TO_DEGREE; RADIAN_TO_DEGREE = 180 / pi;
 global YAW_HEIGHT_HDC_Y_TH_SIZE; YAW_HEIGHT_HDC_Y_TH_SIZE = 2*pi/36;  % 每个单元的角度大小
 
-%% 3. 初始化各模块参数
+%% 3. 应用参数覆盖（针对不同场景的优化）
+global VT_MATCH_THRESHOLD_OVERRIDE;
+global DELTA_EXP_GC_HDC_THRESHOLD_OVERRIDE;
+global EXP_LOOPS_OVERRIDE;
+global EXP_CORRECTION_OVERRIDE;
+global IMU_YAW_WEIGHT_OVERRIDE;
+global IMU_TRANS_WEIGHT_OVERRIDE;
+global IMU_HEIGHT_WEIGHT_OVERRIDE;
+global GC_VT_INJECT_ENERGY_OVERRIDE;
+
+% 应用覆盖参数（如果存在）
+VT_MATCH_THRESHOLD = 0.08;  % 默认值
+DELTA_EXP_GC_HDC_THRESHOLD = 20;
+EXP_LOOPS = 8;
+EXP_CORRECTION = 0.4;
+GC_VT_INJECT_ENERGY = 0.5;
+
+if ~isempty(VT_MATCH_THRESHOLD_OVERRIDE)
+    VT_MATCH_THRESHOLD = VT_MATCH_THRESHOLD_OVERRIDE;
+    fprintf('   ✓ VT阈值覆盖: %.3f\n', VT_MATCH_THRESHOLD);
+end
+if ~isempty(DELTA_EXP_GC_HDC_THRESHOLD_OVERRIDE)
+    DELTA_EXP_GC_HDC_THRESHOLD = DELTA_EXP_GC_HDC_THRESHOLD_OVERRIDE;
+    fprintf('   ✓ 经验地图阈值覆盖: %d\n', DELTA_EXP_GC_HDC_THRESHOLD);
+end
+if ~isempty(EXP_LOOPS_OVERRIDE)
+    EXP_LOOPS = EXP_LOOPS_OVERRIDE;
+    fprintf('   ✓ 地图松弛迭代覆盖: %d\n', EXP_LOOPS);
+end
+if ~isempty(EXP_CORRECTION_OVERRIDE)
+    EXP_CORRECTION = EXP_CORRECTION_OVERRIDE;
+    fprintf('   ✓ 修正力度覆盖: %.2f\n', EXP_CORRECTION);
+end
+if ~isempty(GC_VT_INJECT_ENERGY_OVERRIDE)
+    GC_VT_INJECT_ENERGY = GC_VT_INJECT_ENERGY_OVERRIDE;
+    fprintf('   ✓ GC VT注入能量覆盖: %.2f\n', GC_VT_INJECT_ENERGY);
+end
+
+%% 4. 初始化各模块参数
 fprintf('[3/9] 初始化模块参数...\n');
 
 % 视觉里程计初始化（调整尺度参数以匹配IMU-Fusion）
@@ -94,7 +132,7 @@ visual_odo_initial( ...
     'ODO_IMG_TRANS_RESIZE_RANGE', [60, 130], ...
     'ODO_IMG_YAW_ROT_RESIZE_RANGE', [60, 130], ...
     'ODO_IMG_HEIGHT_V_RESIZE_RANGE', [100, 140], ...
-    'ODO_TRANS_V_SCALE', 24, ...  % 从30降到24 (30 * 1630/2032 ≈ 24)
+    'ODO_TRANS_V_SCALE', 24, ...  
     'ODO_YAW_ROT_V_SCALE', 1, ...
     'ODO_HEIGHT_V_SCALE', 20, ...
     'MAX_TRANS_V_THRESHOLD', 0.5, ...
@@ -106,9 +144,9 @@ visual_odo_initial( ...
     'FOV_VERT_DEGREE', 50, ...
     'ODO_STEP', 1);
 
-% 视觉模板初始化（最佳配置 v2）
+% 视觉模板初始化（使用覆盖参数）
 vt_image_initial('*.png', ...
-    'VT_MATCH_THRESHOLD', 0.08, ...  % v2最佳阈值
+    'VT_MATCH_THRESHOLD', VT_MATCH_THRESHOLD, ...
     'VT_IMG_CROP_Y_RANGE', 1:120, ...
     'VT_IMG_CROP_X_RANGE', 1:160, ...
     'VT_IMG_RESIZE_X_RANGE', 16, ...
@@ -122,7 +160,7 @@ vt_image_initial('*.png', ...
     'VT_PANORAMIC', 0, ...
     'VT_STEP', 1);
 
-fprintf('  VT方法: HART+Transformer (阈值: %.3f，最佳配置)\n', 0.08);
+fprintf('  VT方法: HART+Transformer (阈值: %.3f)\n', VT_MATCH_THRESHOLD);
 
 % 偏航-高度头部朝向细胞初始化
 yaw_height_hdc_initial( ...
@@ -160,18 +198,19 @@ gc_initial( ...
     'GC_INHIB_Y_VAR', 2, ...
     'GC_INHIB_Z_VAR', 2, ...
     'GC_GLOBAL_INHIB', 0.0002, ...
-    'GC_VT_INJECT_ENERGY', 0.5, ...  % 进一步增强VT对网格细胞的影响
+    'GC_VT_INJECT_ENERGY', GC_VT_INJECT_ENERGY, ...
     'GC_HORI_TRANS_V_SCALE', 0.8, ...
     'GC_VERT_TRANS_V_SCALE', 0.8, ...
     'GC_PACKET_SIZE', 4);
 
-% 经验地图初始化（最佳配置 v2）
+% 经验地图初始化（使用覆盖参数）
 exp_initial( ...
-    'DELTA_EXP_GC_HDC_THRESHOLD', 20, ...
-    'EXP_LOOPS', 8, ...
-    'EXP_CORRECTION', 0.4);
+    'DELTA_EXP_GC_HDC_THRESHOLD', DELTA_EXP_GC_HDC_THRESHOLD, ...
+    'EXP_LOOPS', EXP_LOOPS, ...
+    'EXP_CORRECTION', EXP_CORRECTION);
 
-fprintf('经验地图参数: 阈值=20, 迭代=8, 修正力度=0.4 (最佳配置)\n');
+fprintf('经验地图参数: 阈值=%d, 迭代=%d, 修正力度=%.2f\n', ...
+    DELTA_EXP_GC_HDC_THRESHOLD, EXP_LOOPS, EXP_CORRECTION);
 
 %% 4. 读取IMU-视觉融合数据
 fprintf('[4/9] 读取IMU-视觉融合数据 (%s)...\n', dataset_name);
@@ -180,7 +219,7 @@ data_path = fullfile(rootDir, 'data/01_NeuroSLAM_Datasets', dataset_name);
 if ~exist(data_path, 'dir')
     error('数据路径不存在: %s\n请先运行Python脚本采集数据', data_path);
 end
-
+data_path
 % 读取IMU数据
 imu_data = read_imu_data(data_path);
 
@@ -232,8 +271,17 @@ if ~isempty(FAST_TEST_MODE) && FAST_TEST_MODE && ~isempty(FAST_TEST_FRAMES)
 else
     num_frames = min(length(img_files), length(fusion_data.timestamp));
 end
-odo_trajectory = zeros(num_frames, 3);
-exp_trajectory = zeros(num_frames, 3);
+
+% 初始化轨迹数组
+pure_visual_traj = zeros(num_frames, 3);  % 纯视觉轨迹
+imu_aided_traj = zeros(num_frames, 3);    % IMU辅助的视觉里程计轨迹
+exp_trajectory = zeros(num_frames, 3);    % 经验地图轨迹（Bio-inspired SLAM输出）
+
+% 纯视觉里程计状态
+pure_visual_x = 0; pure_visual_y = 0; pure_visual_z = 0;
+pure_visual_yaw = 0; pure_visual_height = 0;
+
+% IMU-aided里程计状态
 odo_x = 0; odo_y = 0; odo_z = 0;
 odo_yaw = 0; odo_height = 0;
 
@@ -252,37 +300,40 @@ for frame_idx = 1:num_frames
     img_path = fullfile(data_path, img_files(frame_idx).name);
     rawImg = imread(img_path);
     
-    % 使用IMU辅助的视觉里程计
-    [transV, yawRotV, heightV] = imu_aided_visual_odometry(rawImg, imu_data, frame_idx);
+    % 1. 计算纯视觉里程计（不使用IMU）- 只计算一次
+    [pure_transV, pure_yawRotV, pure_heightV] = visual_odometry(rawImg);
     
-    % 更新里程计位置
+    % 更新纯视觉轨迹
+    pure_visual_yaw = pure_visual_yaw + pure_yawRotV * DEGREE_TO_RADIAN;
+    pure_visual_height = pure_visual_height + pure_heightV;
+    pure_visual_x = pure_visual_x + pure_transV * cos(pure_visual_yaw);
+    pure_visual_y = pure_visual_y + pure_transV * sin(pure_visual_yaw);
+    pure_visual_z = pure_visual_height;
+    
+    pure_visual_traj(frame_idx, :) = [pure_visual_x, pure_visual_y, pure_visual_z];
+    
+    % 2. 计算IMU辅助的视觉里程计（性能优化：传入纯视觉结果，避免重复计算）
+    pure_visual_results = [pure_transV, pure_yawRotV, pure_heightV];
+    [transV, yawRotV, heightV] = imu_aided_visual_odometry(rawImg, imu_data, frame_idx, pure_visual_results);
+    
+    % 更新IMU-aided轨迹
     odo_yaw = odo_yaw + yawRotV * DEGREE_TO_RADIAN;
     odo_height = odo_height + heightV;
     odo_x = odo_x + transV * cos(odo_yaw);
     odo_y = odo_y + transV * sin(odo_yaw);
     odo_z = odo_height;
     
-    odo_trajectory(frame_idx, :) = [odo_x, odo_y, odo_z];
+    imu_aided_traj(frame_idx, :) = [odo_x, odo_y, odo_z];
     
-    % 视觉模板匹配（使用正确的函数）
-    % visual_template需要当前位置和姿态
-    % 使用融合数据的当前帧（如果可用），否则使用里程计估计
-    if frame_idx <= size(fusion_data.pos, 1)
-        curr_x = fusion_data.pos(frame_idx, 1);
-        curr_y = fusion_data.pos(frame_idx, 2);
-        curr_z = fusion_data.pos(frame_idx, 3);
-        curr_yaw = fusion_data.att(frame_idx, 3);  % degrees
-        curr_height = curr_z;
-    else
-        % 如果融合数据不足，使用里程计位置
-        curr_x = odo_x;
-        curr_y = odo_y;
-        curr_z = odo_z;
-        curr_yaw = odo_yaw * 180 / pi;  % 转换为degrees
-        curr_height = odo_z;
-    end
+    % 视觉模板匹配（使用IMU-aided里程计的位置）
+    % visual_template需要当前位置和姿态来存储VT的空间位置
+    curr_x = odo_x;           % 使用IMU-aided里程计位置
+    curr_y = odo_y;
+    curr_z = odo_z;
+    curr_yaw = odo_yaw * 180 / pi;  % 转换为degrees
+    curr_height = odo_z;
     
-    % 使用简化类脑特征提取（论文验证方法）
+    % 使用类脑特征提取
     vtId = visual_template_neuro_matlab_only(rawImg, curr_x, curr_y, curr_z, curr_yaw, curr_height);
     % 计算VT识别率
     if vtId > 0 && vtId == PREV_VT_ID
@@ -291,7 +342,7 @@ for frame_idx = 1:num_frames
         vtRecog = 0;
     end
     
-    % 更新HDC（修正参数顺序：vt_id, yawRotV, heightV）
+    % 更新HDC
     yaw_height_hdc_iteration(vtId, yawRotV * DEGREE_TO_RADIAN, heightV);
     [curYawTheta, curHeightValue] = get_current_yaw_height_value();
     
@@ -342,26 +393,26 @@ if has_ground_truth
     % 自动裁剪到最短长度（处理融合数据和GT长度不匹配的情况）
     fprintf('  融合轨迹: %d 帧\n', size(fusion_data.pos, 1));
     fprintf('  Ground Truth: %d 帧\n', size(gt_data.pos, 1));
-    fprintf('  视觉里程计: %d 帧\n', size(odo_trajectory, 1));
+    fprintf('  纯视觉轨迹: %d 帧\n', size(pure_visual_traj, 1));
     fprintf('  经验地图: %d 帧\n', size(exp_trajectory, 1));
     
     min_len = min([size(fusion_data.pos, 1), size(gt_data.pos, 1), ...
-                   size(odo_trajectory, 1), size(exp_trajectory, 1)]);
+                   size(pure_visual_traj, 1), size(exp_trajectory, 1)]);
     fprintf('  使用最短长度: %d 帧\n', min_len);
     
     % 裁剪所有轨迹到相同长度
     fusion_pos_trim = fusion_data.pos(1:min_len, :);
     gt_pos_trim = gt_data.pos(1:min_len, :);
-    odo_traj_trim = odo_trajectory(1:min_len, :);
+    pure_visual_trim = pure_visual_traj(1:min_len, :);
     exp_traj_trim = exp_trajectory(1:min_len, :);
     
-    fprintf('  裁剪后 - 融合: %d, GT: %d, 里程计: %d, 经验: %d\n', ...
+    fprintf('  裁剪后 - 融合: %d, GT: %d, 纯视觉: %d, 经验: %d\n', ...
             size(fusion_pos_trim, 1), size(gt_pos_trim, 1), ...
-            size(odo_traj_trim, 1), size(exp_traj_trim, 1));
+            size(pure_visual_trim, 1), size(exp_traj_trim, 1));
     
     % 使用增强的simple方法（平移+尺度修正）
     [fusion_pos_aligned, gt_pos_aligned] = align_trajectories(fusion_pos_trim, gt_pos_trim, 'simple');
-    [odo_traj_aligned, ~] = align_trajectories(odo_traj_trim, gt_pos_trim, 'simple');
+    [pure_visual_aligned, ~] = align_trajectories(pure_visual_trim, gt_pos_trim, 'simple');  % 纯视觉
     [exp_traj_aligned, ~] = align_trajectories(exp_traj_trim, gt_pos_trim, 'simple');
     
     % 创建对齐后的数据结构
@@ -370,9 +421,10 @@ if has_ground_truth
     gt_data_aligned = gt_data;
     gt_data_aligned.pos = gt_pos_aligned;
     
-    plot_imu_visual_comparison_with_gt(fusion_data_aligned, odo_traj_aligned, exp_traj_aligned, gt_data_aligned, result_path);
+    % 绘制对比图：Ground Truth vs Bio-inspired SLAM vs EKF Fusion vs Pure Visual
+    plot_imu_visual_comparison_with_gt(fusion_data_aligned, pure_visual_aligned, exp_traj_aligned, gt_data_aligned, result_path);
 else
-    plot_imu_visual_comparison(fusion_data, odo_trajectory, exp_trajectory, [], result_path);
+    plot_imu_visual_comparison(fusion_data, pure_visual_traj, exp_trajectory, [], result_path);
 end
 
 %% 7. 精度评估
@@ -390,9 +442,9 @@ if has_ground_truth
     fprintf('\n--- EKF前端输入 vs Ground Truth (对齐后) ---\n');
     metrics_fusion_gt = evaluate_slam_accuracy(fusion_pos_aligned, gt_pos_aligned, result_path, 'ekf_input');
     
-    % 3. 视觉里程计 vs Ground Truth (对齐后)
-    fprintf('\n--- 视觉里程计轨迹 vs Ground Truth (对齐后) ---\n');
-    metrics_odo_gt = evaluate_slam_accuracy(odo_traj_aligned, gt_pos_aligned, result_path, 'visual_odometry');
+    % 3. 纯视觉里程计 vs Ground Truth (对齐后)
+    fprintf('\n--- 纯视觉里程计轨迹 vs Ground Truth (对齐后) ---\n');
+    metrics_pure_visual_gt = evaluate_slam_accuracy(pure_visual_aligned, gt_pos_aligned, result_path, 'pure_visual_odometry');
 else
     % 没有Ground Truth时，使用经验地图作为参考
     fprintf('\n--- IMU-视觉融合轨迹 vs 经验地图轨迹 ---\n');
@@ -413,15 +465,18 @@ end
 % 保存轨迹数据（包括对齐后的轨迹用于综合对比）
 if has_ground_truth
     save(fullfile(result_path, 'trajectories.mat'), ...
-        'fusion_data', 'odo_trajectory', 'exp_trajectory', 'imu_data', 'gt_data', ...
-        'fusion_pos_aligned', 'odo_traj_aligned', 'exp_traj_aligned', 'gt_pos_aligned');
+        'fusion_data', 'pure_visual_traj', 'imu_aided_traj', 'exp_trajectory', 'imu_data', 'gt_data', ...
+        'fusion_pos_aligned', 'pure_visual_aligned', 'exp_traj_aligned', 'gt_pos_aligned');
 else
     save(fullfile(result_path, 'trajectories.mat'), ...
-        'fusion_data', 'odo_trajectory', 'exp_trajectory', 'imu_data');
+        'fusion_data', 'pure_visual_traj', 'imu_aided_traj', 'exp_trajectory', 'imu_data');
 end
 
-% 保存里程计轨迹
-dlmwrite(fullfile(result_path, 'odo_trajectory.txt'), odo_trajectory, 'precision', 6);
+% 保存纯视觉轨迹
+dlmwrite(fullfile(result_path, 'pure_visual_trajectory.txt'), pure_visual_traj, 'precision', 6);
+
+% 保存IMU-aided轨迹
+dlmwrite(fullfile(result_path, 'imu_aided_trajectory.txt'), imu_aided_traj, 'precision', 6);
 
 % 保存经验地图轨迹
 dlmwrite(fullfile(result_path, 'exp_trajectory.txt'), exp_trajectory, 'precision', 6);
@@ -450,25 +505,32 @@ fprintf(fid, '\n');
 
 fprintf(fid, '轨迹长度:\n');
 fusion_length = sum(sqrt(sum(diff(fusion_data.pos).^2, 2)));
-odo_length = sum(sqrt(sum(diff(odo_trajectory).^2, 2)));
+pure_visual_length = sum(sqrt(sum(diff(pure_visual_traj).^2, 2)));
+imu_aided_length = sum(sqrt(sum(diff(imu_aided_traj).^2, 2)));
 exp_length = sum(sqrt(sum(diff(exp_trajectory).^2, 2)));
 if has_ground_truth
     gt_length = sum(sqrt(sum(diff(gt_data.pos).^2, 2)));
     fprintf(fid, '  Ground Truth: %.2f m\n', gt_length);
 end
-fprintf(fid, '  IMU-视觉融合: %.2f m', fusion_length);
+fprintf(fid, '  EKF前端输入: %.2f m', fusion_length);
 if has_ground_truth
     fprintf(fid, ' (误差: %.2f m, %.2f%%)\n', abs(fusion_length - gt_length), abs(fusion_length - gt_length)/gt_length*100);
 else
     fprintf(fid, '\n');
 end
-fprintf(fid, '  视觉里程计: %.2f m', odo_length);
+fprintf(fid, '  纯视觉里程计: %.2f m', pure_visual_length);
 if has_ground_truth
-    fprintf(fid, ' (误差: %.2f m, %.2f%%)\n', abs(odo_length - gt_length), abs(odo_length - gt_length)/gt_length*100);
+    fprintf(fid, ' (误差: %.2f m, %.2f%%)\n', abs(pure_visual_length - gt_length), abs(pure_visual_length - gt_length)/gt_length*100);
 else
     fprintf(fid, '\n');
 end
-fprintf(fid, '  经验地图: %.2f m', exp_length);
+fprintf(fid, '  IMU辅助里程计: %.2f m', imu_aided_length);
+if has_ground_truth
+    fprintf(fid, ' (误差: %.2f m, %.2f%%)\n', abs(imu_aided_length - gt_length), abs(imu_aided_length - gt_length)/gt_length*100);
+else
+    fprintf(fid, '\n');
+end
+fprintf(fid, '  生物启发融合系统(经验地图): %.2f m', exp_length);
 if has_ground_truth && exp_length > 0
     fprintf(fid, ' (误差: %.2f m, %.2f%%)\n', abs(exp_length - gt_length), abs(exp_length - gt_length)/gt_length*100);
 else
@@ -503,14 +565,14 @@ if has_ground_truth
     fprintf(fid, '  终点误差: %.2f m\n', norm(fusion_pos_aligned(end,:) - gt_pos_aligned(end,:)));
     fprintf(fid, '\n');
     
-    % Visual Odometry
-    if size(odo_trajectory, 1) == size(gt_data.pos, 1)
-        odo_error = sqrt(sum((odo_traj_aligned - gt_pos_aligned).^2, 2));
-        fprintf(fid, 'Visual Odometry:\n');
-        fprintf(fid, '  平均位置误差: %.2f m\n', mean(odo_error));
-        fprintf(fid, '  RMSE: %.2f m\n', sqrt(mean(odo_error.^2)));
-        fprintf(fid, '  最大误差: %.2f m\n', max(odo_error));
-        fprintf(fid, '  终点误差: %.2f m\n', norm(odo_traj_aligned(end,:) - gt_pos_aligned(end,:)));
+    % Pure Visual Odometry
+    if size(pure_visual_traj, 1) >= min_len
+        pure_visual_error = sqrt(sum((pure_visual_aligned - gt_pos_aligned).^2, 2));
+        fprintf(fid, 'Pure Visual Odometry:\n');
+        fprintf(fid, '  平均位置误差: %.2f m\n', mean(pure_visual_error));
+        fprintf(fid, '  RMSE: %.2f m\n', sqrt(mean(pure_visual_error.^2)));
+        fprintf(fid, '  最大误差: %.2f m\n', max(pure_visual_error));
+        fprintf(fid, '  终点误差: %.2f m\n', norm(pure_visual_aligned(end,:) - gt_pos_aligned(end,:)));
         fprintf(fid, '\n');
     end
     
