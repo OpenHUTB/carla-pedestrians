@@ -1,0 +1,164 @@
+# ==========================================
+# NeuroSLAM Project .gitignore
+# ==========================================
+
+# ============ Debug和临时文件 ============
+*DIAGNOSE*.m
+*CHECK*.m
+*FIX*.m
+*QUICK*.m
+*debug*.m
+*trace*.m
+*test_*.m
+*quick_*.m
+*TEST*.m
+*TRACE*.m
+*FORCE*.m
+*COMPARE*.m
+*USE_*.m
+*CONTINUE*.m
+*PLOT_*.m
+*SIMPLE*.m
+*VISUALIZE*.m
+*RUN_*.m
+*PREPARE*.m
+*SUMMARIZE*.m
+*REGENERATE*.m
+
+# ============ Markdown文档 (保留核心README) ============
+*.md
+!README.md
+!START_HERE.md
+!**/README.md
+!LICENSE.md
+
+# ============ 临时脚本和批处理 ============
+*.bat
+*.txt
+!requirements.txt
+!**/README.txt
+
+# 中文临时文件
+*快速*.txt
+*一键*.txt
+*修复*.txt
+*诊断*.txt
+*说明*.md
+*报告*.md
+*指南*.md
+*总结*.md
+*完成*.md
+*优化*.md
+*问题*.md
+*方案*.md
+*分析*.md
+*清单*.md
+*参考*.md
+*开始*.txt
+*运行*.txt
+*测试*.txt
+*生成*.txt
+*操作*.txt
+*步骤*.txt
+*提示词*.md
+*绘图*.md
+
+# ============ LaTeX编译产物 ============
+*.aux
+*.log
+*.bbl
+*.blg
+*.spl
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.nav
+*.snm
+*.vrb
+*.dvi
+*.ps
+
+# ============ 图片和媒体文件 ============
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.eps
+*.pptx
+*.ppt
+*.svg
+# 保留论文PDF
+!neuro/kbs/kbs_1/NeuroSLAM_KBS.pdf
+
+# ============ 压缩包 ============
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+
+# ============ 数据文件 (太大) ============
+neuro/data/
+**/slam_results/
+**/comparison_results/
+**/ablation_results/
+**/grid_search_results/
+*.mat
+*.csv
+# 保留小的示例数据
+!**/example_data/
+
+# ============ Python缓存 ============
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+
+# ============ MATLAB缓存 ============
+*.asv
+*.m~
+slprj/
+*.autosave
+
+# ============ IDE和编辑器 ============
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============ 系统文件 ============
+*.prj
+Bin.prj
+
+# ============ 个人文件夹 ============
+机器人2301宁彩霞11/
+
+# ============ 特定目录排除 ============
+neuro/08_draw_fig_for_paper/*.png
+neuro/kbs/kbs_1/fig/
+neuro/kbs/kbs/
+neuro/kbsnew/
+neuro/latex/
+neuro/referance/
+neuro/paper_draft/
+resources/
+
+# ============ 保留的核心文件 (明确包含) ============
+# 这些文件即使匹配上面的规则也要保留
+!neuro/START_HERE.md
+!neuro/07_test/07_test/test_imu_visual_slam/core/README_test_imu_visual_fusion_slam2.md
+!neuro/07_test/07_test/test_imu_visual_slam/parameter_search/参数网格搜索指南.md
