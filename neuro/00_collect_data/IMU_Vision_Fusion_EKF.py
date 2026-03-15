@@ -22,9 +22,9 @@ from agents.navigation.behavior_agent import BehaviorAgent
 from visual_odometry_opencv import VisualOdometry, ScaleEstimator
 
 # -------------------------- 配置参数 --------------------------
-TARGET_MAP = "Town02"
+TARGET_MAP = "Town01"
 MAX_SAVE_IMG = 5000
-OUTPUT_DIR = '../data/01_NeuroSLAM_Datasets/Town02Data_IMU_Fusion/'
+OUTPUT_DIR = os.path.join(current_dir, '..', 'data', 'Town01Data_IMU_Fusion')
 
 # IMU-视觉融合参数优化
 IMU_SAMPLE_RATE = 60  # Hz
@@ -232,7 +232,8 @@ def init_carla_environment():
     
     try:
         if os.path.exists(OUTPUT_DIR):
-            shutil.rmtree(OUTPUT_DIR)
+            backup_dir = OUTPUT_DIR + '_backup_' + time.strftime('%Y%m%d_%H%M%S')
+            shutil.move(OUTPUT_DIR, backup_dir)
         os.makedirs(OUTPUT_DIR, exist_ok=True)
     except PermissionError:
         raise PermissionError(f"无权限操作目录: {OUTPUT_DIR}")
@@ -465,7 +466,7 @@ def main():
     # ============ 初始化真正的视觉里程计 ============
     visual_odom = VisualOdometry()
     # 使用固定尺度=1.0（VO本身尺度已经接近正确）
-    scale_estimator = ScaleEstimator(alpha=0.95, use_fixed_scale=True, fixed_scale_value=1.0)
+    scale_estimator = ScaleEstimator(alpha=0.95, use_fixed_scale=False, fixed_scale_value=1.0)
     
     # 用于累积视觉位姿（相对初始位置）
     vo_x, vo_y, vo_z = 0.0, 0.0, 0.0
@@ -538,21 +539,35 @@ def main():
                 if vo_result is not None:
                     # 获取相对运动 [dx, dy, dz, droll, dpitch, dyaw]
                     delta_x, delta_y, delta_z, delta_roll, delta_pitch, delta_yaw = vo_result
+                    cam_right = float(delta_x)
+                    cam_forward = float(delta_z)
+                    delta_roll = 0.0
+                    delta_pitch = 0.0
                     
                     # 使用IMU估计的位移来校准VO的尺度（解决单目尺度模糊）
                     if img_idx > 1:
+                        prev_scale = visual_odom.scale
                         imu_delta = ekf.get_current_velocity() * ekf.dt
-                        vo_delta = np.array([delta_x, delta_y, delta_z])
+                        vo_delta = np.array([cam_forward, cam_right, 0.0])
                         scale = scale_estimator.estimate_scale(vo_delta, imu_delta)
+                        if abs(prev_scale) < 1e-9:
+                            prev_scale = 1.0
+                        cam_forward = (cam_forward / prev_scale) * scale
+                        cam_right = (cam_right / prev_scale) * scale
                         visual_odom.scale = scale
                     else:
                         scale = 1.0
+                        prev_scale = visual_odom.scale
+                        if abs(prev_scale) < 1e-9:
+                            prev_scale = 1.0
+                        cam_forward = (cam_forward / prev_scale) * scale
+                        cam_right = (cam_right / prev_scale) * scale
                     
                     # 累积视觉位姿
                     vo_yaw += delta_yaw
-                    vo_x += delta_x * np.cos(vo_yaw) - delta_y * np.sin(vo_yaw)
-                    vo_y += delta_x * np.sin(vo_yaw) + delta_y * np.cos(vo_yaw)
-                    vo_z += delta_z
+                    vo_x += cam_forward * np.cos(vo_yaw) - cam_right * np.sin(vo_yaw)
+                    vo_y += cam_forward * np.sin(vo_yaw) + cam_right * np.cos(vo_yaw)
+                    vo_z = 0.0
                     vo_roll += delta_roll
                     vo_pitch += delta_pitch
                     
@@ -568,7 +583,7 @@ def main():
                     
                     # 保存视觉里程计数据
                     vo_log.write(f"{img_data.timestamp:.6f},"
-                                f"{vo_x:.6f},{vo_y:.6f},{vo_z:.6f},"
+                                f"{visual_pose[0]:.6f},{visual_pose[1]:.6f},{visual_pose[2]:.6f},"
                                 f"{vo_roll:.6f},{vo_pitch:.6f},{vo_yaw:.6f},"
                                 f"{num_matches},{scale:.6f}\n")
                 else:

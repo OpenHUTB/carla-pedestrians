@@ -80,6 +80,24 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     global ACCUM_DELTA_Z;  
     global ACCUM_DELTA_YAW;   % accum_delta_facing
 %     global ACCUM_DELTA_HEIGHT; 
+
+    global EXP_LOOP_CLOSURE_LINKS;
+    global EXP_CONSTRAINT_ERR_MAX;
+    global EXP_MATCH_RATIO_THRESHOLD;
+    global EXP_MAX_LOOP_CE;
+
+    if isempty(EXP_LOOP_CLOSURE_LINKS)
+        EXP_LOOP_CLOSURE_LINKS = 0;
+    end
+    if isempty(EXP_CONSTRAINT_ERR_MAX)
+        EXP_CONSTRAINT_ERR_MAX = 0;
+    end
+    if isempty(EXP_MATCH_RATIO_THRESHOLD)
+        EXP_MATCH_RATIO_THRESHOLD = 0.7;
+    end
+    if isempty(EXP_MAX_LOOP_CE)
+        EXP_MAX_LOOP_CE = 20;
+    end
     
     ACCUM_DELTA_YAW = clip_radian_180(ACCUM_DELTA_YAW + yawRotV);
 %     ACCUM_DELTA_HEIGHT = mod(ACCUM_DELTA_HEIGHT + heightV, YAW_HEIGHT_HDC_H_DIM);
@@ -112,9 +130,10 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
         delta_em = max(delta_em);  % 取最大值作为判断依据
     end
     
-    % if the visual template is new or the 3d grid cells (x,y,z) and head direction cells (yaw, height)
-    % has changed enough create a new experience
-    if VT(vt_id).numExp == 0 || delta_em > DELTA_EXP_GC_HDC_THRESHOLD
+    % If the visual template is new, create a new experience.
+    % Otherwise, prefer matching an existing experience for this VT before creating a new one
+    % (important when delta_em is large due to drift but VT repeats).
+    if VT(vt_id).numExp == 0
 
         NUM_EXPS = NUM_EXPS + 1;
         create_new_exp(CUR_EXP_ID, NUM_EXPS, vt_id, xGc, yGc, zGc, curYawHdc, curHeight);
@@ -138,19 +157,21 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
         matched_exp_id = 0;
         matched_exp_count = 0;
 
+        delta_em = zeros(1, VT(vt_id).numExp);
+
         for search_id = 1:VT(vt_id).numExp
              
             minDeltaYaw = get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).yaw_hdc, curYawHdc, YAW_HEIGHT_HDC_Y_DIM);
 %             minDeltaYawReversed = get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).yaw_hdc, (YAW_HEIGHT_HDC_Y_DIM /2) - curYawHdc, YAW_HEIGHT_HDC_Y_DIM);
 %             minDeltaYaw = min(minDeltaYaw, minDeltaYawReversed);
     
-            minDeltaHeight = get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).height_hdc, curHeight, YAW_HEIGHT_HDC_Y_DIM);
+            minDeltaHeight = get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).height_hdc, curHeight, YAW_HEIGHT_HDC_H_DIM);
 %             minDeltaHeightReversed = get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).height_hdc, (YAW_HEIGHT_HDC_Y_DIM /2) - curHeight, YAW_HEIGHT_HDC_H_DIM);
 %             minDeltaHeight = min(minDeltaHeight, minDeltaHeightReversed);
             
             delta_em(search_id) = sqrt(get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).x_gc, xGc, GC_X_DIM)^2 ...
             + get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).y_gc, yGc, GC_Y_DIM)^2 ...
-            + get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).z_gc, yGc, GC_Z_DIM)^2 ...
+            + get_min_delta(EXPERIENCES(VT(vt_id).EXPERIENCES(search_id).id).z_gc, zGc, GC_Z_DIM)^2 ...
             + minDeltaYaw^2 + minDeltaHeight^2) ;
             
             
@@ -163,16 +184,30 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
             % this means we aren't sure about which experience is a match due to hash table collision
             % instead of a false posivitive which may create blunder links in
             % the experience map keep the previous experience
+            [vals, ids] = sort(delta_em);
+            if numel(vals) >= 2
+                ratio = vals(1) / (vals(2) + eps);
+            else
+                ratio = 0;
+            end
 
-        else
-            [min_delta, min_delta_id] = min(delta_em);
+            if vals(1) < DELTA_EXP_GC_HDC_THRESHOLD && ratio < EXP_MATCH_RATIO_THRESHOLD
+                matched_exp_id = VT(vt_id).EXPERIENCES(ids(1)).id;
+            end
 
-            MIN_DELTA_EM = [MIN_DELTA_EM; min_delta];
-            if min_delta < DELTA_EXP_GC_HDC_THRESHOLD
+            if matched_exp_id ~= 0
+                heading_yaw_exp_rad_tmp = get_signed_delta_radian(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad, atan2(ACCUM_DELTA_Y, ACCUM_DELTA_X));
+                d_xy_tmp = sqrt(ACCUM_DELTA_X^2 + ACCUM_DELTA_Y^2);
+                lx_tmp = EXPERIENCES(CUR_EXP_ID).x_exp + d_xy_tmp * cos(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad + heading_yaw_exp_rad_tmp);
+                ly_tmp = EXPERIENCES(CUR_EXP_ID).y_exp + d_xy_tmp * sin(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad + heading_yaw_exp_rad_tmp);
+                lz_tmp = EXPERIENCES(CUR_EXP_ID).z_exp + ACCUM_DELTA_Z;
+                ce_tmp = sqrt((EXPERIENCES(matched_exp_id).x_exp - lx_tmp)^2 + (EXPERIENCES(matched_exp_id).y_exp - ly_tmp)^2 + (EXPERIENCES(matched_exp_id).z_exp - lz_tmp)^2);
+                if ~isfinite(ce_tmp) || ce_tmp > EXP_MAX_LOOP_CE
+                    matched_exp_id = 0;
+                end
+            end
 
-                matched_exp_id = VT(vt_id).EXPERIENCES(min_delta_id).id;
-
-                % see if the previous experience already has a link to the current experience
+            if matched_exp_id ~= 0
                 link_exists = 0;
                 for link_id = 1 : EXPERIENCES(CUR_EXP_ID).numlinks
                     if EXPERIENCES(CUR_EXP_ID).links(link_id).exp_id == matched_exp_id
@@ -181,22 +216,101 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                     end
                 end
 
-                % if we didn't find a link then create the link between current
-                % experience and the experience for the current visual template
                 if link_exists == 0
                     EXPERIENCES(CUR_EXP_ID).numlinks = EXPERIENCES(CUR_EXP_ID).numlinks + 1;
                     EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).exp_id = matched_exp_id;
-                    %  EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).d_xy = sqrt(ACCUM_DELTA_X^2 + ACCUM_DELTA_Y^2 + ACCUM_DELTA_Z^2);
                     EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).d_xy = sqrt(ACCUM_DELTA_X^2 + ACCUM_DELTA_Y^2);
                     EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).d_z = ACCUM_DELTA_Z;
-                    
                     EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).heading_yaw_exp_rad = ...
-                        get_signed_delta_radian(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad, atan2(ACCUM_DELTA_Y, ACCUM_DELTA_X)); % heading is the delta angle between current pose of exp and previous pose of exp
-                   
-                    EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).facing_yaw_exp_rad = ... % facing is the direction of each exp
+                        get_signed_delta_radian(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad, atan2(ACCUM_DELTA_Y, ACCUM_DELTA_X));
+                    EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).facing_yaw_exp_rad = ...
                         get_signed_delta_radian(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad, ACCUM_DELTA_YAW);
-                                    
-                 end
+
+                    try
+                        if matched_exp_id > 0 && matched_exp_id < CUR_EXP_ID
+                            EXP_LOOP_CLOSURE_LINKS = EXP_LOOP_CLOSURE_LINKS + 1;
+                        end
+                    catch
+                    end
+                end
+
+                PREV_EXP_ID = CUR_EXP_ID;
+                CUR_EXP_ID = matched_exp_id;
+
+                ACCUM_DELTA_X = 0;
+                ACCUM_DELTA_Y = 0;
+                ACCUM_DELTA_Z = 0;
+                ACCUM_DELTA_YAW = EXPERIENCES(CUR_EXP_ID).yaw_exp_rad;
+            end
+        else
+            [vals, ids] = sort(delta_em);
+            if ~isempty(vals)
+                min_delta = vals(1);
+                min_delta_id = ids(1);
+            else
+                min_delta = inf;
+                min_delta_id = 1;
+            end
+
+            MIN_DELTA_EM = [MIN_DELTA_EM; min_delta];
+            ratio = 0;
+            if numel(vals) >= 2
+                ratio = vals(1) / (vals(2) + eps);
+            end
+            if min_delta < DELTA_EXP_GC_HDC_THRESHOLD && (numel(vals) < 2 || ratio < EXP_MATCH_RATIO_THRESHOLD)
+
+                matched_exp_id = VT(vt_id).EXPERIENCES(min_delta_id).id;
+
+                if matched_exp_id <= 0 || matched_exp_id > NUM_EXPS
+                    matched_exp_id = 0;
+                end
+
+                if matched_exp_id ~= 0
+                    heading_yaw_exp_rad_tmp = get_signed_delta_radian(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad, atan2(ACCUM_DELTA_Y, ACCUM_DELTA_X));
+                    d_xy_tmp = sqrt(ACCUM_DELTA_X^2 + ACCUM_DELTA_Y^2);
+                    lx_tmp = EXPERIENCES(CUR_EXP_ID).x_exp + d_xy_tmp * cos(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad + heading_yaw_exp_rad_tmp);
+                    ly_tmp = EXPERIENCES(CUR_EXP_ID).y_exp + d_xy_tmp * sin(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad + heading_yaw_exp_rad_tmp);
+                    lz_tmp = EXPERIENCES(CUR_EXP_ID).z_exp + ACCUM_DELTA_Z;
+                    ce_tmp = sqrt((EXPERIENCES(matched_exp_id).x_exp - lx_tmp)^2 + (EXPERIENCES(matched_exp_id).y_exp - ly_tmp)^2 + (EXPERIENCES(matched_exp_id).z_exp - lz_tmp)^2);
+                    if ~isfinite(ce_tmp) || ce_tmp > EXP_MAX_LOOP_CE
+                        matched_exp_id = 0;
+                    end
+                end
+
+                if matched_exp_id ~= 0
+                    % see if the previous experience already has a link to the current experience
+                    link_exists = 0;
+                    for link_id = 1 : EXPERIENCES(CUR_EXP_ID).numlinks
+                        if EXPERIENCES(CUR_EXP_ID).links(link_id).exp_id == matched_exp_id
+                            link_exists = 1;
+                            break;
+                        end
+                    end
+
+                    % if we didn't find a link then create the link between current
+                    % experience and the experience for the current visual template
+                    if link_exists == 0
+                        EXPERIENCES(CUR_EXP_ID).numlinks = EXPERIENCES(CUR_EXP_ID).numlinks + 1;
+                        EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).exp_id = matched_exp_id;
+                        %  EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).d_xy = sqrt(ACCUM_DELTA_X^2 + ACCUM_DELTA_Y^2 + ACCUM_DELTA_Z^2);
+                        EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).d_xy = sqrt(ACCUM_DELTA_X^2 + ACCUM_DELTA_Y^2);
+                        EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).d_z = ACCUM_DELTA_Z;
+                        
+                        EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).heading_yaw_exp_rad = ...
+                            get_signed_delta_radian(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad, atan2(ACCUM_DELTA_Y, ACCUM_DELTA_X)); % heading is the delta angle between current pose of exp and previous pose of exp
+                       
+                        EXPERIENCES(CUR_EXP_ID).links(EXPERIENCES(CUR_EXP_ID).numlinks).facing_yaw_exp_rad = ... % facing is the direction of each exp
+                            get_signed_delta_radian(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad, ACCUM_DELTA_YAW);
+
+                        try
+                            if matched_exp_id > 0 && matched_exp_id < CUR_EXP_ID
+                                EXP_LOOP_CLOSURE_LINKS = EXP_LOOP_CLOSURE_LINKS + 1;
+                            end
+                        catch
+                        end
+                                        
+                     end
+                end
 
             end
 
@@ -218,6 +332,21 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
 %             ACCUM_DELTA_HEIGHT = EXPERIENCES(CUR_EXP_ID).height_hdc;
         end
 
+    elseif delta_em > DELTA_EXP_GC_HDC_THRESHOLD
+
+        % VT did not change, but the pose-cell state drifted enough: create a new experience.
+        NUM_EXPS = NUM_EXPS + 1;
+        create_new_exp(CUR_EXP_ID, NUM_EXPS, vt_id, xGc, yGc, zGc, curYawHdc, curHeight);
+
+        PREV_EXP_ID = CUR_EXP_ID;
+        CUR_EXP_ID = NUM_EXPS;
+
+        ACCUM_DELTA_X = 0;
+        ACCUM_DELTA_Y = 0;
+        ACCUM_DELTA_Z = 0;
+        ACCUM_DELTA_YAW = EXPERIENCES(CUR_EXP_ID).yaw_exp_rad;
+%         ACCUM_DELTA_HEIGHT = EXPERIENCES(CUR_EXP_ID).height_hdc;
+
     end
 
     global EXP_CORRECTION;
@@ -235,10 +364,22 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                 e0 = exp_id;
                 e1 = EXPERIENCES(exp_id).links(link_id).exp_id;
 
+                if isempty(e1) || e1 < 1 || e1 > NUM_EXPS
+                    continue;
+                end
+
                 % work out where e0 thinks e1 (x,y) should be based on the stored link information
                 lx = EXPERIENCES(e0).x_exp + EXPERIENCES(e0).links(link_id).d_xy * cos(EXPERIENCES(e0).yaw_exp_rad + EXPERIENCES(e0).links(link_id).heading_yaw_exp_rad);
                 ly = EXPERIENCES(e0).y_exp + EXPERIENCES(e0).links(link_id).d_xy * sin(EXPERIENCES(e0).yaw_exp_rad + EXPERIENCES(e0).links(link_id).heading_yaw_exp_rad);
                 lz = EXPERIENCES(e0).z_exp + EXPERIENCES(e0).links(link_id).d_z;  % 
+
+                try
+                    ce = sqrt((EXPERIENCES(e1).x_exp - lx)^2 + (EXPERIENCES(e1).y_exp - ly)^2 + (EXPERIENCES(e1).z_exp - lz)^2);
+                    if ce > EXP_CONSTRAINT_ERR_MAX
+                        EXP_CONSTRAINT_ERR_MAX = ce;
+                    end
+                catch
+                end
 
                 % correct e0 and e1 (x,y) by equal but opposite amounts
                 % a 0.5 correction parameter means that e0 and e1 will be fully

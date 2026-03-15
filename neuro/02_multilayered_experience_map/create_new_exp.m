@@ -45,7 +45,7 @@ function create_new_exp(curExpId, newExpId, vt_id, xGc, yGc, zGc, curYawHdc, cur
     EXPERIENCES(curExpId).links(EXPERIENCES(curExpId).numlinks).d_z = ACCUM_DELTA_Z;
     
     EXPERIENCES(curExpId).links(EXPERIENCES(curExpId).numlinks).heading_yaw_exp_rad = ... 
-        get_signed_delta_radian(EXPERIENCES(curExpId).yaw_exp_rad, -atan2(ACCUM_DELTA_Y, ACCUM_DELTA_X)); % heading is the delta angle between current pose of exp and previous pose of exp
+        get_signed_delta_radian(EXPERIENCES(curExpId).yaw_exp_rad, atan2(ACCUM_DELTA_Y, ACCUM_DELTA_X)); % heading is the delta angle between current pose of exp and previous pose of exp
         
     EXPERIENCES(curExpId).links(EXPERIENCES(curExpId).numlinks).facing_yaw_exp_rad = ... % facing is the direction of each exp
         get_signed_delta_radian(EXPERIENCES(curExpId).yaw_exp_rad, ACCUM_DELTA_YAW);

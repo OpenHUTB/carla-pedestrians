@@ -48,6 +48,8 @@ class VisualOdometry:
         # 统计信息
         self.num_inliers = 0
         self.scale = 1.0  # 单目VO无法恢复真实尺度
+        self.scale_history = []  # 尺度历史（用于滤波）
+        self.max_scale_history = 10  # 保持最近10帧
         
     def process_frame(self, frame):
         """
@@ -234,7 +236,7 @@ class ScaleEstimator:
         scale = imu_norm / visual_norm
         
         # 更严格的尺度限制（防止崩溃）
-        scale = np.clip(scale, 0.5, 2.0)  # 从[0.1,10]改为[0.5,2]
+        scale = np.clip(scale, 0.05, 5.0)  # 从[0.1,10]改为[0.5,2]
         
         # 更保守的平滑更新
         self.current_scale = self.alpha * self.current_scale + (1 - self.alpha) * scale

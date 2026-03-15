@@ -1,186 +1,164 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# ==========================================
+# NeuroSLAM Project .gitignore
+# ==========================================
 
-# C extensions
-*.so
+# ============ Debug和临时文件 ============
+*DIAGNOSE*.m
+*CHECK*.m
+*FIX*.m
+*QUICK*.m
+*debug*.m
+*trace*.m
+*test_*.m
+*quick_*.m
+*TEST*.m
+*TRACE*.m
+*FORCE*.m
+*COMPARE*.m
+*USE_*.m
+*CONTINUE*.m
+*PLOT_*.m
+*SIMPLE*.m
+*VISUALIZE*.m
+*RUN_*.m
+*PREPARE*.m
+*SUMMARIZE*.m
+*REGENERATE*.m
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# ============ Markdown文档 (保留核心README) ============
+*.md
+!README.md
+!START_HERE.md
+!**/README.md
+!LICENSE.md
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# ============ 临时脚本和批处理 ============
+*.bat
+*.txt
+!requirements.txt
+!**/README.txt
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# 中文临时文件
+*快速*.txt
+*一键*.txt
+*修复*.txt
+*诊断*.txt
+*说明*.md
+*报告*.md
+*指南*.md
+*总结*.md
+*完成*.md
+*优化*.md
+*问题*.md
+*方案*.md
+*分析*.md
+*清单*.md
+*参考*.md
+*开始*.txt
+*运行*.txt
+*测试*.txt
+*生成*.txt
+*操作*.txt
+*步骤*.txt
+*提示词*.md
+*绘图*.md
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-.vscode
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# Minimal Working Examples of issues
-pedestrians-video-2-carla/issues_mwe
-
-# Logs
-lightning_logs/
-runs/
-
-# shared data
-subsets/
-
-# Checkpoints
-*.pt
-
-.DS_Store
-
-# NeuroSLAM数据和结果（不上传）
-neuro/data/
-
-# SLAM测试结果（不上传）
-neuro/07_test/test_imu_visual_slam/*_results/
-neuro/07_test/test_imu_visual_slam/*.png
-neuro/07_test/test_imu_visual_slam/*.mat
-neuro/07_test/test_imu_visual_slam/*.txt
-
-# 说明文档（不上传，只上传核心代码）
-neuro/07_test/test_imu_visual_slam/*.md
-neuro/09_vestibular/README*.md
-neuro/09_vestibular/QUICKSTART*.md
-neuro/IMU_VISUAL_FUSION_SUMMARY.md
-
-# 诊断和测试脚本（不上传）
-neuro/00_collect_data/diagnose_error.py
-neuro/00_collect_data/test_collision_avoidance.py
-neuro/00_collect_data/COLLISION_AVOIDANCE_CONFIG.md
-
-# MATLAB临时文件
-*.asv
-*.fig
-# LaTeX编译产物（无需跟踪，本地可重新生成）
+# ============ LaTeX编译产物 ============
 *.aux
+*.log
 *.bbl
 *.blg
-*.out
 *.spl
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.nav
+*.snm
+*.vrb
+*.dvi
+*.ps
+
+# ============ 图片和媒体文件 ============
 *.pdf
-# Matlab临时文件
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.eps
+*.pptx
+*.ppt
+*.svg
+# 保留论文PDF
+!neuro/kbs/kbs_1/NeuroSLAM_KBS.pdf
+
+# ============ 压缩包 ============
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+
+# ============ 数据文件 (太大) ============
+neuro/data/
+**/slam_results/
+**/comparison_results/
+**/ablation_results/
+**/grid_search_results/
 *.mat
+*.csv
+# 保留小的示例数据
+!**/example_data/
+
+# ============ Python缓存 ============
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+
+# ============ MATLAB缓存 ============
+*.asv
 *.m~
-*.log
-# 文件夹过滤（按需添加）
+slprj/
+*.autosave
+
+# ============ IDE和编辑器 ============
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============ 系统文件 ============
+*.prj
+Bin.prj
+
+# ============ 个人文件夹 ============
+机器人2301宁彩霞11/
+
+# ============ 特定目录排除 ============
+neuro/08_draw_fig_for_paper/*.png
+neuro/kbs/kbs_1/fig/
+neuro/kbs/kbs/
+neuro/kbsnew/
+neuro/latex/
 neuro/referance/
-neuro/07_test/test_imu_visual_slam/debug/
-neuro/07_test/test_imu_visual_slam/scripts/
-# 其他无用文件
-*.sh
+neuro/paper_draft/
+resources/
+
+# ============ 保留的核心文件 (明确包含) ============
+# 这些文件即使匹配上面的规则也要保留
+!neuro/START_HERE.md
+!neuro/07_test/07_test/test_imu_visual_slam/core/README_test_imu_visual_fusion_slam2.md
+!neuro/07_test/07_test/test_imu_visual_slam/parameter_search/参数网格搜索指南.md
