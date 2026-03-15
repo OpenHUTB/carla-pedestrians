@@ -1,0 +1,1 @@
+Model weights `UniPose_LSTM_COCO.pth` from https://github.com/bmartacho/UniPose

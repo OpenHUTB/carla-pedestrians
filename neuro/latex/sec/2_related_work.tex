@@ -1,0 +1,206 @@
+\section{Related Work}
+
+In this section, we provide a comprehensive review of related research in simultaneous localization and mapping (SLAM), with a focus on three key areas: (1) traditional SLAM algorithms and their evolution, (2) IMU-visual sensor fusion approaches, and (3) brain-inspired SLAM systems. These three research directions represent the foundation upon which our proposed NeuroNav system, a HART+Transformer enhanced NeuroSLAM variant, is built.
+
+\subsection{Traditional SLAM Algorithms}
+
+\subsubsection{Visual SLAM Systems}
+
+The SLAM problem has been extensively studied over the past three decades, with significant advances in both theoretical foundations and practical implementations \cite{Cadena2016}. Traditional SLAM systems can be broadly categorized based on their sensor modalities and algorithmic approaches.
+
+\textbf{Monocular Visual SLAM.} 
+Monocular visual SLAM has been a popular research direction due to the low cost and simplicity of camera sensors. 
+ORB-SLAM \cite{MurArtal2015, MurArtal2017} represents a milestone in feature-based visual SLAM, utilizing oriented FAST and rotated BRIEF (ORB) features for robust tracking, mapping, and loop closure detection. 
+The system employs a bag-of-words approach for place recognition and achieves real-time performance on standard CPUs. 
+However, ORB-SLAM struggles with scale ambiguity inherent to monocular systems and requires substantial computational resources for feature extraction and matching.
+
+PTAM (Parallel Tracking and Mapping) \cite{Klein2007} pioneered the separation of tracking and mapping into parallel threads, enabling real-time performance on small-scale environments. 
+While groundbreaking, PTAM is limited to small workspaces and lacks robust loop closure detection.
+LSD-SLAM \cite{Engel2014} took a different approach by using direct image alignment instead of features, achieving semi-dense reconstruction. 
+However, it is sensitive to photometric changes and requires careful parameter tuning.
+
+More recently, direct sparse odometry (DSO) \cite{Engel2018} improved upon LSD-SLAM by incorporating photometric calibration and optimizing a joint photometric and geometric error. 
+DSO demonstrates superior accuracy compared to feature-based methods in well-textured environments but struggles in low-texture scenarios.
+SVO (Semi-direct Visual Odometry) \cite{Forster2014, Forster2017} combines the advantages of feature-based and direct methods, achieving high-speed performance by minimizing reprojection error at sparse feature locations.
+
+\textbf{RGB-D and Stereo SLAM.}
+RGB-D cameras have enabled dense 3D reconstruction by providing direct depth measurements.
+KinectFusion \cite{Newcombe2011} demonstrated real-time dense surface reconstruction using truncated signed distance function (TSDF) representation, though it was limited to small-scale environments.
+ElasticFusion \cite{Whelan2016} extended this work to enable large-scale dense mapping with a surfel-based representation and loop closure detection.
+
+Stereo SLAM systems, such as ORB-SLAM2 \cite{MurArtal2017}, leverage baseline information to recover absolute scale while maintaining the flexibility of passive sensing.
+However, stereo systems require precise calibration and struggle in textureless regions where feature matching is unreliable.
+
+\textbf{Semantic SLAM.}
+Recent advances have incorporated semantic understanding into SLAM systems.
+SLAM++ \cite{Salas2013} introduced object-level SLAM by detecting and tracking known objects in the environment, enabling more compact and meaningful map representations.
+SemanticFusion \cite{McCormac2017} combines dense reconstruction with CNN-based semantic segmentation, creating semantically labeled 3D maps.
+While semantic SLAM provides richer environmental understanding, it relies heavily on pre-trained object detection models and may fail in novel or cluttered environments.
+
+\subsubsection{Loop Closure and Place Recognition}
+
+Loop closure detection is critical for correcting accumulated drift in long-term SLAM.
+FAB-MAP (Fast Appearance-Based Mapping) \cite{Cummins2008, Paul2010} pioneered probabilistic place recognition using a bag-of-words model with a Chow-Liu tree to capture feature co-occurrence.
+SeqSLAM \cite{Milford2012} demonstrated robust place recognition under extreme appearance changes by matching sequences of images rather than individual frames, though it requires storing entire image sequences.
+
+More recent deep learning approaches, such as NetVLAD \cite{Arandjelovic2016}, learn compact image representations for place recognition, achieving state-of-the-art performance.
+However, these methods typically require large-scale training datasets and may not generalize well to novel environments.
+
+\subsubsection{Limitations of Traditional SLAM}
+
+Despite significant progress, traditional SLAM systems face several fundamental challenges:
+(1) \textit{Computational complexity}: Many state-of-the-art systems require substantial computational resources for feature extraction, matching, and optimization, limiting their deployment on resource-constrained platforms.
+(2) \textit{Environmental assumptions}: Most systems assume static, well-lit environments with sufficient texture, failing in dynamic or challenging conditions.
+(3) \textit{Scalability}: Long-term operation in large-scale environments leads to increasing computational burden and memory requirements.
+(4) \textit{Robustness}: Traditional systems often suffer from catastrophic failures due to perceptual aliasing, rapid motion, or sensor degradation.
+
+
+\subsection{IMU-Visual Sensor Fusion}
+
+Integrating inertial measurement units (IMUs) with visual sensors has emerged as a powerful approach to address limitations of pure visual SLAM, providing complementary information for robust state estimation.
+
+\subsubsection{Tightly-Coupled Visual-Inertial Odometry}
+
+Tightly-coupled approaches fuse visual and inertial measurements within a unified optimization framework, leveraging the complementary nature of these modalities.
+
+MSCKF (Multi-State Constraint Kalman Filter) \cite{Mourikis2007} pioneered the use of EKF-based visual-inertial fusion by marginalizing feature observations to maintain computational efficiency.
+However, MSCKF's reliance on a linearized system model can lead to inconsistency in highly nonlinear scenarios.
+
+OKVIS (Open Keyframe-based Visual-Inertial SLAM) \cite{Leutenegger2015} employs nonlinear optimization over a bounded window of recent keyframes and IMU measurements, achieving accurate state estimation.
+While OKVIS demonstrates superior accuracy compared to filtering approaches, its keyframe-based marginalization can discard valuable information.
+
+ROVIO (Robust Visual Inertial Odometry) \cite{Bloesch2015} takes a direct approach by tracking image patches rather than point features, making it robust to feature-poor environments.
+However, ROVIO does not perform loop closure and thus accumulates drift over long trajectories.
+
+VINS-Mono \cite{Qin2018} represents a significant advancement in monocular visual-inertial fusion by incorporating robust initialization, loop closure via a pose graph, and four-degree-of-freedom optimization.
+The system achieves state-of-the-art accuracy and has been widely adopted in both research and commercial applications.
+VINS-Fusion \cite{Qin2019} extends this work to support stereo cameras and stereo+IMU configurations, demonstrating improved robustness and scale observability.
+
+VI-ORB-SLAM \cite{MurArtal2017} integrates IMU measurements into the ORB-SLAM framework, enabling robust initialization and improved tracking performance.
+However, its tight coupling increases system complexity and computational requirements.
+
+\subsubsection{Loosely-Coupled Approaches}
+
+Loosely-coupled methods treat visual and inertial odometry as separate modules, fusing their outputs at the state estimation level.
+While computationally efficient, these approaches do not fully exploit the synergy between modalities and are more susceptible to sensor failures.
+
+S-MSCKF \cite{Sun2018} extends MSCKF with stereo cameras, demonstrating improved performance in GPS-denied environments.
+However, the increased number of measurements significantly increases computational complexity.
+
+\subsubsection{Challenges in Visual-Inertial Fusion}
+
+Despite significant progress, visual-inertial SLAM faces several persistent challenges:
+(1) \textit{Initialization}: Accurate estimation of initial states, including IMU biases and velocity, is crucial but difficult in practice.
+(2) \textit{Calibration}: Precise spatial and temporal calibration between camera and IMU is essential for tight coupling.
+(3) \textit{Degeneracy}: Certain motion patterns (e.g., pure rotation) lead to unobservable states.
+(4) \textit{Computational cost}: Real-time operation on embedded platforms remains challenging, especially for multi-camera systems.
+
+Our proposed system addresses these challenges by incorporating bio-inspired neural mechanisms that provide intrinsic robustness and efficiency.
+
+
+\subsection{Brain-Inspired SLAM and Neural Navigation}
+
+Biological navigation systems demonstrate remarkable capabilities that inspire novel approaches to robot navigation and SLAM.
+Animals navigate effectively in complex, dynamic environments with limited computational resources, suggesting fundamentally different strategies from traditional engineering approaches.
+
+\subsubsection{Rodent-Inspired Navigation Systems}
+
+RatSLAM \cite{Milford2004, Milford2008, Milford2010} pioneered the application of rodent navigation principles to robot SLAM.
+The system models place cells, head direction cells, and grid cells using continuous attractor neural networks (CANNs), creating a topological-metric hybrid representation.
+RatSLAM successfully demonstrated suburb-scale mapping and long-term navigation, achieving robustness to appearance changes that challenge traditional visual SLAM.
+However, the original RatSLAM operates primarily in 2D environments and uses hand-crafted visual features that limit performance in complex scenarios.
+
+Extensions of RatSLAM include BatSLAM \cite{Steckel2013}, which incorporates sonar sensing for navigation in darkness, and various improvements to the visual processing pipeline \cite{Milford2011a, Milford2011b}.
+
+\subsubsection{3D Navigation and Spatial Representation}
+
+Recent neuroscientific discoveries of 3D grid cells and 3D head direction cells in bats \cite{Finkelstein2015, Finkelstein2016} and humans \cite{Kim2017, Kim2018a, Kim2018b, Kim2019} have inspired efforts to extend bio-inspired SLAM to three-dimensional environments.
+
+3D place cells represent specific 3D locations \cite{Yartsev2013, Wohlgemuth2018}, forming a sparse metric map.
+3D head direction cells encode the animal's orientation in 3D space through combinations of azimuth and pitch \cite{Finkelstein2015, Page2018, Shinder2019}.
+3D grid cells exhibit periodic firing patterns in volumetric space, potentially providing a universal metric for 3D path integration \cite{Finkelstein2016, Casali2019}.
+
+Mathematical models of these 3D spatial cells have been proposed \cite{Jeffery2013, Jeffery2015}, including face-centered cubic (FCC) and hexagonal close-packed (HCP) lattice organizations for 3D grid cells.
+Soman et al. \cite{Soman2018} developed a hierarchical network model of 3D spatial cells, demonstrating the computational principles underlying volumetric navigation.
+
+Silveira et al. \cite{Silveira2013, Silveira2015} extended RatSLAM to underwater 3D environments using a 3D place cell model, though without explicit directional representation.
+Yu et al. proposed NeuroSLAM for 3D environments by modeling 3D grid cells and multi-layered head direction cells, demonstrating 4-DOF pose estimation.
+
+\subsubsection{Deep Learning and Neuromorphic Approaches}
+
+Recent work has explored combining bio-inspired principles with modern deep learning.
+Kreiser et al. \cite{Kreiser2018a, Kreiser2018b} developed spiking neural network (SNN) implementations of spatial cells running on neuromorphic hardware, achieving energy-efficient place recognition.
+
+Attention mechanisms, inspired by selective visual processing in the brain, have shown promise in visual place recognition \cite{Chen2017}.
+However, these approaches typically focus on individual components (e.g., place recognition) rather than complete SLAM systems.
+
+\subsubsection{Limitations and Opportunities}
+
+While brain-inspired SLAM systems demonstrate unique advantages in robustness and long-term stability, several challenges remain:
+(1) \textit{Feature representation}: Most bio-inspired systems use hand-crafted features that limit performance in complex environments.
+(2) \textit{3D navigation}: Few systems successfully operate in true 3D environments with complete 6-DOF pose estimation.
+(3) \textit{Scalability}: Computational complexity of neural network models can limit real-time performance.
+(4) \textit{Integration}: Combining bio-inspired principles with modern sensor fusion and deep learning remains largely unexplored.
+
+Our work addresses these limitations by incorporating the HART visual attention mechanism with Transformer-based feature processing, creating a biologically-inspired yet computationally efficient approach to visual feature extraction for neural SLAM systems.
+
+
+\subsection{Mapping and Localization Paradigms}
+
+The representation of spatial information is fundamental to SLAM, with different paradigms offering distinct advantages and limitations.
+
+\subsubsection{Metric Mapping}
+
+Metric maps represent the environment with precise geometric information, typically as point clouds, voxel grids, or mesh structures.
+Dense methods like KinectFusion \cite{Newcombe2011} and ElasticFusion \cite{Whelan2016} create detailed 3D reconstructions suitable for robot manipulation and human-robot interaction.
+Sparse methods like ORB-SLAM \cite{MurArtal2015} maintain only landmark positions, reducing memory requirements while sacrificing environmental completeness.
+
+OctoMap \cite{Hornung2013} provides a probabilistic volumetric representation using an octree structure, enabling efficient storage and uncertainty modeling.
+However, metric maps scale poorly to large environments and are sensitive to sensor noise.
+
+\subsubsection{Topological Mapping}
+
+Topological maps represent environments as graphs of discrete locations and connections, abstracting away precise geometric details.
+This representation naturally supports hierarchical planning and is robust to perceptual changes \cite{Lowry2016}.
+
+Vision-based topological mapping systems like FAB-MAP \cite{Cummins2008} and SeqSLAM \cite{Milford2012} create place-based graph representations.
+These systems excel in appearance-based loop closure detection but provide limited metric information for precise navigation.
+
+\subsubsection{Hybrid Representations}
+
+Hybrid approaches combine the benefits of metric and topological representations.
+The experience map in RatSLAM \cite{Milford2008} creates a topological graph where each node stores local metric pose information, balancing computational efficiency with metric accuracy.
+
+Semantic mapping approaches \cite{Salas2013, McCormac2017} create hierarchical representations with object-level topology and instance-level geometry.
+These representations are compact and meaningful but rely on object detection, limiting applicability in unstructured environments.
+
+\subsubsection{Neural Spatial Representations}
+
+Grid cells in the mammalian brain provide a neural code for space that combines properties of metric and topological representations \cite{Hafting2005, Moser2017}.
+The periodic nature of grid cell activity creates a multi-scale metric representation, while the discrete attractor states in grid cell networks enable topological robustness.
+
+Our system leverages this neural spatial representation through continuous attractor networks, creating an inherently hybrid mapping approach that combines the precision of metric maps with the robustness of topological representations.
+
+
+\subsection{Research Gap and Contributions}
+
+Despite extensive research in traditional SLAM, visual-inertial fusion, and bio-inspired navigation, several key challenges remain unaddressed:
+
+\begin{enumerate}
+    \item \textbf{Feature representation in bio-inspired navigation}: Existing brain-inspired systems predominantly use hand-crafted visual features (e.g., intensity scanlines, whole-image matching) that limit performance in complex real-world scenarios. There is a lack of integration between modern deep visual features and bio-inspired spatial representations such as grid-cell and head-direction-cell attractor networks.
+    
+    \item \textbf{Attention and dual-stream visual processing}: Biological vision employs dorsal/ventral dual streams and sophisticated attention mechanisms to focus on behaviourally relevant information. In contrast, most engineering systems process all pixels uniformly or rely on a single visual pipeline, leading to computational inefficiency and vulnerability to clutter and illumination changes.
+    
+    \item \textbf{Long-range temporal dependencies for inertial-visual fusion}: Spatial navigation inherently involves dependencies across long sequences of multi-modal observations. However, many existing visual-inertial systems exploit only short temporal windows and do not explicitly model long-range correlations that are crucial for drift suppression and robust loop re-localisation.
+    
+    \item \textbf{3D bio-inspired navigation with modern sensors}: While 3D spatial cells have been modeled and implemented in NeuroSLAM-like architectures, practical deployments that tightly fuse these neural representations with modern IMU-visual front-ends in realistic 3D environments are still limited.
+    
+    \item \textbf{End-to-end interpretation of component contributions}: There is a lack of systematic studies that connect cortical-style visual processing, inertial sensing, and hippocampal/entorhinal representations (experience map, grid cells, head-direction cells) within a single, analysable navigation framework.
+\end{enumerate}
+
+This paper addresses these gaps by proposing a \emph{brain-inspired inertial-visual fusion system} built on the NeuroSLAM spatial representation backbone. Concretely, we integrate:
+(1) a biologically-inspired dual-stream visual encoder (dorsal and ventral pathways) with HART-like attention for selectively processing salient motion and appearance cues,
+(2) Transformer and LSTM-based temporal modules for capturing long-range dependencies in visual and inertial sequences,
+(3) fusion of timestamp-aligned IMU measurements and visual odometry to provide vestibular-style self-motion signals to the 3D grid-cell and multilayer head-direction-cell networks, and
+(4) comprehensive evaluation on both simulated CARLA towns and real EuRoC sequences to quantify the benefits of each component via ablation.
+Our approach bridges the gap between bio-inspired navigation principles and modern deep inertial-visual fusion, yielding an interpretable brain-inspired navigation framework for challenging 3D environments.

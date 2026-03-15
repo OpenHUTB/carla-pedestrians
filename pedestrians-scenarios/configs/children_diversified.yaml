@@ -1,0 +1,12 @@
+number_of_clips: 800
+clip_length_in_frames: 1200
+pedestrian_distributions:
+  - ['adult_female', 0.5]
+  - ['adult_male', 0.5]
+camera_position_distributions:
+  - [[-7.0, 2.0], [0.0, 0.25], [1.0, 0.25]]
+  - [[10.0, 2.0], [0.0, 0.25], [2.0, 0.25]]
+batch_size: 1
+camera_fov: 110
+camera_image_size: [1920, 1080]
+waypoint_jitter_scale: 10.0

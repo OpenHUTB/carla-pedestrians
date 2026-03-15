@@ -1,0 +1,60 @@
+services:
+  server:
+    image: carlasim/carla:0.9.15
+    entrypoint: [ "/bin/bash", "/home/carla/CarlaUE4.sh" ]
+    command:
+      [
+        "-RenderOffScreen",
+        "-carla-rpc-port=${CARLA_SERVER_PORT:-2000}",
+        "-carla-streaming-port=${CARLA_SERVER_STREAMING_PORT:-2001}",
+        "-quality-level=${CARLA_SERVER_QUALITY:-Epic}"
+      ]
+    expose:
+      - "${CARLA_SERVER_PORT:-2000}-${CARLA_SERVER_STREAMING_PORT_2:-2002}"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,graphics,utility
+    restart: "on-failure"
+    healthcheck:
+      start_period: ${CARLA_SERVER_START_PERIOD:-30}s
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ '${CARLA_SERVER_GPU_ID:-0}' ]
+              capabilities: [ 'compute', 'graphics', 'utility' ]
+
+  client:
+    build:
+      context: ${COMMON_DIR:-.}
+      dockerfile: Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USERNAME: carla
+        PLATFORM: ${PLATFORM:-nvidia}
+    image: ${IMAGES_NAMESPACE:-wielgoszinfo}/carla-common:${PLATFORM:-nvidia}-latest
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,graphics,utility
+    volumes:
+      - vscode:/home/carla/.vscode-server
+      - outputs:/home/carla/outputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ '${PYTHON_GPU_ID:-0}' ]
+              capabilities: [ 'compute', 'graphics', 'utility' ]
+    depends_on:
+      - server
+
+volumes:
+  vscode:
+  outputs:

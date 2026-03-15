@@ -1,0 +1,64 @@
+\section{Introduction}
+\label{sec:intro}
+\hspace{1pc}Navigating in three dimensional environments is a critical capability for many current or prospective robotic tasks, such as rescue, delivery and exploration. 
+Operation in these environments involves a number of challenges including onboard compute, lack of cloud access, power consumption restrictions and cost pressures (Cadena et al., 2016; Bellingham et al., 2018): 
+current advanced systems typically employ a multi-sensor suite of vision, range, inertial and GNSS (Global Navigation Satellite System) sensors, combined with a probabilistic mapping or Simultaneous Localization And Mapping (SLAM) back-end (Saputra et al., 2018).
+
+
+In contrast to current robotic technologies, many animals such as bats robustly map and navigate in a range of three dimensional environments (Jeffery et al., 2013; Finkelstein et al., 2016). 
+The location in 3D space is estimated by combining local visual cues and self-motion cues for spatial navigation in the mammalian brain (Milford and Schulz, 2014; Finkelstein et al., 2016; Campbell et al., 2018). 
+Some neural basis of navigation have been discovered in the manmmalian brain, including place cells (O'Keefe and Dostrovsky, 1971), grid cells (Hafting et al., 2005), head direction cells (Taube et al., 1990), and boundary / border cells (Solstad et al., 2008; Lever et al., 2009), speed cells (Kropff et al., 2015), etc., (Moser et al., 2017). 
+Together, an internal cognitive map is generated according to local visual cues and self-motion cues. (Jeffery et al., 2013, 2016; Evans et al., 2016; Cope et al., 2017; Campbell et al., 2018; Bjerknes et al., 2018).
+
+
+With the initial discovery and understanding of the 2D spatial neural mechanism in the brain encoded by place and head-direction cells, some neural navigational models have been developed and applied to robot navigation. 
+For example, a navigational model based on head-direction cells and place cells was developed, which was deployed on the Khepera robot operating in a small 2D area (Arleo and Gerstner, 2000). 
+Furthermore, in order to support large scale persistent navigation and mapping, Milford et al. (2004), Milford and Wyeth (2008) and Milford and Wyeth (2010) developed a computational model called RatSLAM, a rodent brain-inspired SLAM algorithm. 
+RatSLAM has successfully mapped an entire suburb in a 2D map, and navigated in an office environment over two weeks. 
+Most recently, several novel approaches have been developed based on several types of neural network models and neuromorphic hardware (Banino et al., 2018; Tang and Michmizos, 2018; Zhou et al., 2018; Kreiser et al., 2018a,b).
+
+
+There has to date been relatively little work on developing biologically-inspired mapping models capable of functioning in 3D, rather than 2D environments. 
+Part of this is due to the relatively recent inroads into understanding 3D spatial representations in the brain; neuroscientists have recently found evidence for the neural basis of 3D navigational neural representation in freely flying bats, rats and humans, including 3D place cells (Yartsev and Ulanovsky, 2013; Kim et al., 2017; Wohlgemuth et al., 2018), 3D head direction cells (Finkelstein et al., 2015; Laurens et al., 2016; Page et al., 2018; Shinder and Taube, 2019) and 3D grid cells (Finkelstein et al., 2016; Kim and Maguire, 2019; Casali et al., 2019). 
+Hayman et al. (2015) and Jeffery et al. (2015) proposed several mathematical models of these 3D spatial neural cells and analyzed their properties and limitations in representing 3D space. 
+Page et al. (2018) proposed a 3D rotation rule with dual-axis for representing 3D head direction. 
+Casali et al. (2019) found the novel spatial encoding properties of grid cell firing fields in vertical space. 
+Some research has also closed the loop back to neuroscience in an attempt to aid neuroscientists in interpreting neurobiological recordings (Llofriu et al., 2015; Gianelli et al., 2018; Gaussier et al., 2019).
+
+
+In this paper, we present a novel biologically-inspired mapping system with 4 degrees of freedom, enabling it to map and localize in 3D, rather than 2D, environments. 
+The core system draws some of its inspiration from previous 2D-only brain-based mapping systems including RatSLAM (Milford et al., 2004; Milford and Wyeth, 2008, 2010), but makes a range of new contributions as follows:
+
+- Firstly, we propose a novel neuro-inspired model for mapping and localization in a large, real-world three dimensional environments, which is to the best of our knowledge, the first work to do so.
+
+- Secondly, we develop a functional computational model of conjunctive pose cells consisting of 3D grid cells and multilayered head direction cells for representing a 4DoF pose (x, y,z, yaw).
+
+- Thirdly, we propose a novel multilayered graphical experience map combining the local view cells, 3D grid cells, multilayered head direction cells and 3D visual odometry.
+
+- Finally, we present three new 3D mapping real-world and synthetic datasets comprising both outdoor and indoor environments, and evaluate NeuroSLAM’s performance on them.
+
+
+The paper is organized as follows: Section 2 discusses the conventional visual SLAM and brain-inspired SLAM. 
+Section 3 describes the current understanding of 3D spatial neural representation in the brain and provides a background for the problem. 
+Section 4 presents the architecture and detailed models of our system - NeuroSLAM - to build the neural mechanism of 3D spatial representation in robots. 
+Section 5 describes the methodology of experiments for investigating the performance of NeuroSLAM. 
+Section 6 presents experimental results demonstrating the mapping and localization performance of the system in 3D space. 
+Section 7 discusses and concludes the results of the study, revealing the insights gained regarding the benefits and drawbacks of developing and deploying a neuro-inspired 3D SLAM system.
+
+
+
+
+
+
+%\begin{figure}[t]
+%	\centering
+%	%\fbox{\rule{0pt}{2in} \rule{0.9\linewidth}{0pt}}
+%	\includegraphics[width=0.95\linewidth]{fig/brain_inspired.pdf}
+%	\caption{Perception-decision network diagram based on neural pathway anatomical alignment}
+%	\label{fig:fig1}
+%\end{figure}
+
+
+
+
+

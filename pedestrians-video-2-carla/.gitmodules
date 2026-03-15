@@ -1,0 +1,20 @@
+[submodule "third_party/3d_pose_baseline_pytorch"]
+	path = third_party/3d_pose_baseline_pytorch
+	url = https://github.com/weigq/3d_pose_baseline_pytorch.git
+	ignore = all
+[submodule "third_party/PoseFormer"]
+	path = third_party/PoseFormer
+	url = https://github.com/zczcwh/PoseFormer.git
+	ignore = all
+[submodule "third_party/VideoPose3D"]
+	path = third_party/VideoPose3D
+	url = https://github.com/facebookresearch/VideoPose3D.git
+	ignore = all
+[submodule "third_party/smplify-x"]
+	path = third_party/smplify-x
+	url = https://github.com/vchoutas/smplify-x.git
+	ignore = all
+[submodule "third_party/UniPose"]
+	path = third_party/UniPose
+	url = https://github.com/bmartacho/UniPose.git
+	ignore = all

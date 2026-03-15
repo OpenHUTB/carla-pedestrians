@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  video2carla:
+    build:
+      args:
+        PLATFORM: ${PLATFORM:-nvidia}
+    image: wielgoszinfo/pedestrians-video-2-carla:${PLATFORM:-nvidia}-latest
+    user: ${USER_ID}:${GROUP_ID}
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,graphics,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ '${VIDEO2CARLA_GPU_ID:-0}' ]
+              capabilities: [ 'compute', 'graphics', 'utility' ]
+    depends_on:
+      - server

@@ -1,0 +1,8 @@
+lightning_logs/
+core.*
+.git
+artifacts/
+wandb/
+models/**/*.*
+!models/**/.gitkeep
+!models/**/*.md

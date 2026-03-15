@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  video2carla:
+    build:
+      context: ${VIDEO2CARLA_DIR:-.}
+      dockerfile: Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USERNAME: carla
+        PLATFORM: ${PLATFORM:-cpu}
+    image: wielgoszinfo/pedestrians-video-2-carla:${PLATFORM:-cpu}-latest
+    user: ${USER_ID}:${GROUP_ID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${VIDEO2CARLA_DATASETS_PATH}:/datasets:ro
+      - ${VIDEO2CARLA_DIR:-PWD}:/app
+      - vscode:/home/carla/.vscode-server
+      - vscode-insiders:/home/carla/.vscode-server-insiders
+      - ${VIDEO2CARLA_OUTPUTS_DIR_OR_VOLUME}:/outputs
+      - ${VIDEO2CARLA_RUNS_DIR_OR_VOLUME}:/runs
+    environment:
+      COMMIT: ${COMMIT}
+      CARLA_SERVER_START_PERIOD: ${CARLA_SERVER_START_PERIOD:-30}
+      WANDB_API_KEY: ${WANDB_API_KEY}
+      WANDB_DISABLE_CODE: ${WANDB_DISABLE_CODE:-true}
+      VIDEO2CARLA_ROOT_DIR: ${VIDEO2CARLA_ROOT_DIR:-/}
+    shm_size: ${VIDEO2CARLA_SHM_SIZE:-2gb}
+    deploy:
+      resources:
+        limits:
+          memory: ${VIDEO2CARLA_MEMORY:-16gb}
+          cpus: ${VIDEO2CARLA_CPUS:-8}
