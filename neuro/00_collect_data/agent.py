@@ -1,3 +1,12 @@
+import sys
+print("Python 解释器路径：", sys.executable)  # 打印当前使用的Python路径
+print("CARLA 环境测试：开始初始化...")
+
+import carla
+import numpy as np
+import time
+
+# 下面保留你原来的所有代码（比如 deg_to_rad 函数、agent 类等）
 #!/usr/bin/env python3
 
 # MIT License
@@ -48,6 +57,7 @@ class agent:
         self.geo_centre_lat = deg_to_rad(map_geo.latitude) 
         self.geo_centre_lon = deg_to_rad(map_geo.longitude)
         self.geo_centre_alt = map_geo.altitude
+        print("✅ CARLA 连接成功！世界地图名称：", self.world.get_map().name)
 
 
     # Spawn the vehicle randomly
@@ -177,3 +187,6 @@ class agent:
         for a in self.actor_list:
             a.destroy()
             self.actor_list.remove(a)
+            # 新增：创建agent实例，触发初始化和验证代码执行
+if __name__ == "__main__":
+    carla_agent = agent()  # 实例化agent类，会执行__init__里的所有代码
