@@ -1,11 +1,5 @@
-import sys
 print("Python 解释器路径：", sys.executable)  # 打印当前使用的Python路径
 print("CARLA 环境测试：开始初始化...")
-
-import carla
-import numpy as np
-import time
-
 # 下面保留你原来的所有代码（比如 deg_to_rad 函数、agent 类等）
 #!/usr/bin/env python3
 
