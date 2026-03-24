@@ -7,14 +7,19 @@
 import os
 import numpy as np
 
-# -------------------------- 路径配置（清晰不变） --------------------------
+# -------------------------- 相对路径配置（无绝对路径） --------------------------
+# 脚本所在目录
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = r"D:\kitti\KITTI_07"
+
+# 数据目录 = 脚本目录下的 KITTI_07 文件夹
+DATA_PATH = os.path.join(SCRIPT_DIR, "KITTI_07")
+
+# 输入输出文件（自动拼接路径）
 INPUT_FILE = os.path.join(DATA_PATH, 'fusion_pose_ekf.txt')
 OUTPUT_FILE = os.path.join(DATA_PATH, 'fusion_pose.txt')
 OXTS_PATH = os.path.join(DATA_PATH, 'oxts', 'data')
 
-# -------------------------- 常量定义（新增，便于维护） --------------------------
+# -------------------------- 常量定义 --------------------------
 PI = 3.141592653589793
 OXTS_AX_INDEX = 11
 OXTS_AY_INDEX = 12
@@ -36,7 +41,7 @@ def main():
     with open(INPUT_FILE, 'r', encoding='utf-8') as f_in, \
          open(OUTPUT_FILE, 'w', encoding='utf-8') as f_out:
 
-        # MATLAB 头部注释（格式更整齐）
+        # MATLAB 头部注释
         header_text = (
             "% KITTI 07 EKF Fusion Data\n"
             "% timestamp(s) x(m) y(m) z(m) roll(deg) pitch(deg) yaw(deg) "
@@ -55,13 +60,12 @@ def main():
             if not line:
                 continue
 
-            # 分割数据
             parts = line.split(',')
             if len(parts) < 16:
                 print(f"⚠️  警告: 第{line_num}行数据长度不足，跳过")
                 continue
 
-            # 解析字段（命名更清晰，注释更明确）
+            # 解析字段
             timestamp = float(parts[0])
             pos_x, pos_y, pos_z = map(float, parts[1:4])
             roll, pitch, yaw = map(float, parts[4:7])
@@ -72,7 +76,7 @@ def main():
             pitch_deg = np.rad2deg(pitch)
             yaw_deg   = np.rad2deg(yaw)
 
-            # 读取 OXTS IMU 数据（容错更强）
+            # 读取 OXTS 数据
             oxts_file = os.path.join(OXTS_PATH, f'{count:010d}.txt')
             try:
                 with open(oxts_file, 'r', encoding='utf-8') as f_oxts:
@@ -92,7 +96,7 @@ def main():
                 ax = ay = az = wx = wy = wz = 0.0
                 print(f"⚠️  警告: 第{count}帧 OXTS 读取异常: {str(e)}")
 
-            # 写入输出文件（格式统一、可读性强）
+            # 写入输出
             output_line = (
                 f"{timestamp:<10.6f} {pos_x:<12.6f} {pos_y:<12.6f} {pos_z:<12.6f} "
                 f"{roll_deg:<10.6f} {pitch_deg:<10.6f} {yaw_deg:<10.6f} "
