@@ -7,74 +7,106 @@
 import os
 import numpy as np
 
-# 路径
+# -------------------------- 路径配置（清晰不变） --------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(SCRIPT_DIR, '..', 'data', 'KITTI_07')
+DATA_PATH = r"D:\kitti\KITTI_07"
 INPUT_FILE = os.path.join(DATA_PATH, 'fusion_pose_ekf.txt')
 OUTPUT_FILE = os.path.join(DATA_PATH, 'fusion_pose.txt')
 OXTS_PATH = os.path.join(DATA_PATH, 'oxts', 'data')
 
-print("转换EKF数据为MATLAB格式...")
-print(f"输入: {INPUT_FILE}")
-print(f"输出: {OUTPUT_FILE}")
+# -------------------------- 常量定义（新增，便于维护） --------------------------
+PI = 3.141592653589793
+OXTS_AX_INDEX = 11
+OXTS_AY_INDEX = 12
+OXTS_AZ_INDEX = 13
+OXTS_WX_INDEX = 17
+OXTS_WY_INDEX = 18
+OXTS_WZ_INDEX = 19
 
-with open(INPUT_FILE, 'r') as f_in, open(OUTPUT_FILE, 'w') as f_out:
-    # 写入MATLAB风格的header
-    f_out.write("% KITTI 07 EKF Fusion Data\n")
-    f_out.write("% timestamp(s) x(m) y(m) z(m) roll(deg) pitch(deg) yaw(deg) ")
-    f_out.write("vx(m/s) vy(m/s) vz(m/s) ax(m/s2) ay(m/s2) az(m/s2) ")
-    f_out.write("wx(rad/s) wy(rad/s) wz(rad/s)\n")
-    
-    # 跳过CSV header
-    header = f_in.readline()
-    
-    # 转换数据行
-    count = 0
-    for line in f_in:
-        line = line.strip()
-        if not line:
-            continue
-        
-        # 解析CSV
-        parts = line.split(',')
-        if len(parts) < 16:
-            print(f"警告: 第{count+1}行数据不完整，跳过")
-            continue
-        
-        # CSV格式: timestamp,pos_x,pos_y,pos_z,roll,pitch,yaw,
-        #          imu_pos_x,imu_pos_y,imu_pos_z,vel_x,vel_y,vel_z,
-        #          uncertainty_x,uncertainty_y,uncertainty_z
-        # 我们需要额外的IMU加速度和角速度，用0填充
-        timestamp = float(parts[0])
-        pos_x, pos_y, pos_z = float(parts[1]), float(parts[2]), float(parts[3])
-        roll, pitch, yaw = float(parts[4]), float(parts[5]), float(parts[6])
-        vel_x, vel_y, vel_z = float(parts[10]), float(parts[11]), float(parts[12])
-        
-        # 转为度（EKF输出的是弧度）
-        roll_deg = roll * 180.0 / 3.14159265359
-        pitch_deg = pitch * 180.0 / 3.14159265359
-        yaw_deg = yaw * 180.0 / 3.14159265359
-        
-        # 从OXTS读取真实IMU数据
-        oxts_file = os.path.join(OXTS_PATH, f'{count:010d}.txt')
-        try:
-            with open(oxts_file, 'r') as f_oxts:
-                oxts_data = list(map(float, f_oxts.readline().split()))
-            # OXTS格式：lat,lon,alt,roll,pitch,yaw,vn,ve,vf,vl,vu,ax,ay,az,af,al,au,wx,wy,wz,...
-            ax, ay, az = oxts_data[11], oxts_data[12], oxts_data[13]
-            wx, wy, wz = oxts_data[17], oxts_data[18], oxts_data[19]
-        except:
-            # 如果读取失败，用0填充
-            ax, ay, az = 0.0, 0.0, 0.0
-            wx, wy, wz = 0.0, 0.0, 0.0
-        
-        # 写入MATLAB格式（空格分隔）
-        f_out.write(f"{timestamp:.6f} {pos_x:.6f} {pos_y:.6f} {pos_z:.6f} ")
-        f_out.write(f"{roll_deg:.6f} {pitch_deg:.6f} {yaw_deg:.6f} ")
-        f_out.write(f"{vel_x:.6f} {vel_y:.6f} {vel_z:.6f} ")
-        f_out.write(f"{ax:.6f} {ay:.6f} {az:.6f} ")
-        f_out.write(f"{wx:.6f} {wy:.6f} {wz:.6f}\n")
-        
-        count += 1
+# -------------------------- 主程序 --------------------------
+def main():
+    print("=" * 60)
+    print("开始转换 EKF 数据为 MATLAB 格式".center(60))
+    print("=" * 60)
+    print(f"📥 输入文件: {INPUT_FILE}")
+    print(f"📤 输出文件: {OUTPUT_FILE}")
+    print(f"📊 OXTS 路径: {OXTS_PATH}")
+    print("-" * 60)
 
-print(f"✓ 转换完成！共{count}行数据")
+    with open(INPUT_FILE, 'r', encoding='utf-8') as f_in, \
+         open(OUTPUT_FILE, 'w', encoding='utf-8') as f_out:
+
+        # MATLAB 头部注释（格式更整齐）
+        header_text = (
+            "% KITTI 07 EKF Fusion Data\n"
+            "% timestamp(s) x(m) y(m) z(m) roll(deg) pitch(deg) yaw(deg) "
+            "vx(m/s) vy(m/s) vz(m/s) ax(m/s2) ay(m/s2) az(m/s2) "
+            "wx(rad/s) wy(rad/s) wz(rad/s)\n"
+        )
+        f_out.write(header_text)
+
+        # 跳过 CSV 表头
+        f_in.readline()
+        count = 0
+
+        # 逐行处理
+        for line_num, line in enumerate(f_in, start=1):
+            line = line.strip()
+            if not line:
+                continue
+
+            # 分割数据
+            parts = line.split(',')
+            if len(parts) < 16:
+                print(f"⚠️  警告: 第{line_num}行数据长度不足，跳过")
+                continue
+
+            # 解析字段（命名更清晰，注释更明确）
+            timestamp = float(parts[0])
+            pos_x, pos_y, pos_z = map(float, parts[1:4])
+            roll, pitch, yaw = map(float, parts[4:7])
+            vel_x, vel_y, vel_z = map(float, parts[10:13])
+
+            # 弧度转角度
+            roll_deg  = np.rad2deg(roll)
+            pitch_deg = np.rad2deg(pitch)
+            yaw_deg   = np.rad2deg(yaw)
+
+            # 读取 OXTS IMU 数据（容错更强）
+            oxts_file = os.path.join(OXTS_PATH, f'{count:010d}.txt')
+            try:
+                with open(oxts_file, 'r', encoding='utf-8') as f_oxts:
+                    oxts_data = list(map(float, f_oxts.readline().split()))
+
+                ax = oxts_data[OXTS_AX_INDEX]
+                ay = oxts_data[OXTS_AY_INDEX]
+                az = oxts_data[OXTS_AZ_INDEX]
+                wx = oxts_data[OXTS_WX_INDEX]
+                wy = oxts_data[OXTS_WY_INDEX]
+                wz = oxts_data[OXTS_WZ_INDEX]
+
+            except FileNotFoundError:
+                ax = ay = az = wx = wy = wz = 0.0
+                print(f"ℹ️  信息: 第{count}帧 OXTS 文件不存在，使用 0 填充")
+            except Exception as e:
+                ax = ay = az = wx = wy = wz = 0.0
+                print(f"⚠️  警告: 第{count}帧 OXTS 读取异常: {str(e)}")
+
+            # 写入输出文件（格式统一、可读性强）
+            output_line = (
+                f"{timestamp:<10.6f} {pos_x:<12.6f} {pos_y:<12.6f} {pos_z:<12.6f} "
+                f"{roll_deg:<10.6f} {pitch_deg:<10.6f} {yaw_deg:<10.6f} "
+                f"{vel_x:<8.6f} {vel_y:<8.6f} {vel_z:<8.6f} "
+                f"{ax:<10.6f} {ay:<10.6f} {az:<10.6f} "
+                f"{wx:<10.6f} {wy:<10.6f} {wz:<10.6f}\n"
+            )
+            f_out.write(output_line)
+            count += 1
+
+    print("-" * 60)
+    print(f"✅ 转换完成！总计处理 {count} 帧数据")
+    print(f"✅ 文件已保存至: {OUTPUT_FILE}")
+    print("=" * 60)
+
+if __name__ == "__main__":
+    main()
