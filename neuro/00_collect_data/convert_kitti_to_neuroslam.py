@@ -19,6 +19,7 @@ import os
 import argparse
 from pathlib import Path
 from scipy.spatial.transform import Rotation
+import sys
 
 
 def parse_kitti_poses(pose_file):
@@ -27,7 +28,8 @@ def parse_kitti_poses(pose_file):
     返回: N x 7 数组 (x, y, z, qw, qx, qy, qz)
     """
     poses = []
-    with open(pose_file, 'r') as f:
+    # 使用 utf-8 编码打开，跨平台兼容
+    with open(pose_file, 'r', encoding='utf-8') as f:
         for line in f:
             values = [float(x) for x in line.strip().split()]
             if len(values) != 12:
@@ -61,15 +63,15 @@ def convert_kitti_sequence(kitti_root, sequence, output_dir):
         sequence: 序列编号 (00, 05, 06等)
         output_dir: 输出目录
     """
-    kitti_root = Path(kitti_root)
-    output_dir = Path(output_dir)
+    kitti_root = Path(kitti_root).resolve()
+    output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"========================================")
     print(f"  转换 KITTI 序列 {sequence}")
     print(f"========================================\n")
     
-    # 输入路径
+    # ====================== 核心修改：跨平台相对路径 ======================
     image_dir = kitti_root / "data_odometry_gray" / "sequences" / sequence / "image_0"
     pose_file = kitti_root / "data_odometry_poses" / "poses" / f"{sequence}.txt"
     calib_file = kitti_root / "data_odometry_calib" / "sequences" / f"{sequence}.txt"
@@ -104,9 +106,10 @@ def convert_kitti_sequence(kitti_root, sequence, output_dir):
     # 转换图像
     print(f"\n[3/4] 转换图像 (调整到 120x160)...")
     for i in range(num_frames):
-        img = cv2.imread(str(image_files[i]), cv2.IMREAD_GRAYSCALE)
+        img_path = str(image_files[i])
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
         if img is None:
-            print(f"  ❌ 无法读取图像: {image_files[i]}")
+            print(f"  ❌ 无法读取图像: {img_path}")
             continue
         
         # 调整图像尺寸为 120x160 (与Town01一致)
@@ -124,7 +127,7 @@ def convert_kitti_sequence(kitti_root, sequence, output_dir):
     # 生成ground_truth.txt
     print("\n[4/4] 生成 ground_truth.txt...")
     gt_file = output_dir / "ground_truth.txt"
-    with open(gt_file, 'w') as f:
+    with open(gt_file, 'w', encoding='utf-8', newline='') as f:
         # 写入表头
         f.write("frame_id,x,y,z,roll,pitch,yaw\n")
         for i in range(num_frames):
@@ -137,7 +140,7 @@ def convert_kitti_sequence(kitti_root, sequence, output_dir):
     # 生成dataset_metadata.txt
     metadata_file = output_dir / "dataset_metadata.txt"
     trajectory_length = np.sum(np.linalg.norm(np.diff(poses[:, :3], axis=0), axis=1))
-    with open(metadata_file, 'w') as f:
+    with open(metadata_file, 'w', encoding='utf-8') as f:
         f.write(f"Dataset: KITTI Odometry Sequence {sequence}\n")
         f.write(f"Frames: {num_frames}\n")
         f.write(f"Image Size: 120x160\n")
@@ -176,13 +179,13 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default=None,
                         help="输出目录 (默认: ../data/01_NeuroSLAM_Datasets/KITTI_Seq_XX)")
     
-    args = parser.parse_args()
+    args = python convert_kitti_to_neuroslam.py --sequence 07 --kitti_root "D:\kitti\KITTI_07"parser.parse_args()
     
-    # 设置默认输出目录
+    script_dir = Path(__file__).parent.resolve()
+
     if args.output_dir is None:
-        script_dir = Path(__file__).parent
-        args.output_dir = script_dir.parent / "data" / "01_NeuroSLAM_Datasets" / f"KITTI_Seq_{args.sequence}"
-    
+        args.output_dir = script_dir / ".." / "data" / "01_NeuroSLAM_Datasets" / f"KITTI_Seq_{args.sequence}"
+
     # 转换数据集
     success = convert_kitti_sequence(args.kitti_root, args.sequence, args.output_dir)
     
@@ -200,3 +203,4 @@ if __name__ == "__main__":
         print(f"")
     else:
         print(f"\n❌ 数据集转换失败")
+        sys.exit(1)
