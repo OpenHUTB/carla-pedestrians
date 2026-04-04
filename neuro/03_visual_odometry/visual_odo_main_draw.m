@@ -2,27 +2,27 @@ function visual_odo_main(visualDataFile,groundTruthFile)
 %     NeuroSLAM System Copyright (C) 2018-2019 
 %     NeuroSLAM: A Brain inspired SLAM System for 3D Environments
 %
-%     Fangwen Yu (www.yufangwen.com), Jianga Shang, Youjian Hu, Michael Milford(www.michaelmilford.com) 
+%     Fangwen Yu (www.yufangwen.com), Jianga Shang, Youjian Hu, Michael Milford(www.michaelmilford.com)
 %
-%     The NeuroSLAM V1.0 (MATLAB) was developed based on the OpenRatSLAM (David et al. 2013). 
+%     The NeuroSLAM V1.0 (MATLAB) was developed based on the OpenRatSLAM (David et al. 2013).
 %     The RatSLAM V0.3 (MATLAB) developed by David Ball, Michael Milford and Gordon Wyeth in 2008.
-% 
+%
 %     Reference:
 %     Ball, David, Scott Heath, Janet Wiles, Gordon Wyeth, Peter Corke, and Michael Milford.
 %     "OpenRatSLAM: an open source brain-based SLAM system." Autonomous Robots 34, no. 3 (2013): 149-176.
-% 
+%
 %     This program is free software: you can redistribute it and/or modify
 %     it under the terms of the GNU General Public License as published by
 %     the Free Software Foundation, either version 3 of the License, or
 %     (at your option) any later version.
-% 
+%
 %     This program is distributed in the hope that it will be useful,
 %     but WITHOUT ANY WARRANTY; without even the implied warranty of
 %     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 %     GNU General Public License for more details.
-% 
+%
 %     You should have received a copy of the GNU General Public License
-%     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+%     along with this program. If not, see <http://www.gnu.org/licenses/>.
 
     %% vo
     % for drawing images for estimating pitch and yaw
@@ -81,7 +81,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
     global DEGREE_TO_RADIAN;
     DEGREE_TO_RADIAN = pi / 180;
    
-    % Transform the angle from radian to degree 
+    % Transform the angle from radian to degree
     global RADIAN_TO_DEGREE;
     RADIAN_TO_DEGREE = 180 / pi;  
     
@@ -89,7 +89,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
     
     IMG_TYPE = '*.png';
           
-    global OFFSET_YAW_ROT; 
+    global OFFSET_YAW_ROT;
     offset_yaw_rot_vector = [];
     offset_yaw_rot_vector(1) = 0;
     
@@ -112,7 +112,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
     curFrame = 0;
 %     step = 1;
 
-%     %  up
+%     % up
     startFrame = 1;
     endFrame = 3000;
 
@@ -160,7 +160,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                 sumHeight(curFrame + 1) = sumHeight(curFrame) + heightV;
                 
                 % For drawing the total rotational angle
-                if  sumRotAngle + yawRotV >= 360
+                if sumRotAngle + yawRotV >= 360
                     sumRotAngle = mod(sumRotAngle + yawRotV, 360);
                 elseif sumRotAngle + yawRotV <= -360
                     sumRotAngle = sumRotAngle + yawRotV + 360;
@@ -171,15 +171,16 @@ function visual_odo_main(visualDataFile,groundTruthFile)
 
                
                 % Transform the vrot from degree to radian
-                yawRotV = yawRotV * DEGREE_TO_RADIAN;  
+                yawRotV = yawRotV * DEGREE_TO_RADIAN;
 
                 % Direction by raw odometry
                 curRotDir(curFrame + 1, 1) = cos(curRotDir(curFrame, 3) + yawRotV );
                 curRotDir(curFrame + 1, 2) = sin(curRotDir(curFrame, 3) + yawRotV );
                 curRotDir(curFrame + 1, 3) = curRotDir(curFrame, 3) + yawRotV;
  
-                odoMapTrajectory(curFrame + 1,1) = odoMapTrajectory(curFrame,1) + transV * cos(sym(curRotDir(curFrame + 1, 3)));
-                odoMapTrajectory(curFrame + 1,2) = odoMapTrajectory(curFrame,2) + transV * sin(sym(curRotDir(curFrame + 1, 3)));
+                % 仅删除 sym()，其余完全不动
+                odoMapTrajectory(curFrame + 1,1) = odoMapTrajectory(curFrame,1) + transV * cos(curRotDir(curFrame + 1, 3));
+                odoMapTrajectory(curFrame + 1,2) = odoMapTrajectory(curFrame,2) + transV * sin(curRotDir(curFrame + 1, 3));
                 odoMapTrajectory(curFrame + 1,3) = odoMapTrajectory(curFrame,3) + heightV;
                 odoMapTrajectory(curFrame + 1,4) = curRotDir(curFrame + 1, 3);
                 
@@ -189,19 +190,19 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                     % computing the normalized profile of horizontal translational image
                     profilesTransImg = sum(SUB_TRANS_IMG);
                     avgIntensity = sum(profilesTransImg) / size(profilesTransImg, 2);
-                    profilesTransImg = profilesTransImg / avgIntensity; 
+                    profilesTransImg = profilesTransImg / avgIntensity;
 
                     
                     % computing the normalized profile of rotational image
                     profilesYawRotImg = sum(SUB_YAW_ROT_IMG);
                     avgIntensity = sum(profilesYawRotImg) / size(profilesYawRotImg, 2);
-                    profilesYawRotImg = profilesYawRotImg / avgIntensity;  
+                    profilesYawRotImg = profilesYawRotImg / avgIntensity;
 
 %                     diffYawRotImgs = profilesYawRotImg - preProfilesYawRotImg;
                     % computing the normalized profile of vertical transV image
                     profilesHeightVImg = sum(SUB_HEIGHT_V_IMG,2);
                     avgIntensity = sum(profilesHeightVImg) / size(profilesHeightVImg, 1);
-                    profilesHeightVImg = profilesHeightVImg / avgIntensity; 
+                    profilesHeightVImg = profilesHeightVImg / avgIntensity;
                     
                     diffHeightVImgs = profilesHeightVImg - preProfilesHeightVImg;
                     
@@ -265,7 +266,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                     axis on
                     
                     figure(3)
-                     % render current rot direction 
+                     % render current rot direction
                     subplot(1, 1, 1, 'replace');
                     polar(theta,rho);
                     hold on
@@ -312,7 +313,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                    
                     % draw the the normalized profile of rotational image
                     subplot(3,4,6, 'replace');
-                    hold on 
+                    hold on
                     plot(1: size(profilesYawRotImg,2),profilesYawRotImg, 'r');
                     plot(1: size(preProfilesYawRotImg,2),preProfilesYawRotImg, 'g');
                     hold off
@@ -334,7 +335,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                     
                     % draw the the normalized profile of height v image
                     subplot(3,4,7, 'replace');
-                    hold on 
+                    hold on
                     plot(profilesHeightVImg, 1: size(profilesHeightVImg,1), 'r');
                     plot(preProfilesHeightVImg, 1: size(preProfilesHeightVImg,1), 'g');
                     hold off
@@ -371,12 +372,12 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                     title('Offset yaw rotation');
                     xlabel('Time');
                     ylabel('Offset');
-                    axis on                   
+                    axis on
                     
-%                     figure(3) 
-%                     
-%                      subplot(1,1,1, 'replace');
-%                     hold on 
+%                     figure(3)
+%
+%                     subplot(1,1,1, 'replace');
+%                     hold on
 %                     plot(1: size(diffHeightVImgs,1),diffHeightVImgs, 'r');
 %                     hold off
 % %                     legend('r: curr', 'g: prev');
