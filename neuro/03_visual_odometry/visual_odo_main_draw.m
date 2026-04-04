@@ -40,12 +40,18 @@ function visual_odo_main(visualDataFile,groundTruthFile)
     
     %% read imgs as VT input
 
+    % 改为相对路径兼容（自动获取当前文件夹）
+    visualDataFile = fullfile(pwd, visualDataFile);
+
     % get the visual data info
     [subFoldersPathSet, numSubFolders] = get_images_data_info(visualDataFile);
 
     % load ground truth data
-    [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz] = load_ground_truth_data(groundTruthFile);
-    groundTruthData = [gt_x gt_y gt_z];
+    if nargin > 1
+        groundTruthFile = fullfile(pwd, groundTruthFile);
+        [frameId, gt_x, gt_y, gt_z, gt_rx, gt_ry, gt_rz] = load_ground_truth_data(groundTruthFile);
+        groundTruthData = [gt_x gt_y gt_z];
+    end
     
     % define temp variables of previous profiles
     preProfilesTransImg = zeros(1,ODO_IMG_TRANS_RESIZE_RANGE(2));
@@ -178,10 +184,12 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                 curRotDir(curFrame + 1, 2) = sin(curRotDir(curFrame, 3) + yawRotV );
                 curRotDir(curFrame + 1, 3) = curRotDir(curFrame, 3) + yawRotV;
  
-                odoMapTrajectory(curFrame + 1,1) = odoMapTrajectory(curFrame,1) + transV * cos(sym(curRotDir(curFrame + 1, 3)));
-                odoMapTrajectory(curFrame + 1,2) = odoMapTrajectory(curFrame,2) + transV * sin(sym(curRotDir(curFrame + 1, 3)));
+                % ====================== 已删除 sym() ======================
+                odoMapTrajectory(curFrame + 1,1) = odoMapTrajectory(curFrame,1) + transV * cos(curRotDir(curFrame + 1, 3));
+                odoMapTrajectory(curFrame + 1,2) = odoMapTrajectory(curFrame,2) + transV * sin(curRotDir(curFrame + 1, 3));
                 odoMapTrajectory(curFrame + 1,3) = odoMapTrajectory(curFrame,3) + heightV;
                 odoMapTrajectory(curFrame + 1,4) = curRotDir(curFrame + 1, 3);
+                % ==========================================================
                 
                 % render results information
                 if (mod(curFrame, RENDER_RATE) == 0)
@@ -237,8 +245,8 @@ function visual_odo_main(visualDataFile,groundTruthFile)
 %                     subplot(1, 2, 2, 'replace');
 %                     hold on
 %                     plot3((odoMapTrajectory(:,2))* ODO_MAP_X_SCALING , ...
-%                         (odoMapTrajectory(:,1)) * ODO_MAP_Y_SCALING, ...
-%                         (odoMapTrajectory(:,3) ) * ODO_MAP_Z_SCALING, '.b');
+%                     (odoMapTrajectory(:,1)) * ODO_MAP_Y_SCALING, ...
+%                     (odoMapTrajectory(:,3) ) * ODO_MAP_Z_SCALING, '.b');
 %                     
 % %                     plot3((gt_x(1:curFrame) - gt_x(1)) * GT_ODO_X_SCALING, ...
 % %                         (gt_y(1:curFrame) - gt_y(1)) * GT_ODO_Y_SCALING, ...
