@@ -22,7 +22,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
 %     GNU General Public License for more details.
 % 
 %     You should have received a copy of the GNU General Public License
-%     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+%     along with this program. If not, see <http://www.gnu.org/licenses/>.
 
     %% vo
     % for drawing images for estimating pitch and yaw
@@ -193,8 +193,8 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                 curRotDir(curFrame + 1, 2) = sin(curRotDir(curFrame, 3) + yawRotV );
                 curRotDir(curFrame + 1, 3) = curRotDir(curFrame, 3) + yawRotV;
  
-                odoMapTrajectory(curFrame + 1,1) = odoMapTrajectory(curFrame,1) + transV * cos(sym(curRotDir(curFrame + 1, 3)));
-                odoMapTrajectory(curFrame + 1,2) = odoMapTrajectory(curFrame,2) + transV * sin(sym(curRotDir(curFrame + 1, 3)));
+                odoMapTrajectory(curFrame + 1,1) = odoMapTrajectory(curFrame,1) + transV * cos(curRotDir(curFrame + 1, 3));
+                odoMapTrajectory(curFrame + 1,2) = odoMapTrajectory(curFrame,2) + transV * sin(curRotDir(curFrame + 1, 3));
                 odoMapTrajectory(curFrame + 1,3) = odoMapTrajectory(curFrame,3) + heightV;
                 odoMapTrajectory(curFrame + 1,4) = curRotDir(curFrame + 1, 3);
                 
