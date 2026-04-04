@@ -22,7 +22,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
 %     GNU General Public License for more details.
 % 
 %     You should have received a copy of the GNU General Public License
-%     along with this program. If not, see <http://www.gnu.org/licenses/>.
+%     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
     %% vo
     % for drawing images for estimating pitch and yaw
@@ -384,7 +384,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                     
 %                     figure(3) 
 %                     
-%                      subplot(1,1,1, 'replace');
+%                     subplot(1,1,1, 'replace');
 %                     hold on 
 %                     plot(1: size(diffHeightVImgs,1),diffHeightVImgs, 'r');
 %                     hold off
