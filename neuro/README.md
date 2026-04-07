@@ -1,394 +1,177 @@
-# 🧠 NeuroSLAM: Brain-Inspired 3D SLAM System
-
-**Version 2.0** | IMU-Visual Fusion + HART+CORnet Feature Extraction
-
-[![MATLAB](https://img.shields.io/badge/MATLAB-R2020b+-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Python](https://img.shields.io/badge/Python-3.7+-green.svg)](https://www.python.org/)
-[![CARLA](https://img.shields.io/badge/CARLA-0.9.15-orange.svg)](https://carla.org/)
-[![License](https://img.shields.io/badge/License-GPL--3.0-red.svg)](LICENSE)
-
-A biologically-inspired Simultaneous Localization and Mapping (SLAM) system that mimics the spatial cognition mechanisms of the rat hippocampus, enhanced with state-of-the-art computer vision techniques.
-
----
-
-## 🌟 Key Features
-
-- 🧠 **Bio-Inspired Architecture**
-  - Grid Cell network for 3D position encoding (61×61×51)
-  - Head Direction Cell network for orientation estimation
-  - Experience Map for topological-metric mapping
-
-- 🎯 **Multi-Sensor Fusion**
-  - RGB camera (640×480, 20Hz)
-  - IMU (accelerometer + gyroscope, 100Hz)
-  - Complementary filter fusion for robust odometry
-
-- 🚀 **Advanced Feature Extraction**
-  - **HART+CORnet**: Hierarchical brain-like visual features (V1→V2→V4→IT)
-  - **Simplified Enhanced**: 71 FPS (5.92× speedup) with strong robustness
-  - Spatial attention mechanism and LSTM temporal modeling
-
-- 📊 **Comprehensive Evaluation**
-  - ATE/RPE metrics
-  - Ground truth comparison
-  - 7 publication-quality figures
-
-- 🔄 **Real-time Performance**
-  - 30-70 FPS processing speed
-  - Supports trajectories >1.5 km
-  - Town01: 95.3% trajectory completeness, 152.87m RMSE
-
----
-
-## 📋 Table of Contents
-
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Dataset](#dataset)
-- [Usage](#usage)
-- [Documentation](#documentation)
-- [Performance](#performance)
-- [Citation](#citation)
-- [License](#license)
-
----
-
-## 🔧 Installation
-
-### Prerequisites
-
-- **MATLAB** R2020b or later
-- **Python** 3.7+ (for data collection)
-- **CARLA Simulator** 0.9.13-0.9.15 (optional, for data collection)
-
-### Python Dependencies
-
-```bash
-cd neuro/00_collect_data
-pip install -r requirements.txt
-```
-
-### MATLAB Setup
-
-```matlab
-% Open MATLAB and navigate to the neuro directory
-cd /path/to/neuro
-
-% Add all paths
-addpath(genpath('.'));
-savepath;
-```
-
----
-
-## 🚀 Quick Start
-
-### Option 1: Fast Test (30 seconds)
-
-Test the feature extractor with built-in images:
-
-```matlab
-cd neuro
-quick_test_integration
-```
-
-**Expected output:**
-- ✓ Feature extraction: 71 FPS
-- ✓ VT count: 5-6
-- ✓ Template reuse rate: 75%
-
-### Option 2: Full SLAM on Town01 (5 minutes)
-
-Run complete SLAM with HART+CORnet features:
-
-```matlab
-cd neuro/07_test/test_imu_visual_slam
-test_imu_visual_slam_hart_cornet
-```
-
-**Expected results (5000 frames, ~1.8km):**
-- VT count: 5
-- Experience nodes: 185
-- RMSE: 152.87m
-- Trajectory completeness: 95.3%
-
----
-
-## 📁 Dataset
-
-### Data Structure
-
-```
-neuro/data/01_NeuroSLAM_Datasets/
-├── Town01Data_IMU_Fusion/
-│   ├── 0001.png - 5000.png      # RGB image sequence
-│   ├── aligned_imu.txt           # IMU data
-│   ├── fusion_pose.txt           # EKF fusion poses
-│   └── ground_truth.txt          # Ground truth trajectory
-└── Town10Data_IMU_Fusion/
-    └── (same structure)
-```
-
-### Acquire Datasets
-
-**Note:** Datasets are **NOT included** in this repository due to size (~5GB).
-
-#### Method 1: Collect Your Own (Recommended)
-
-```bash
-# 1. Start CARLA server
-cd /path/to/carla-0.9.15
-./CarlaUE4.sh
-
-# 2. Run data collection script
-cd neuro/00_collect_data
-python IMU_Vision_Fusion_EKF.py
-```
-
-Configure in the script:
-- `TOWN = 'Town01'` or `'Town10'`
-- `DURATION = 250` seconds
-- Data auto-saved to `neuro/data/01_NeuroSLAM_Datasets/`
-
-#### Method 2: Download Pre-collected Data
-
-If available, download from:
-- Town01: [Link TBD]
-- Town10: [Link TBD]
-
-See `data/01_NeuroSLAM_Datasets/README.md` for details.
-
----
-
-## 📖 Usage
-
-### Switch Between Feature Extractors
-
-```matlab
-% In test_imu_visual_slam_hart_cornet.m (line 15)
-
-USE_HART_CORNET = true;   % HART+CORnet (best trajectory completeness)
-USE_HART_CORNET = false;  % Simplified Enhanced (best speed & RMSE)
-```
-
-### Tune Parameters
-
-```matlab
-% VT matching threshold (line 106)
-VT_MATCH_THRESHOLD = 0.07;  % Lower = more VTs, higher precision
-
-% Experience map threshold
-DELTA_EXP_GC_HDC_THRESHOLD = 15;  % Node creation threshold
-
-% IMU-Visual fusion weights (in imu_aided_visual_odometry.m)
-ALPHA_YAW = 0.7;     % 70% IMU for yaw
-ALPHA_TRANS = 0.3;   % 30% IMU for translation
-```
-
-### Run on Custom Dataset
-
-```matlab
-% Modify data path in your script
-scriptDir = fileparts(mfilename('fullpath'));
-neuroRoot = fileparts(scriptDir);
-datasetPath = fullfile(neuroRoot, 'data/MyDataset');
-
-% Run SLAM
-cd neuro/07_test/test_imu_visual_slam
-test_imu_visual_slam_hart_cornet
-```
-
----
-
-## 📚 Documentation
-
-| Document | Description |
-|----------|-------------|
-| **`COMPLETE_SYSTEM_GUIDE.md`** | 📘 Complete technical guide (60+ KB) |
-| **`QUICK_START_VISUAL_GUIDE.md`** | 🚀 Visual quick start guide |
-| **`HART_CORNET_SUMMARY.md`** | 🧠 HART+CORnet feature extractor |
-| **`PATH_USAGE_GUIDE.md`** | 📂 Relative path usage guide |
-| **`START_HERE.md`** | ⭐ Original quick start |
-
-**Start with:** `QUICK_START_VISUAL_GUIDE.md` → `COMPLETE_SYSTEM_GUIDE.md`
-
----
-
-## 📊 Performance Benchmarks
-
-### Town01 (5000 frames, ~1.8 km)
-
-| Method | VTs | Nodes | RMSE | Trajectory % | Speed |
-|--------|-----|-------|------|--------------|-------|
-| **Original** | 5 | 186 | 129.39m | 95.3% | ~25 FPS |
-| **Simplified Enhanced** | 1365 | 2022 | **142.57m** ✅ | 38% | **71 FPS** ✅ |
-| **HART+CORnet** | 5 | 185 | 152.87m | **95.3%** ✅ | ~30 FPS |
-
-**Recommendation:**
-- **Speed priority** → Simplified Enhanced (71 FPS)
-- **Long trajectory** → HART+CORnet (95% completeness)
-- **Local precision** → Simplified Enhanced (143m RMSE)
-
-### Town10 (5000 frames, ~1.6 km)
-
-| Method | VTs | Nodes | RMSE | Trajectory % | Drift Rate |
-|--------|-----|-------|------|--------------|------------|
-| **HART+CORnet** | 5 | 151 | 229.95m | 87.9% | 24.4% |
-
-*Note: Town10 can be improved by lowering VT threshold to 0.05*
-
----
-
-## 🏗️ System Architecture
-
-```
-Input (RGB + IMU)
-    ↓
-IMU-Visual Fusion Odometry
-    ↓
-    ├─→ Visual Template Matching (HART+CORnet)
-    │   └─→ VT ID
-    ↓
-    ├─→ Head Direction Cell Network
-    │   └─→ (yaw, height)
-    ↓
-    ├─→ 3D Grid Cell Network
-    │   └─→ (x, y, z)
-    ↓
-Experience Map (Topological + Metric)
-    ├─→ Node creation
-    ├─→ Graph optimization
-    └─→ Trajectory output
-        ↓
-Evaluation & Visualization
-    └─→ ATE/RPE, figures
-```
-
----
-
-## 🔬 Scientific Background
-
-### Neuroscience Inspiration
-
-- **Grid Cells**: Nobel Prize 2014, spatial encoding in entorhinal cortex
-- **Place Cells**: Hippocampal location recognition
-- **Head Direction Cells**: Orientation sensing
-- **Visual Cortex**: V1→V2→V4→IT hierarchical processing
-
-### Key References
-
-1. **NeuroSLAM**:
-   ```
-   Yu, F., Shang, J., Hu, Y., & Milford, M. (2019).
-   NeuroSLAM: a brain-inspired SLAM system for 3D environments.
-   Biological Cybernetics, 113(5-6), 515-545.
-   ```
-
-2. **HART (Hierarchical Attentive Recurrent Tracking)**:
-   ```
-   Kosiorek, A. R., Bewley, A., & Posner, I. (2017).
-   Hierarchical Attentive Recurrent Tracking. NIPS 2017.
-   ```
-
-3. **CORnet (Brain-Like Object Recognition)**:
-   ```
-   Kubilius, J., et al. (2018).
-   Brain-like Object Recognition with High-Performing Shallow Recurrent ANNs.
-   NeurIPS 2018.
-   ```
-
----
-
-## 📁 Project Structure
-
-```
-neuro/
-├── 00_collect_data/              # CARLA data collection
-├── 01_conjunctive_pose_cells_network/  # Grid Cell + HDC
-├── 02_multilayered_experience_map/      # Experience map
-├── 03_visual_odometry/           # Visual odometry
-├── 04_visual_template/           # Feature extraction (HART+CORnet)
-├── 05_tookit/                    # Utilities
-├── 06_main/                      # Main entry points
-├── 07_test/                      # Test scripts
-├── 09_vestibular/                # IMU fusion
-├── data/                         # Datasets (not in repo)
-├── latex/                        # LaTeX documents
-└── referance/                    # References
-```
-
----
-
-## 🐛 Troubleshooting
-
-### "Undefined function or variable"
-
-```matlab
-cd /path/to/neuro
-addpath(genpath('.'));
-savepath;
-```
-
-### "Data files not found"
-
-See `data/01_NeuroSLAM_Datasets/README.md` for data acquisition.
-
-### VT count abnormal
-
-```matlab
-% Too many VTs (>2000): increase threshold
-VT_MATCH_THRESHOLD = 0.10;
-
-% Too few VTs (<5): decrease threshold
-VT_MATCH_THRESHOLD = 0.05;
-```
-
-More troubleshooting: See `COMPLETE_SYSTEM_GUIDE.md` Section 9.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **Original NeuroSLAM**: Fangwen Yu, Jianga Shang, Youjian Hu, Michael Milford
-- **OpenRatSLAM**: David Ball, Gordon Wyeth, Michael Milford
-- **CARLA Simulator**: CARLA Team
-- **HART**: Adam Kosiorek, Alex Bewley, Ingmar Posner
-- **CORnet**: Jonas Kubilius, Martin Schrimpf, Daniel Yamins
-
----
-
-## 📧 Contact
-
-- **Issues**: [GitHub Issues](https://github.com/your-username/neuro/issues)
-- **Email**: [your-email@example.com]
-- **Website**: [Project Homepage]
-
----
-
-## 🌟 Star History
-
-If you find this project helpful, please consider giving it a ⭐!
-
----
-
-**Last Updated**: 2025-12-07  
-**Version**: 2.0 (IMU-Visual Fusion + HART+CORnet)  
-**Status**: ✅ Stable and Ready for Use
+图 2 互补 IMU - 视觉融合架构
+一、图的核心内容
+左子图：频率响应曲线
+蓝色曲线：视觉系统的低通滤波器幅频响应（低频保留、高频衰减）
+橙色曲线：IMU（前庭系统）的高通滤波器幅频响应（高频保留、低频衰减）
+标注了截止频率 
+ω 
+c
+​
+ =10 rad/s
+，以及该点的幅值 
+R=0.707
+（-3dB 点），是互补滤波器的核心参数。
+中子图：时域信号融合效果
+黑色虚线：地面真值（GT）速度
+蓝色曲线：视觉原始速度（低频稳定、但响应慢）
+黄色曲线：IMU 原始速度（高频灵敏、但有漂移）
+绿色曲线：融合后的速度（结合两者优势，无漂移、响应快）
+标注了融合前后的误差指标（
+X 3.52→Y 1.74493
+），验证融合效果。
+右子图：生物系统类比框图
+视觉系统（眼睛）对应低通滤波，前庭系统（耳朵）对应高通滤波
+中枢神经系统（CNS，前庭核 + 小脑）完成融合，输出鲁棒的自运动估计
+标注了融合公式 
+v 
+f
+ =H_LP⋅v 
+vis
+ +H_HP⋅v 
+imu
+ 
+，以及核心优势（无漂移、快速响应）。
+二、对应仓库文件
+绘图脚本：neuro/kbs/fig/imu_visual_complementary_fusion.py
+生成 PDF：neuro/kbs/fig/imu_visual_complementary_f...pdf
+数据来源：CARLA 仿真环境采集的视觉 / IMU 同步传感器数据
+三、绘制方法（可直接复现）
+工具依赖：scipy.signal（滤波器设计、频率响应计算）、matplotlib + numpy（绘图）、matplotlib.patches（框图绘制）
+运行步骤：
+执行 python imu_visual_complementary_fusion.py
+脚本自动生成频率响应曲线、时域融合曲线、生物类比框图
+输出 PDF 文件 imu_visual_complementary_fusion.pdf
+图 3 3D 网格细胞网络与 4-DoF 编码
+一、图的核心内容
+左子图：3D 网格细胞活动分布
+展示 
+61×61×61
+ 网格细胞的 3D 分层活动强度，用色阶区分不同深度的活动分布，对应空间位置的分布式编码。
+标注了网格细胞的规模（
+61×61×61 neurons
+）和头方向细胞的关联。
+中子图：简单立方 vs FCC 晶格对比
+对比简单立方与 FCC（面心立方）两种晶格结构，FCC 为网格细胞的最优空间拓扑。
+标注了晶格的坐标变换关系 
+m(x=0)−z/2→2/a
+。
+右子图：4-DoF 位姿编码流程
+3D 网格细胞编码 3D 位置，头方向细胞（Hdc）编码 1D 航向，两者拼接为 
+[g_xyz;h_ψ]
+标注了核心解码公式，最终输出 4-DoF（3D 位置 + 1D 航向）位姿表示。
+二、对应仓库文件
+绘图脚本：neuro/kbs/fig/3d_grid_cell_fcc_lattice.py
+生成 PDF：neuro/kbs/fig/3d_grid_cell_fcc_lattice.pdf
+数据来源：模型输出的网格细胞活动场矩阵、FCC 晶格坐标数据
+三、绘制方法（可直接复现）
+工具依赖：matplotlib.mplot3d（3D 可视化）、numpy（FCC 晶格坐标计算）、matplotlib.patches（框图绘制）
+运行步骤：
+执行 python 3d_grid_cell_fcc_lattice.py
+脚本生成 3D 活动分布、晶格对比、4-DoF 编码流程框图
+输出 PDF 文件 3d_grid_cell_fcc_lattice.pdf
+图 4 Town01/MH03 代表性性能
+一、图的核心内容
+Town01 性能指标（左上）
+柱状图展示核心指标：RMSE (
+145.5 m
+)、Drift% (
+11.9%
+)、RPE (
+0.82
+)、VT (
+125
+)、Loops (
+47
+)
+Town01 误差演化（右上）
+逐帧 ATE 误差曲线，对比 NeuroLocMap、EKF Fusion、Visual Odometry 三种方法，体现 NeuroLocMap 的低误差优势
+MH03 性能指标（左下）
+柱状图展示核心指标：RMSE (
+3.3 m
+)、Drift% (
+2.1%
+)、RPE (
+0.18
+)、VT (
+171
+)、Loops (
+8
+)
+MH03 误差演化（右下）
+逐帧 ATE 误差曲线，对比三种方法，验证 NeuroLocMap 在小场景下的鲁棒性
+二、对应仓库文件
+绘图脚本：neuro/kbs/fig/representative_performance.py
+生成 PDF：neuro/kbs/fig/representative_performance....pdf
+数据来源：Town01、MH03 数据集的 SLAM 定位结果、逐帧误差数据
+三、绘制方法（可直接复现）
+工具依赖：matplotlib（绘图）、pandas（整理实验指标、逐帧误差数据）
+运行步骤：
+执行 python representative_performance.py
+脚本读取实验数据，生成指标柱状图、误差演化曲线
+输出 PDF 文件 representative_performance.pdf
+图 5 消融实验 + 视觉模板增长
+一、图的核心内容
+左子图：消融实验 RMSE 对比
+柱状图对比 5 种模型配置：Full、w/o IMU、w/o Exp Map、w/o Transformer、w/o Dual-stream
+标注了各配置的 RMSE 数值（Full:
+145.5 m
+，w/o IMU:
+315.3 m
+等），添加误差棒体现结果稳定性
+右子图：视觉模板增长曲线
+6 个数据集（Town01/Town02/Town10/MH01/MH03/KITTI07）的视觉模板数随帧索引的增长曲线
+对比 RatSLAM 基线（≈5 个模板），标注 Town10 的 195 个模板，体现模型的模板积累能力
+二、对应仓库文件
+绘图脚本：neuro/kbs/fig/ablation_unified.py、neuro/kbs/fig/vt_growth_all_datasets.py
+生成 PDF：neuro/kbs/fig/ablation_unified.pdf、neuro/kbs/fig/vt_growth_all_datasets.pdf
+数据来源：消融实验结果、各数据集的视觉模板数时序数据
+三、绘制方法（可直接复现）
+工具依赖：matplotlib + seaborn（绘图）、numpy（整理模板数时序数据、消融实验数据）
+运行步骤：
+执行 python ablation_unified.py 生成消融实验图
+执行 python vt_growth_all_datasets.py 生成模板增长图
+输出对应 PDF 文件
+图 6 6 数据集性能汇总
+一、图的核心内容
+(a) RMSE 对比柱状图
+6 个数据集（Town01/Town02/Town10/KITTI07/MH01/MH03）的 NeuroLocMap/EKF/VO 三种方法 RMSE 对比
+(b) 提升率气泡图
+相对 EKF 的提升率，气泡大小与轨迹长度成正比，标注各数据集的提升百分比（如 Town10:
+58.5%
+）
+(c) 成功率饼图
+定位成功率
+83%
+（5/6 数据集成功），
+17%
+失败（对应 MH01）
+二、对应仓库文件
+绘图脚本：neuro/kbs/fig/performance_summary.py
+生成 PDF：neuro/kbs/fig/performance_summary.pdf
+数据来源：6 个数据集的 SLAM 定位结果、RMSE 统计数据
+三、绘制方法（可直接复现）
+工具依赖：matplotlib（绘图）、pandas（计算提升率、整理汇总数据）
+运行步骤：
+执行 python performance_summary.py
+脚本读取汇总数据，生成 RMSE 对比、提升率气泡图、成功率饼图
+输出 PDF 文件 performance_summary.pdf
+图 7 KITTI07 输入 - 输出可视化
+一、图的核心内容
+左上：RGB Images
+KITTI07 数据集的 4 个关键帧（Frame77/110/330/551），展示视觉输入
+左下：IMU Sensor Data
+IMU 加速度（Accel）、角速度（GyroZ）的时序曲线，标注关键帧位置
+右上：3D Trajectory Comparison
+地面真值（Ground Truth）与 NeuroLocMap 预测轨迹的 3D 对比，标注起点（绿）、终点（红）
+右下：Experience Map Topology
+经验图拓扑结构：51 个节点、8 个闭环，蓝色实线为顺序链接，绿色虚线为闭环边，标注起点 / 终点
+二、对应仓库文件
+绘图脚本：neuro/kbs/fig/KITTI_07_input_output_visualization.py
+生成 PDF：neuro/kbs/fig/KITTI_07_input_output_visuali...pdf
+数据来源：KITTI07 数据集的 RGB 图像、IMU 数据、定位轨迹、经验图拓扑数据
+三、绘制方法（可直接复现）
+工具依赖：cv2（OpenCV，读取关键帧图像）、matplotlib.mplot3d（3D 轨迹）、networkx（绘制经验图节点、边、闭环）、matplotlib（IMU 时序曲线）
+运行步骤：
+执行 python KITTI_07_input_output_visualization.py
+脚本读取 KITTI07 数据，生成全链路可视化图
+输出 PDF 文件 KITTI_07_input_output_visualization.pdf
