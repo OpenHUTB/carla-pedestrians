@@ -1,28 +1,30 @@
-图 2 互补 IMU - 视觉融合架构
-一、图的核心内容
-左子图：频率响应曲线
-蓝色曲线：视觉系统的低通滤波器幅频响应（低频保留、高频衰减）
-橙色曲线：IMU（前庭系统）的高通滤波器幅频响应（高频保留、低频衰减）
-标注了截止频率 
+📊 Paper Figures 2-7: Drawing Method & Reproduction Guide
+This document details the drawing logic, corresponding scripts, data sources, and reproduction steps for all core figures in the paper, fully aligned with the repository structure.
+📌 Figure 2: Complementary IMU-Visual Fusion Architecture
+1. Figure Core Content
+Left Subplot (Frequency Response)
+Blue curve: Low-pass filter amplitude-frequency response of the visual system (low-frequency retention, high-frequency attenuation)
+Orange curve: High-pass filter amplitude-frequency response of the IMU (vestibular system) (high-frequency retention, low-frequency attenuation)
+Cutoff frequency 
 ω 
 c
 ​
  =10 rad/s
-，以及该点的幅值 
+, amplitude 
 R=0.707
-（-3dB 点），是互补滤波器的核心参数。
-中子图：时域信号融合效果
-黑色虚线：地面真值（GT）速度
-蓝色曲线：视觉原始速度（低频稳定、但响应慢）
-黄色曲线：IMU 原始速度（高频灵敏、但有漂移）
-绿色曲线：融合后的速度（结合两者优势，无漂移、响应快）
-标注了融合前后的误差指标（
+ (-3dB point) marked as the core parameter of the complementary filter
+Middle Subplot (Time-Domain Fusion)
+Black dashed line: Ground Truth (GT) velocity
+Blue curve: Raw visual velocity (stable at low frequencies, slow response)
+Yellow curve: Raw IMU velocity (sensitive at high frequencies, with drift)
+Green curve: Fused velocity (combines advantages of both, drift-free, fast response)
+Error metrics before/after fusion (
 X 3.52→Y 1.74493
-），验证融合效果。
-右子图：生物系统类比框图
-视觉系统（眼睛）对应低通滤波，前庭系统（耳朵）对应高通滤波
-中枢神经系统（CNS，前庭核 + 小脑）完成融合，输出鲁棒的自运动估计
-标注了融合公式 
+) marked to verify fusion effect
+Right Subplot (Biological Analogy)
+Visual system (eyes) corresponds to low-pass filtering, vestibular system (ears) corresponds to high-pass filtering
+CNS (vestibular nuclei + cerebellum) completes fusion to output robust self-motion estimation
+Fusion formula 
 v 
 f
  =H_LP⋅v 
@@ -30,148 +32,154 @@ vis
  +H_HP⋅v 
 imu
  
-，以及核心优势（无漂移、快速响应）。
-二、对应仓库文件
-绘图脚本：neuro/kbs/fig/imu_visual_complementary_fusion.py
-生成 PDF：neuro/kbs/fig/imu_visual_complementary_f...pdf
-数据来源：CARLA 仿真环境采集的视觉 / IMU 同步传感器数据
-三、绘制方法（可直接复现）
-工具依赖：scipy.signal（滤波器设计、频率响应计算）、matplotlib + numpy（绘图）、matplotlib.patches（框图绘制）
-运行步骤：
-执行 python imu_visual_complementary_fusion.py
-脚本自动生成频率响应曲线、时域融合曲线、生物类比框图
-输出 PDF 文件 imu_visual_complementary_fusion.pdf
-图 3 3D 网格细胞网络与 4-DoF 编码
-一、图的核心内容
-左子图：3D 网格细胞活动分布
-展示 
+ and core advantages (drift-free, fast response) marked
+2. Corresponding Repository Files
+Drawing Script: neuro/kbs/fig/generate_imu_visual_fusion.py
+Generated PDF: neuro/kbs/fig/imu_visual_complementary_fusion.pdf
+Data Source: Synchronized visual/IMU sensor data collected from CARLA simulation environment
+3. Reproduction Method
+Dependencies: scipy.signal (filter design), matplotlib + numpy (plotting), matplotlib.patches (block diagram drawing)
+Run Command:
+bash
+运行
+python generate_imu_visual_fusion.py
+Output: PDF file imu_visual_complementary_fusion.pdf
+📌 Figure 3: 3D Grid Cell Network & 4-DoF Encoding
+1. Figure Core Content
+Left Subplot (3D Grid Cell Activity)
+3D layered activity distribution of 
 61×61×61
- 网格细胞的 3D 分层活动强度，用色阶区分不同深度的活动分布，对应空间位置的分布式编码。
-标注了网格细胞的规模（
+ grid cells, with color scales distinguishing activity intensity at different depths, corresponding to distributed encoding of spatial positions
+Grid cell scale (
 61×61×61 neurons
-）和头方向细胞的关联。
-中子图：简单立方 vs FCC 晶格对比
-对比简单立方与 FCC（面心立方）两种晶格结构，FCC 为网格细胞的最优空间拓扑。
-标注了晶格的坐标变换关系 
+) and head direction cell association marked
+Middle Subplot (Simple Cubic vs FCC Lattice)
+Comparison of simple cubic and FCC (face-centered cubic) lattice structures, with FCC as the optimal spatial topology for grid cells
+Lattice coordinate transformation relation 
 m(x=0)−z/2→2/a
-。
-右子图：4-DoF 位姿编码流程
-3D 网格细胞编码 3D 位置，头方向细胞（Hdc）编码 1D 航向，两者拼接为 
+ marked
+Right Subplot (4-DoF Pose Encoding)
+3D grid cells encode 3D position, head direction cells (Hdc) encode 1D heading, concatenated as 
 [g_xyz;h_ψ]
-标注了核心解码公式，最终输出 4-DoF（3D 位置 + 1D 航向）位姿表示。
-二、对应仓库文件
-绘图脚本：neuro/kbs/fig/3d_grid_cell_fcc_lattice.py
-生成 PDF：neuro/kbs/fig/3d_grid_cell_fcc_lattice.pdf
-数据来源：模型输出的网格细胞活动场矩阵、FCC 晶格坐标数据
-三、绘制方法（可直接复现）
-工具依赖：matplotlib.mplot3d（3D 可视化）、numpy（FCC 晶格坐标计算）、matplotlib.patches（框图绘制）
-运行步骤：
-执行 python 3d_grid_cell_fcc_lattice.py
-脚本生成 3D 活动分布、晶格对比、4-DoF 编码流程框图
-输出 PDF 文件 3d_grid_cell_fcc_lattice.pdf
-图 4 Town01/MH03 代表性性能
-一、图的核心内容
-Town01 性能指标（左上）
-柱状图展示核心指标：RMSE (
+Core decoding formula marked, final output of 4-DoF (3D position + 1D heading) pose representation
+2. Corresponding Repository Files
+Drawing Script: neuro/kbs/fig/generate_fig_3d_grid_cell.py
+Generated PDF: neuro/kbs/fig/3d_grid_cell_fcc_lattice.pdf
+Data Source: Grid cell activity field matrix output by the model, FCC lattice coordinate data
+3. Reproduction Method
+Dependencies: matplotlib.mplot3d (3D visualization), numpy (FCC lattice coordinate calculation), matplotlib.patches (block diagram drawing)
+Run Command:
+bash
+运行
+python generate_fig_3d_grid_cell.py
+Output: PDF file 3d_grid_cell_fcc_lattice.pdf
+📌 Figure 4: Town01/MH03 Representative Performance
+1. Figure Core Content
+Town01 Performance Metrics (Top-Left)
+Bar chart showing core metrics: RMSE (
 145.5 m
-)、Drift% (
+), Drift% (
 11.9%
-)、RPE (
+), RPE (
 0.82
-)、VT (
+), VT (
 125
-)、Loops (
+), Loops (
 47
 )
-Town01 误差演化（右上）
-逐帧 ATE 误差曲线，对比 NeuroLocMap、EKF Fusion、Visual Odometry 三种方法，体现 NeuroLocMap 的低误差优势
-MH03 性能指标（左下）
-柱状图展示核心指标：RMSE (
+Town01 Error Evolution (Top-Right)
+Frame-by-frame ATE error curve, comparing NeuroLocMap, EKF Fusion, Visual Odometry, demonstrating NeuroLocMap's low-error advantage
+MH03 Performance Metrics (Bottom-Left)
+Bar chart showing core metrics: RMSE (
 3.3 m
-)、Drift% (
+), Drift% (
 2.1%
-)、RPE (
+), RPE (
 0.18
-)、VT (
+), VT (
 171
-)、Loops (
+), Loops (
 8
 )
-MH03 误差演化（右下）
-逐帧 ATE 误差曲线，对比三种方法，验证 NeuroLocMap 在小场景下的鲁棒性
-二、对应仓库文件
-绘图脚本：neuro/kbs/fig/representative_performance.py
-生成 PDF：neuro/kbs/fig/representative_performance....pdf
-数据来源：Town01、MH03 数据集的 SLAM 定位结果、逐帧误差数据
-三、绘制方法（可直接复现）
-工具依赖：matplotlib（绘图）、pandas（整理实验指标、逐帧误差数据）
-运行步骤：
-执行 python representative_performance.py
-脚本读取实验数据，生成指标柱状图、误差演化曲线
-输出 PDF 文件 representative_performance.pdf
-图 5 消融实验 + 视觉模板增长
-一、图的核心内容
-左子图：消融实验 RMSE 对比
-柱状图对比 5 种模型配置：Full、w/o IMU、w/o Exp Map、w/o Transformer、w/o Dual-stream
-标注了各配置的 RMSE 数值（Full:
+MH03 Error Evolution (Bottom-Right)
+Frame-by-frame ATE error curve, comparing three methods, verifying NeuroLocMap's robustness in small scenes
+2. Corresponding Repository Files
+Drawing Script: neuro/kbs/fig/generate_fig4_professional.py
+Generated PDF: neuro/kbs/fig/representative_performance.pdf
+Data Source: SLAM positioning results and frame-by-frame error data from Town01 and MH03 datasets
+3. Reproduction Method
+Dependencies: matplotlib (plotting), pandas (experimental metrics and error data processing)
+Run Command:
+bash
+运行
+python generate_fig4_professional.py
+Output: PDF file representative_performance.pdf
+📌 Figure 5: Ablation Study & Visual Template Growth
+1. Figure Core Content
+Left Subplot (Ablation Study RMSE Comparison)
+Bar chart comparing 5 model configurations: Full, w/o IMU, w/o Exp Map, w/o Transformer, w/o Dual-stream
+RMSE values for each configuration marked (Full: 
 145.5 m
-，w/o IMU:
+, w/o IMU: 
 315.3 m
-等），添加误差棒体现结果稳定性
-右子图：视觉模板增长曲线
-6 个数据集（Town01/Town02/Town10/MH01/MH03/KITTI07）的视觉模板数随帧索引的增长曲线
-对比 RatSLAM 基线（≈5 个模板），标注 Town10 的 195 个模板，体现模型的模板积累能力
-二、对应仓库文件
-绘图脚本：neuro/kbs/fig/ablation_unified.py、neuro/kbs/fig/vt_growth_all_datasets.py
-生成 PDF：neuro/kbs/fig/ablation_unified.pdf、neuro/kbs/fig/vt_growth_all_datasets.pdf
-数据来源：消融实验结果、各数据集的视觉模板数时序数据
-三、绘制方法（可直接复现）
-工具依赖：matplotlib + seaborn（绘图）、numpy（整理模板数时序数据、消融实验数据）
-运行步骤：
-执行 python ablation_unified.py 生成消融实验图
-执行 python vt_growth_all_datasets.py 生成模板增长图
-输出对应 PDF 文件
-图 6 6 数据集性能汇总
-一、图的核心内容
-(a) RMSE 对比柱状图
-6 个数据集（Town01/Town02/Town10/KITTI07/MH01/MH03）的 NeuroLocMap/EKF/VO 三种方法 RMSE 对比
-(b) 提升率气泡图
-相对 EKF 的提升率，气泡大小与轨迹长度成正比，标注各数据集的提升百分比（如 Town10:
+), with error bars to reflect result stability
+Right Subplot (Visual Template Growth Curve)
+Visual template count growth curves for 6 datasets (Town01/Town02/Town10/MH01/MH03/KITTI07) with frame index
+Comparison with RatSLAM baseline (~5 templates), Town10's 195 templates marked to reflect model's template accumulation capability
+2. Corresponding Repository Files
+Drawing Scripts: neuro/kbs/fig/generate_ablation_unified.py, neuro/kbs/fig/generate_vt_growth.py
+Generated PDFs: neuro/kbs/fig/ablation_unified.pdf, neuro/kbs/fig/vt_growth_all_datasets.pdf
+Data Source: Ablation experiment results, visual template count time-series data from each dataset
+3. Reproduction Method
+Dependencies: matplotlib + seaborn (plotting), numpy (template count and ablation data processing)
+Run Commands:
+bash
+运行
+python generate_ablation_unified.py
+python generate_vt_growth.py
+Output: Corresponding PDF files ablation_unified.pdf, vt_growth_all_datasets.pdf
+📌 Figure 6: 6-Dataset Performance Summary
+1. Figure Core Content
+(a) RMSE Comparison Bar Chart
+RMSE comparison of NeuroLocMap/EKF/VO for 6 datasets (Town01/Town02/Town10/KITTI07/MH01/MH03)
+(b) Improvement Bubble Chart
+Improvement rate relative to EKF, bubble size proportional to trajectory length, improvement percentage for each dataset marked (e.g., Town10: 
 58.5%
-）
-(c) 成功率饼图
-定位成功率
+)
+(c) Success Rate Pie Chart
+Localization success rate 
 83%
-（5/6 数据集成功），
+ (5/6 datasets successful), 
 17%
-失败（对应 MH01）
-二、对应仓库文件
-绘图脚本：neuro/kbs/fig/performance_summary.py
-生成 PDF：neuro/kbs/fig/performance_summary.pdf
-数据来源：6 个数据集的 SLAM 定位结果、RMSE 统计数据
-三、绘制方法（可直接复现）
-工具依赖：matplotlib（绘图）、pandas（计算提升率、整理汇总数据）
-运行步骤：
-执行 python performance_summary.py
-脚本读取汇总数据，生成 RMSE 对比、提升率气泡图、成功率饼图
-输出 PDF 文件 performance_summary.pdf
-图 7 KITTI07 输入 - 输出可视化
-一、图的核心内容
-左上：RGB Images
-KITTI07 数据集的 4 个关键帧（Frame77/110/330/551），展示视觉输入
-左下：IMU Sensor Data
-IMU 加速度（Accel）、角速度（GyroZ）的时序曲线，标注关键帧位置
-右上：3D Trajectory Comparison
-地面真值（Ground Truth）与 NeuroLocMap 预测轨迹的 3D 对比，标注起点（绿）、终点（红）
-右下：Experience Map Topology
-经验图拓扑结构：51 个节点、8 个闭环，蓝色实线为顺序链接，绿色虚线为闭环边，标注起点 / 终点
-二、对应仓库文件
-绘图脚本：neuro/kbs/fig/KITTI_07_input_output_visualization.py
-生成 PDF：neuro/kbs/fig/KITTI_07_input_output_visuali...pdf
-数据来源：KITTI07 数据集的 RGB 图像、IMU 数据、定位轨迹、经验图拓扑数据
-三、绘制方法（可直接复现）
-工具依赖：cv2（OpenCV，读取关键帧图像）、matplotlib.mplot3d（3D 轨迹）、networkx（绘制经验图节点、边、闭环）、matplotlib（IMU 时序曲线）
-运行步骤：
-执行 python KITTI_07_input_output_visualization.py
-脚本读取 KITTI07 数据，生成全链路可视化图
-输出 PDF 文件 KITTI_07_input_output_visualization.pdf
+ failure (corresponding to MH01)
+2. Corresponding Repository Files
+Drawing Script: neuro/kbs/fig/generate_performance_summary.py
+Generated PDF: neuro/kbs/fig/performance_summary.pdf
+Data Source: SLAM positioning results and RMSE statistics from 6 datasets
+3. Reproduction Method
+Dependencies: matplotlib (plotting), pandas (improvement rate calculation and summary data processing)
+Run Command:
+bash
+运行
+python generate_performance_summary.py
+Output: PDF file performance_summary.pdf
+📌 Figure 7: KITTI-07 Input-Output Visualization
+1. Figure Core Content
+Top-Left: RGB Images
+4 key frames from KITTI-07 dataset (Frame 77/110/330/551), showing visual input
+Bottom-Left: IMU Sensor Data
+Time-series curves of IMU acceleration (Accel) and angular velocity (GyroZ), with key frame positions marked
+Top-Right: 3D Trajectory Comparison
+3D comparison of Ground Truth and NeuroLocMap predicted trajectory, start (green) and end (red) marked
+Bottom-Right: Experience Map Topology
+Experience map topology: 51 nodes, 8 loop closures, blue solid lines for sequential links, green dashed lines for loop closure edges, start/end marked
+2. Corresponding Repository Files
+Drawing Script: neuro/kbs/fig/KITTI_07_manual_save_picture.m
+Generated PDF: neuro/kbs/fig/KITTI_07_input_output_visualization.pdf
+Data Source: RGB images, IMU data, positioning trajectory, experience map topology data from KITTI-07 dataset
+3. Reproduction Method
+Dependencies: cv2 (OpenCV, image reading), matplotlib.mplot3d (3D trajectory), networkx (topology drawing), matplotlib (IMU curve plotting)
+Run Command (MATLAB):
+matlab
+run KITTI_07_manual_save_picture.m
+Output: PDF file KITTI_07_input_output_visualization.pdf
