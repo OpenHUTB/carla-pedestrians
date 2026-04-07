@@ -1,0 +1,32 @@
+name: Compile LaTeX 2025
+
+# 触发条件：当有代码推送到主分支，或者有 Pull Request 时触发
+on: [push, pull_request]
+
+jobs:
+  build_latex:
+    runs-on: ubuntu-latest # 在最新的 Ubuntu 虚拟环境中运行
+    steps:
+      # 第一步：拉取你的仓库代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 第二步：使用开源社区主流的 LaTeX 编译环境（包含了完整的 TeX Live）
+      - name: Compile LaTeX document
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: neuro/kbs
+          root_file: NeuroSLAM_KBS.tex   # 指定你的主文件名为 NeuroSLAM_KBS.tex
+          texlive_version: 2025       # 保持你参考的 TeX Live 版本
+          latexmk_use_xelatex: true   # 保持使用 XeLaTeX 引擎，它对复杂字符和宏包的兼容性很好
+          compiler: latexmk     
+          args: -interaction=nonstopmode -file-line-error # 遇到小错误时不卡住等待输入，直接输出错误信息
+
+      # # 第三步：将生成的 PDF 作为云端附件存档
+      # # 注意：这不会把 PDF 提交到你的代码仓库中
+      # # 而是把它挂载在这次 Action 运行记录的网页上，方便你随时点击下载和预览编译效果。
+      # - name: Upload PDF as artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: compiled-neuroslam-kbs
+      #     path: neuro/kbs/NeuroSLAM_KBS.pdf
