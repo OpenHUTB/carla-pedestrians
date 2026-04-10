@@ -30,7 +30,7 @@ This document details the drawing logic, corresponding scripts, data sources, an
 - Run Command:
   ```bash
   python generate_imu_visual_fusion.py
-Output:PDF file imu_visual_complementary_fusion.pdf
+  Output:PDF file imu_visual_complementary_fusion.pdf
 
 ### 📌 Figure 3: 3D Grid Cell Network & 4-DoF Encoding
 #### 1. Figure Core Content
@@ -54,7 +54,7 @@ Output:PDF file imu_visual_complementary_fusion.pdf
 - Run Command:
   ```bash
   python generate_fig_3d_grid_cell.py
-Output: PDF file 3d_grid_cell_fcc_lattice.pdf
+  Output: PDF file 3d_grid_cell_fcc_lattice.pdf
 
 ### 📌 Figure 4: Town01/MH03 Representative Performance
 #### 1. Figure Core Content
@@ -77,7 +77,7 @@ Output: PDF file 3d_grid_cell_fcc_lattice.pdf
 - Run Command:
   ```bash
   python generate_fig4_professional.py
-Output: PDF file representative_performance.pdf
+  Output: PDF file representative_performance.pdf
 
 ### 📌 Figure 5: Ablation Study & Visual Template Growth
 #### 1. Figure Core Content
@@ -99,7 +99,7 @@ Output: PDF file representative_performance.pdf
   ```bash
   python generate_ablation_unified.py
   python generate_vt_growth.py
-Output: Corresponding PDF files ablation_unified.pdf, vt_growth_all_datasets.pdf
+  Output: Corresponding PDF files ablation_unified.pdf, vt_growth_all_datasets.pdf
 
 ### 📌 Figure 6: 6-Dataset Performance Summary
 #### 1. Figure Core Content
@@ -121,3 +121,26 @@ Output: Corresponding PDF files ablation_unified.pdf, vt_growth_all_datasets.pdf
   ```bash
   python generate_performance_summary.py
   Output: PDF file performance_summary.pdf
+
+### 📌 Figure 7: KITTI-07 Input-Output Visualization
+#### 1. Figure Core Content
+- **Top-Left: RGB Images**
+  - 4 key frames from KITTI-07 dataset (Frame 77/110/330/551), showing visual input
+- **Bottom-Left: IMU Sensor Data**
+  - Time-series curves of IMU acceleration (Accel) and angular velocity (GyroZ), with key frame positions marked
+- **Top-Right: 3D Trajectory Comparison**
+  - 3D comparison of Ground Truth and NeuroLocMap predicted trajectory, start (green) and end (red) marked
+- **Bottom-Right: Experience Map Topology**
+  - Experience map topology: 51 nodes, 8 loop closures, blue solid lines for sequential links, green dashed lines for loop closure edges, start/end marked
+
+#### 2. Corresponding Repository Files
+- Drawing Script: `neuro/kbs/fig/KITTI_07_manual_save_picture.m`
+- Generated PDF: `neuro/kbs/fig/KITTI_07_input_output_visualization.pdf`
+- Data Source: RGB images, IMU data, positioning trajectory, experience map topology data from KITTI-07 dataset
+
+#### 3. Reproduction Method
+- Dependencies: `cv2` (OpenCV, image reading), `matplotlib.mplot3d` (3D trajectory), `networkx` (topology drawing), `matplotlib` (IMU curve plotting)
+- Run Command (MATLAB):
+  ```matlab
+  run KITTI_07_manual_save_picture.m
+  Output: PDF file KITTI_07_input_output_visualization.pdf
