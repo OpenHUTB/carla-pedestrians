@@ -54,3 +54,4 @@ Output: PDF file imu_visual_complementary_fusion.pdf
 - Run Command:
   ```bash
   python generate_fig_3d_grid_cell.py
+Output: PDF file 3d_grid_cell_fcc_lattice.pdf
