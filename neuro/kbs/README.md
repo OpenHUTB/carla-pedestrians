@@ -1,4 +1,6 @@
-U-Visual Fusion Architecture
+📊 Paper Figures 2-7: Drawing Method & Reproduction Guide
+This document details the drawing logic, corresponding scripts, data sources, and reproduction steps for all core figures in the paper, fully aligned with the repository structure.
+📌 Figure 2: Complementary IMU-Visual Fusion Architecture
 1. Figure Core Content
 Left Subplot (Frequency Response)
 Blue curve: Low-pass filter amplitude-frequency response of the visual system (low-frequency retention, high-frequency attenuation)
