@@ -100,3 +100,24 @@ Output: PDF file representative_performance.pdf
   python generate_ablation_unified.py
   python generate_vt_growth.py
 Output: Corresponding PDF files ablation_unified.pdf, vt_growth_all_datasets.pdf
+
+### 📌 Figure 6: 6-Dataset Performance Summary
+#### 1. Figure Core Content
+- **(a) RMSE Comparison Bar Chart**
+  - RMSE comparison of NeuroLocMap/EKF/VO for 6 datasets (Town01/Town02/Town10/KITTI07/MH01/MH03)
+- **(b) Improvement Bubble Chart**
+  - Improvement rate relative to EKF, bubble size proportional to trajectory length, improvement percentage for each dataset marked (e.g., Town10: $58.5\%$)
+- **(c) Success Rate Pie Chart**
+  - Localization success rate $83\%$ (5/6 datasets successful), $17\%$ failure (corresponding to MH01)
+
+#### 2. Corresponding Repository Files
+- Drawing Script: `neuro/kbs/fig/generate_performance_summary.py`
+- Generated PDF: `neuro/kbs/fig/performance_summary.pdf`
+- Data Source: SLAM positioning results and RMSE statistics from 6 datasets
+
+#### 3. Reproduction Method
+- Dependencies: `matplotlib` (plotting), `pandas` (improvement rate calculation and summary data processing)
+- Run Command:
+  ```bash
+  python generate_performance_summary.py
+  Output: PDF file performance_summary.pdf
