@@ -30,3 +30,4 @@ This document details the drawing logic, corresponding scripts, data sources, an
 - Run Command:
   ```bash
   python generate_imu_visual_fusion.py
+Output: PDF file imu_visual_complementary_fusion.pdf
