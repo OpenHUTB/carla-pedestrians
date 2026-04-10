@@ -78,3 +78,25 @@ Output: PDF file 3d_grid_cell_fcc_lattice.pdf
   ```bash
   python generate_fig4_professional.py
 Output: PDF file representative_performance.pdf
+
+### 📌 Figure 5: Ablation Study & Visual Template Growth
+#### 1. Figure Core Content
+- **Left Subplot (Ablation Study RMSE Comparison)**
+  - Bar chart comparing 5 model configurations: Full, w/o IMU, w/o Exp Map, w/o Transformer, w/o Dual-stream
+  - RMSE values for each configuration marked (Full: $145.5\ \text{m}$, w/o IMU: $315.3\ \text{m}$), with error bars to reflect result stability
+- **Right Subplot (Visual Template Growth Curve)**
+  - Visual template count growth curves for 6 datasets (Town01/Town02/Town10/MH01/MH03/KITTI07) with frame index
+  - Comparison with RatSLAM baseline (~5 templates), Town10's 195 templates marked to reflect model's template accumulation capability
+
+#### 2. Corresponding Repository Files
+- Drawing Scripts: `neuro/kbs/fig/generate_ablation_unified.py`, `neuro/kbs/fig/generate_vt_growth.py`
+- Generated PDFs: `neuro/kbs/fig/ablation_unified.pdf`, `neuro/kbs/fig/vt_growth_all_datasets.pdf`
+- Data Source: Ablation experiment results, visual template count time-series data from each dataset
+
+#### 3. Reproduction Method
+- Dependencies: `matplotlib` + `seaborn` (plotting), `numpy` (template count and ablation data processing)
+- Run Commands:
+  ```bash
+  python generate_ablation_unified.py
+  python generate_vt_growth.py
+Output: Corresponding PDF files ablation_unified.pdf, vt_growth_all_datasets.pdf
