@@ -30,7 +30,7 @@ This document details the drawing logic, corresponding scripts, data sources, an
 - Run Command:
   ```bash
   python generate_imu_visual_fusion.py
-Output: PDF file imu_visual_complementary_fusion.pdf
+Output:PDF file imu_visual_complementary_fusion.pdf
 
 ### 📌 Figure 3: 3D Grid Cell Network & 4-DoF Encoding
 #### 1. Figure Core Content
@@ -55,3 +55,26 @@ Output: PDF file imu_visual_complementary_fusion.pdf
   ```bash
   python generate_fig_3d_grid_cell.py
 Output: PDF file 3d_grid_cell_fcc_lattice.pdf
+
+### 📌 Figure 4: Town01/MH03 Representative Performance
+#### 1. Figure Core Content
+- **Town01 Performance Metrics (Top-Left)**
+  - Bar chart showing core metrics: RMSE ($145.5\ \text{m}$), Drift% ($11.9\%$), RPE ($0.82$), VT ($125$), Loops ($47$)
+- **Town01 Error Evolution (Top-Right)**
+  - Frame-by-frame ATE error curve, comparing NeuroLocMap, EKF Fusion, Visual Odometry, demonstrating NeuroLocMap's low-error advantage
+- **MH03 Performance Metrics (Bottom-Left)**
+  - Bar chart showing core metrics: RMSE ($3.3\ \text{m}$), Drift% ($2.1\%$), RPE ($0.18$), VT ($171$), Loops ($8$)
+- **MH03 Error Evolution (Bottom-Right)**
+  - Frame-by-frame ATE error curve, comparing three methods, verifying NeuroLocMap's robustness in small scenes
+
+#### 2. Corresponding Repository Files
+- Drawing Script: `neuro/kbs/fig/generate_fig4_professional.py`
+- Generated PDF: `neuro/kbs/fig/representative_performance.pdf`
+- Data Source: SLAM positioning results and frame-by-frame error data from Town01 and MH03 datasets
+
+#### 3. Reproduction Method
+- Dependencies: `matplotlib` (plotting), `pandas` (experimental metrics and error data processing)
+- Run Command:
+  ```bash
+  python generate_fig4_professional.py
+Output: PDF file representative_performance.pdf
