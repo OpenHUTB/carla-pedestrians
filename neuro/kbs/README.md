@@ -17,6 +17,7 @@ Data Source: EM/VT count time-series data from 6 datasets
 Dependencies: MATLAB R2020b+ (no additional toolboxes)
 Run Command:
 bash
+运行
 run('neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m')
 run('neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m')
 Output: PDF files saved to neuro/kbs/fig/
