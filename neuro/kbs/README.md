@@ -3,35 +3,20 @@ This document details the drawing logic, corresponding scripts, data sources, an
 
 ---
 
-📌 Figure 5: Ablation Study & Visual Template Growth
+Figure 5: Ablation Study & Visual Template Growth
 1. Figure Core Content
-Experience Map Growth Curve (Left)
-Curve of experience map (EM) node count growth with frame index across 6 datasets (Town01/Town02/Town10/MH01/MH03/KITTI07)
-Key node count value marked: Town10 (
-51
- nodes), reflecting map construction efficiency
-Visual Template Growth Curve (Right)
-Visual template (VT) count growth curves for 6 datasets, comparing with RatSLAM baseline (
-∼5
- templates)
-Key template count value marked: Town10 (
-195
- templates), highlighting template accumulation capability
+Left Subplot (Experience Map Growth Curve): EM node count growth across 6 datasets (Town01/Town02/Town10/MH01/MH03/KITTI07), key value: Town10 (51 nodes)
+Right Subplot (Visual Template Growth Curve): VT count growth across 6 datasets (baseline: RatSLAM ~5 templates), key value: Town10 (195 templates)
 2. Corresponding Repository Files
-bash
-运行
-# Left Subplot (EM Growth)
-Script Path: neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m
-Output PDF: neuro/kbs/fig/em_growth_all_datasets.pdf
-
-# Right Subplot (VT Growth)
-Script Path: neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m
-Output PDF: neuro/kbs/fig/vt_growth_all_datasets.pdf
-Data Source: EM node count & VT count time-series data from 6 datasets
+Drawing Script (Left): neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m
+Drawing Script (Right): neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m
+Generated PDF (Left): neuro/kbs/fig/em_growth_all_datasets.pdf
+Generated PDF (Right): neuro/kbs/fig/vt_growth_all_datasets.pdf
+Data Source: EM/VT count time-series data from 6 datasets
 3. Reproduction Method
-Dependencies: MATLAB R2020b+ (no additional toolboxes required)
+Dependencies: MATLAB R2020b+ (no additional toolboxes)
+Run Command:
 bash
-运行
-# 直接复制以下命令到MATLAB Command Window运行
 run('neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m')
 run('neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m')
+Output: PDF files saved to neuro/kbs/fig/
