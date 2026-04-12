@@ -5,26 +5,45 @@ This document details the drawing logic, corresponding scripts, data sources, an
 
 🎯 Figure 5: Ablation Study & Visual Template Growth
 1. Figure Core Content
-Left Subplot (Experience Map Growth Curve)
-Curve of experience map (EM) node count growth with frame index across 6 datasets (Town01/Town02/Town10/MH01/MH03/KITTI07)
-Key node count values (e.g., Town10: 51 nodes) marked to reflect map construction efficiency
-Right Subplot (Visual Template Growth Curve)
-Visual template (VT) count growth curves for 6 datasets, comparison with RatSLAM baseline (~5 templates)
-Town10's 195 templates marked to highlight template accumulation capability
+• Left Subplot (Experience Map Growth Curve)
+◦ EM node count growth across 6 datasets (Town01/Town02/Town10/MH01/MH03/KITTI07)
+◦ Key value: Town10 (51 nodes)
+• Right Subplot (Visual Template Growth Curve)
+◦ VT count growth across 6 datasets (baseline: RatSLAM ~5 templates)
+◦ Key value: Town10 (195 templates)
 2. Corresponding Repository Files
-Drawing Scripts:
-Left Subplot: neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m
-Right Subplot: neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m
-Generated PDFs:
-Left Subplot: neuro/kbs/fig/em_growth_all_datasets.pdf
-Right Subplot: neuro/kbs/fig/vt_growth_all_datasets.pdf
-Data Source: EM node count & VT count time-series data from 6 datasets
+bash
+￼
+￼
+运行
+￼
+￼
+￼
+￼
+# Left Subplot (EM Growth)
+Script: neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m
+PDF Output: neuro/kbs/fig/em_growth_all_datasets.pdf
+
+# Right Subplot (VT Growth)
+Script: neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m
+PDF Output: neuro/kbs/fig/vt_growth_all_datasets.pdf
+
+# Data Source: EM/VT count time-series data (6 datasets)
+￼
 3. Reproduction Method
-Dependencies: MATLAB R2020b+ (no additional toolboxes required)
-Run Commands (MATLAB Command Window):
-matlab
-% Run for left subplot (EM Growth)
-run('neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m')
-% Run for right subplot (VT Growth)
-run('neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m')
-Output: PDFs saved to neuro/kbs/fig/ automatically
+bash
+￼
+￼
+运行
+￼
+￼
+￼
+￼
+# Dependencies: MATLAB R2020b+ (no extra toolboxes)
+# Run in MATLAB Command Window:
+run
+('neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m')  # Left Subplot
+run
+('neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m')  # Right Subplot
+
+# Output: PDFs auto-saved to neuro/kbs/fig/
