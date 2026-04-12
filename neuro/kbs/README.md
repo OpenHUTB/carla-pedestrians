@@ -27,12 +27,11 @@ Output PDF: neuro/kbs/fig/em_growth_all_datasets.pdf
 # Right Subplot (VT Growth)
 Script Path: neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m
 Output PDF: neuro/kbs/fig/vt_growth_all_datasets.pdf
-
-# Data Source: EM node count & VT count time-series data from 6 datasets
+Data Source: EM node count & VT count time-series data from 6 datasets
 3. Reproduction Method
 Dependencies: MATLAB R2020b+ (no additional toolboxes required)
 bash
 运行
-# Run in MATLAB Command Window (直接复制运行)
+# 直接复制以下命令到MATLAB Command Window运行
 run('neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m')
 run('neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m')
