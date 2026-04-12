@@ -7,10 +7,10 @@ This document details the drawing logic, corresponding scripts, data sources, an
 1. Figure Core Content
 Left Subplot (Experience Map Growth Curve)
 Curve of experience map (EM) node count growth with frame index across 6 datasets (Town01/Town02/Town10/MH01/MH03/KITTI07)
-Key node count values marked (e.g., Town10: 51 nodes) to reflect map construction efficiency
+Key node count values (e.g., Town10: 51 nodes) marked to reflect map construction efficiency
 Right Subplot (Visual Template Growth Curve)
 Visual template (VT) count growth curves for 6 datasets, comparison with RatSLAM baseline (~5 templates)
-Town10's 195 templates marked to highlight the model's template accumulation capability
+Town10's 195 templates marked to highlight template accumulation capability
 2. Corresponding Repository Files
 Drawing Scripts:
 Left Subplot: neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m
@@ -27,4 +27,4 @@ matlab
 run('neuro/08_draw_fig_for_paper/02_EM_History/draw_em_history.m')
 % Run for right subplot (VT Growth)
 run('neuro/08_draw_fig_for_paper/03_VT_History/draw_vt_history.m')
-Output: Corresponding PDF files saved to neuro/kbs/fig/ directory automatically
+Output: PDFs saved to neuro/kbs/fig/ automatically
