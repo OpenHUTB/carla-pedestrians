@@ -193,8 +193,8 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                 curRotDir(curFrame + 1, 2) = sin(curRotDir(curFrame, 3) + yawRotV );
                 curRotDir(curFrame + 1, 3) = curRotDir(curFrame, 3) + yawRotV;
  
-                odoMapTrajectory(curFrame + 1,1) = odoMapTrajectory(curFrame,1) + transV * cos(sym(curRotDir(curFrame + 1, 3)));
-                odoMapTrajectory(curFrame + 1,2) = odoMapTrajectory(curFrame,2) + transV * sin(sym(curRotDir(curFrame + 1, 3)));
+                odoMapTrajectory(curFrame + 1,1) = odoMapTrajectory(curFrame,1) + transV * cos(curRotDir(curFrame + 1, 3));
+                odoMapTrajectory(curFrame + 1,2) = odoMapTrajectory(curFrame,2) + transV * sin(curRotDir(curFrame + 1, 3));
                 odoMapTrajectory(curFrame + 1,3) = odoMapTrajectory(curFrame,3) + heightV;
                 odoMapTrajectory(curFrame + 1,4) = curRotDir(curFrame + 1, 3);
                 
@@ -384,7 +384,7 @@ function visual_odo_main(visualDataFile,groundTruthFile)
                     
 %                     figure(3) 
 %                     
-%                      subplot(1,1,1, 'replace');
+%                     subplot(1,1,1, 'replace');
 %                     hold on 
 %                     plot(1: size(diffHeightVImgs,1),diffHeightVImgs, 'r');
 %                     hold off
