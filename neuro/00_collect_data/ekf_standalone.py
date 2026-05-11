@@ -26,11 +26,11 @@ class EKF_VIO:
         self.init_z = init_pose[2]  # 保存初始Z轴高度（平地车辆固定）
         
         # EKF协方差矩阵 - 极度信任视觉，IMU仅用于姿态和短期预测
-        self.P = np.diag([0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.001, 0.001, 0.001])  # 初始不确定性小
+        self.P = np.diag([0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.001, 0.001, 0.001])
         # 极大过程噪声（完全不信任IMU位置积分，只用IMU姿态）
-        self.Q = np.diag([10.0, 10.0, 10.0, 5.0, 5.0, 5.0, 0.001, 0.001, 0.001])  # 位置噪声极大
+        self.Q = np.diag([10.0, 10.0, 10.0, 5.0, 5.0, 5.0, 0.001, 0.001, 0.001])
         # 极小视觉观测噪声（几乎完全信任VO）
-        self.R = np.diag([0.01, 0.01, 0.01, 0.001, 0.001, 0.001])  # 极度信任VO
+        self.R = np.diag([0.01, 0.01, 0.01, 0.001, 0.001, 0.001])
         
         # 统计信息
         self.innovation_history = []
@@ -47,9 +47,9 @@ class EKF_VIO:
         gyro = np.array([imu_data.gyroscope.x, imu_data.gyroscope.y, imu_data.gyroscope.z])
 
         roll, pitch, yaw = self.x[6], self.x[7], self.x[8]
-        new_roll = (roll + gyro[0]*self.dt + np.pi) % (2*np.pi) - np.pi
-        new_pitch = (pitch + gyro[1]*self.dt + np.pi) % (2*np.pi) - np.pi
-        new_yaw = (yaw + gyro[2]*self.dt + np.pi) % (2*np.pi) - np.pi
+        new_roll = np.mod(roll + gyro[0]*self.dt + np.pi, 2*np.pi) - np.pi
+        new_pitch = np.mod(pitch + gyro[1]*self.dt + np.pi, 2*np.pi) - np.pi
+        new_yaw = np.mod(yaw + gyro[2]*self.dt + np.pi, 2*np.pi) - np.pi
 
         # 旋转矩阵（从车体坐标系到世界坐标系）
         cr, sr = np.cos(roll), np.sin(roll)
@@ -71,7 +71,7 @@ class EKF_VIO:
         new_y = self.x[1] + self.x[4]*self.dt
         new_z = self.x[2] + self.x[5]*self.dt
 
-        self.x = np.array([new_x, new_y, new_z, new_vx, new_vy, new_vz, new_roll, new_pitch, new_yaw])
+        self.x = np.array([new_x, new_y, new_z, new_vx, new_vy, new_vz, new_roll, new_pitch, new_yaw], dtype=np.float64)
         self.P += self.Q
 
     def visual_update(self, visual_pose):
@@ -94,7 +94,7 @@ class EKF_VIO:
             # 记录新息和不确定性用于质量评估
             self.innovation_history.append(np.linalg.norm(y))
             self.uncertainty_history.append(np.trace(self.P[:3, :3]))  # 位置不确定性
-        except:
+        except Exception:
             K = np.eye(9,6)*0.1
 
         self.x += K @ y
