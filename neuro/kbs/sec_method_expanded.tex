@@ -28,7 +28,7 @@ Table~\ref{tab:notation} summarizes the primary mathematical symbols used throug
             \bottomrule
             \endlastfoot
             \multicolumn{2}{l}{\textit{Pose and Motion}}                                                                                       \\
-            $x, y, z$                                                   & 3-D position coordinates (meters)                                    \\
+            $x, y, z$                                                   & 3D position coordinates (meters)                                    \\
             $\psi$                                                      & Yaw angle / heading direction (radians)                              \\
             $\mathbf{p}_t = (x_t, y_t, z_t)^T$                          & Position vector at time $t$                                          \\
             $\mathbf{v}_t$                                              & Translational velocity (m/s)                                         \\
@@ -51,7 +51,7 @@ Table~\ref{tab:notation} summarizes the primary mathematical symbols used throug
             $\omega_c$                                                  & Com\-ple\-men\-tary filter cutoff frequency (rad/s)                  \\
             \midrule
             \multicolumn{2}{l}{\textit{Spatial Cell Representations}}                                                                          \\
-            $\mathbf{A}_t^g \in \mathbb{R}^{N_x \times N_y \times N_z}$ & 3-D grid cell activity (position encoding)                           \\
+            $\mathbf{A}_t^g \in \mathbb{R}^{N_x \times N_y \times N_z}$ & 3D grid cell activity (position encoding)                           \\
             $\mathbf{A}_t^h \in \mathbb{R}^{N_\psi \times N_h}$         & Head direction cell activity (orientation encoding)                  \\
             $\mathcal{S}_t = (\mathbf{A}_t^g, \mathbf{A}_t^h)$          & Conjunctive spatial cell state                                       \\
             $\mathbf{u}_t = (\mathbf{v}_t^f, r_t^f)$                    & Fused motion cue for path integration                                \\
@@ -143,7 +143,7 @@ Table~\ref{tab:notation} summarizes the primary mathematical symbols used throug
 
 \subsection{Framework Architecture}
 
-NeuroLocMap integrates a dual-stream visual front-end, a ves\-tib\-u\-lar (IMU) front-end, and hippocampal--entorhinal spatial representations to estimate 4-DoF pose $(x,y,z,\psi)$ and build maps in challenging 3-D environments. As shown in Figure~\ref{fig:system_overview}, the visual front-end extracts appearance and motion cues along ventral (V1$\rightarrow$V2$\rightarrow$V4$\rightarrow$IT) and dorsal (V1$\rightarrow$MT/MST) path\-ways, while the ves\-tib\-u\-lar front-end provides high-frequency self-motion from gyroscopes and accelerometers. Com\-ple\-men\-tary filtering fuses these modalities in the frequency domain. Spatial representation uses 3-D grid cells for $(x,y,z)$ and multilayer head-direction cells for $\psi$ with path integration and visual anchoring to limit drift. A hybrid experience map couples visual templates with spatial-cell snapshots to support loop closure and pose-graph relaxation, yielding globally consistent topology with local metric accuracy.
+NeuroLocMap integrates a dual-stream visual front-end, a ves\-tib\-u\-lar (IMU) front-end, and hippocampal--entorhinal spatial representations to estimate 4-DoF pose $(x,y,z,\psi)$ and build maps in challenging 3D environments. As shown in Figure~\ref{fig:system_overview}, the visual front-end extracts appearance and motion cues along ventral (V1$\rightarrow$V2$\rightarrow$V4$\rightarrow$IT) and dorsal (V1$\rightarrow$MT/MST) path\-ways, while the ves\-tib\-u\-lar front-end provides high-frequency self-motion from gyroscopes and accelerometers. Com\-ple\-men\-tary filtering fuses these modalities in the frequency domain. Spatial representation uses 3D grid cells for $(x,y,z)$ and multilayer head-direction cells for $\psi$ with path integration and visual anchoring to limit drift. A hybrid experience map couples visual templates with spatial-cell snapshots to support loop closure and pose-graph relaxation, yielding globally consistent topology with local metric accuracy.
 
 
 
@@ -350,22 +350,22 @@ with small adaptation gain $\beta \ll 1$ (e.g., $\beta=0.01$). This online scale
 
 \subsection{Neural Spatial Representation}
 
-The spatial representation module encodes the robot's 4-DoF pose through bio-inspired neural coordinate systems using conjunctive pose cells. The 3-D location $(x, y, z)$ is represented by grid cells using a 3-D continuous attractor network (MD-CAN), while orientation $\psi$ (yaw) is encoded by multilayered head direction cells. These representations enable stable, noise-tolerant path integration through attractor dynamics.
+The spatial representation module encodes the robot's 4-DoF pose through bio-inspired neural coordinate systems using conjunctive pose cells. The 3D location $(x, y, z)$ is represented by grid cells using a 3D continuous attractor network (MD-CAN), while orientation $\psi$ (yaw) is encoded by multilayered head direction cells. These representations enable stable, noise-tolerant path integration through attractor dynamics.
 
-\textbf{3-D Grid Cell Network.} The 3-D grid cell network mimics the 3-D spatial neural representation in the mammalian brain, exhibiting regular 3-D lattice patterns (face-centered cubic, FCC) that encode position and provide a universal metric for path integration. Inspired by the discovery of 3-D grid cells in bats~\cite{finkelstein2016three} and theoretical models of hexagonal grid structures~\cite{hafting2005microstructure}, our implementation extends 2D continuous attractor networks to full 3-D space while preserving key biological properties: multi-scale representation, metric path integration, and resilience to noise.
+\textbf{3D Grid Cell Network.} The 3D grid cell network mimics the 3D spatial neural representation in the mammalian brain, exhibiting regular 3D lattice patterns (face-centered cubic, FCC) that encode position and provide a universal metric for path integration. Inspired by the discovery of 3D grid cells in bats~\cite{finkelstein2016three} and theoretical models of hexagonal grid structures~\cite{hafting2005microstructure}, our implementation extends 2D continuous attractor networks to full 3D space while preserving key biological properties: multi-scale representation, metric path integration, and resilience to noise.
 
-\textbf{Network Architecture.} The 3-D grid cell network is a 3-D multi-scale continuous attractor network (MD-CAN) with dimensions $N_x \times N_y \times N_z$ (typically $N_x = N_y = N_z = 61$). The network activity $\mathbf{A}^{g}_t \in \mathbb{R}^{N_x \times N_y \times N_z}$ represents a distributed population code for the robot's 3-D position $(x_t, y_t, z_t)$, where each cell $(i,j,k)$ is tuned to a preferred spatial location within the environment. The activity forms a localized ``bump'' (or activity packet) centered at the current position, analogous to the activity bump observed in rodent entorhinal cortex recordings.
+\textbf{Network Architecture.} The 3D grid cell network is a 3D multi-scale continuous attractor network (MD-CAN) with dimensions $N_x \times N_y \times N_z$ (typically $N_x = N_y = N_z = 61$). The network activity $\mathbf{A}^{g}_t \in \mathbb{R}^{N_x \times N_y \times N_z}$ represents a distributed population code for the robot's 3D position $(x_t, y_t, z_t)$, where each cell $(i,j,k)$ is tuned to a preferred spatial location within the environment. The activity forms a localized ``bump'' (or activity packet) centered at the current position, analogous to the activity bump observed in rodent entorhinal cortex recordings.
 
-The network's topology implements periodic boundary conditions with toroidal wrapping, enabling unbounded spatial representation. Cell-to-cell connectivity follows a face-centered cubic (FCC) lattice---the densest sphere packing in 3D---which provides optimal spatial coverage with minimal neurons. In the FCC structure, each cell has 12 nearest neighbors (compared to 6 in 2D hexagonal grids), yielding efficient 3-D path integration with isotropic directional sensitivity.
+The network's topology implements periodic boundary conditions with toroidal wrapping, enabling unbounded spatial representation. Cell-to-cell connectivity follows a face-centered cubic (FCC) lattice---the densest sphere packing in 3D---which provides optimal spatial coverage with minimal neurons. In the FCC structure, each cell has 12 nearest neighbors (compared to 6 in 2D hexagonal grids), yielding efficient 3D path integration with isotropic directional sensitivity.
 
 \begin{figure*}[!t]
     \centering
     \includegraphics[width=\textwidth]{fig/3D_grid_cell_fcc_lattice.pdf}
-    \caption{3-D Grid Cell Network with FCC lattice structure. (a) 3-D activity packet representing position $(x,y,z)$ through distributed population code. (b) FCC lattice structure showing hexagonal grid pattern with three height layers for dense 3-D packing. (c) 4-DoF encoding scheme combining position and heading representations.}
-    \label{fig:3-D_grid_cell_fcc}
+    \caption{3D Grid Cell Network with FCC lattice structure. (a) 3D activity packet representing position $(x,y,z)$ through distributed population code. (b) FCC lattice structure showing hexagonal grid pattern with three height layers for dense 3D packing. (c) 4-DoF encoding scheme combining position and heading representations.}
+    \label{fig:3D_grid_cell_fcc}
 \end{figure*}
 
-Figure~\ref{fig:3-D_grid_cell_fcc} schematically illustrates: (a) the 3-D activity bump at position $(x, y, z)$, represented as isosurfaces to visualize the localized excitation; (b) the FCC lattice projected onto the 2D plane, showing the characteristic hexagonal pattern arising from layer-offset positioning, where different height layers (indicated by color) are displaced by half-lattice constants to achieve optimal packing; (c) the complete 4-DoF encoding pipeline integrating position and heading representations.
+Figure~\ref{fig:3D_grid_cell_fcc} schematically illustrates: (a) the 3D activity bump at position $(x, y, z)$, represented as isosurfaces to visualize the localized excitation; (b) the FCC lattice projected onto the 2D plane, showing the characteristic hexagonal pattern arising from layer-offset positioning, where different height layers (indicated by color) are displaced by half-lattice constants to achieve optimal packing; (c) the complete 4-DoF encoding pipeline integrating position and heading representations.
 
 \textbf{Continuous Attractor Dynamics.} The network maintains a localized ``bump'' of activity through three key mechanisms:
 
@@ -406,7 +406,7 @@ This discrete shifting operation efficiently implements path integration on the 
 \end{align}
 where $\eta$ is the learning rate and $\rho$ is the correction strength. The max operation ensures associations only strengthen (one-shot learning), while the corrective injection biases the activity bump toward positions associated with the currently visible scene.
 
-\textbf{Multilayered Head Direction Cells.} The multilayered head direction cell (HDC) network represents the robot's orientation using a 2D MD-CAN with dimensions $N_\psi \times N_h$ (azimuth bins by height layers). Different height layers allow representation of heading at various vertical positions, supporting 3-D operation where orientation may vary with altitude.
+\textbf{Multilayered Head Direction Cells.} The multilayered head direction cell (HDC) network represents the robot's orientation using a 2D MD-CAN with dimensions $N_\psi \times N_h$ (azimuth bins by height layers). Different height layers allow representation of heading at various vertical positions, supporting 3D operation where orientation may vary with altitude.
 
 \textbf{Network Architecture.} The multilayer head-direction network has activity $\mathbf{A}^{h} \in \mathbb{R}^{N_\psi \times N_h}$ (typically $N_\psi = 360$ azimuth bins and $N_h = 5$ height layers). Each cell $(u, h)$ is tuned to azimuth angle $\theta_u = 2\pi u / N_\psi$ and height layer $h$.
 
@@ -433,7 +433,7 @@ This decoding naturally handles the circular topology of orientation (using $\ma
 
 \subsection{Experience Map and Loop Closure}
 
-The multilayered experience map represents 3-D spatial experiences as a graph structure, providing a hybrid topological-metric representation that combines the benefits of discrete place-based maps (topological robustness, loop closure) and continuous metric representations (accurate localization).
+The multilayered experience map represents 3D spatial experiences as a graph structure, providing a hybrid topological-metric representation that combines the benefits of discrete place-based maps (topological robustness, loop closure) and continuous metric representations (accurate localization).
 
 \textbf{Experience Representation.} Each experience node $\mathcal{E}_i$ encodes a distinct spatial episode comprising the active visual template and descriptor $(VT_i,\,\boldsymbol{\phi}_i\in\mathbb{R}^{4096})$, the concurrent spatial-cell codes $\mathbf{P}^{gc}_i=\mathbf{A}^{g}_i\in\mathbb{R}^{N_x\times N_y\times N_z}$ and $\mathbf{P}^{hdc}_i=\mathbf{A}^{h}_i\in\mathbb{R}^{N_\psi\times N_h}$, the metric pose $(x_i, y_i, z_i, \psi_i)$ decoded from these activities, and the timestamp $t_i$ for temporal ordering.
 This rich multimodal encoding enables robust loop closure detection through visual matching while maintaining metric information through the spatial cell codes.
