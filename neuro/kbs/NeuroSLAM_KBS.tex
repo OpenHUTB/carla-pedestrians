@@ -19,26 +19,31 @@
 \usepackage{url}
 \usepackage{verbatim}
 \usepackage{graphicx}
-\usepackage{epstopdf}
-\epstopdfsetup{update}
+\usepackage{epstopdf}  % 支持EPS矢量图自动转换为PDF
+\epstopdfsetup{update}  % 自动更新EPS文件
+% 图片路径（统一指向本地fig目录）
 \graphicspath{{fig/}}
 \usepackage{xcolor}
-\usepackage{colortbl}
+\usepackage{colortbl}  % 支持表格行颜色
 \usepackage{booktabs}
 \usepackage{multirow}
-\usepackage{longtable}
-\usepackage{threeparttable}
+\usepackage{longtable}  % 支持跨页长表格
+\usepackage{threeparttable}  % 支持表格注释
+
+% 定义自定义颜色
 \definecolor{darkgreen}{rgb}{0,0.6,0}
 
 \usepackage{float}
 \usepackage{placeins}
 \usepackage{adjustbox}
-\usepackage{microtype} 
-\tolerance=1000         
-\emergencystretch=3em   
-\hyphenpenalty=50   
-\exhyphenpenalty=50     
-\frenchspacing          
+\usepackage{microtype}  % Improve text justification
+
+% 改善两端对齐的字间距问题
+\tolerance=1000          % 允许更宽松的断行（默认200）
+\emergencystretch=3em    % 紧急情况下允许额外拉伸
+\hyphenpenalty=50        % 降低断字惩罚，允许更多断字
+\exhyphenpenalty=50      % 显式连字符后的断字惩罚
+\frenchspacing           % 禁用句号后的额外空格，保持所有空格一致
 
 \DeclareMathOperator*{\argmin}{\arg\!\min}
 \usepackage{xspace}
@@ -107,7 +112,7 @@ The contributions of this paper are summarized as follows:
     \item We propose a unified brain-inspired architecture that couples dual-stream visual processing with vestibular modeling and hippocampal-entorhinal spatial representations for 4-DoF localization and mapping.
     \item We develop cortex-inspired visual processing with explicit operators for visual template creation, increasing template count from 5 (typical in RatSLAM) to 195 (39 $\times$ improvement) for finer-grained place discrimination under challenging lighting and viewpoint variations.
     \item We design a lightweight complementary fusion strategy for vestibular-visual integration that operates without computationally expensive filters, achieving real-time performance ($\sim$ 31 FPS on CPU) without requiring training data.
-    \item We validate the framework on six diverse scenarios (CARLA Town 01 / 02 / 10, EuRoC MH\_01 / 03, KITTI~07), achieving an average RMSE improvement of 38.1\% over EKF baselines across all tested environments.
+    \item We validate the framework on six diverse scenarios (CARLA Town01 / 02 / 10, EuRoC MH\_01 / 03, KITTI~07), achieving an average RMSE improvement of 38.1\% over EKF baselines across all tested environments.
 \end{itemize}
 
 %% ==================== RELATED WORK ====================
