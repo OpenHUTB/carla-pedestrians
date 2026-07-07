@@ -28,7 +28,7 @@ Table~\ref{tab:notation} summarizes the primary mathematical symbols used throug
             \bottomrule
             \endlastfoot
             \multicolumn{2}{l}{\textit{Pose and Motion}}                                                                                       \\
-            $x, y, z$                                                   & 3D position coordinates (meters)                                    \\
+            $x, y, z$                                                   & 3D position coordinates (meters)                                     \\
             $\psi$                                                      & Yaw angle / heading direction (radians)                              \\
             $\mathbf{p}_t = (x_t, y_t, z_t)^T$                          & Position vector at time $t$                                          \\
             $\mathbf{v}_t$                                              & Translational velocity (m/s)                                         \\
@@ -51,7 +51,7 @@ Table~\ref{tab:notation} summarizes the primary mathematical symbols used throug
             $\omega_c$                                                  & Com\-ple\-men\-tary filter cutoff frequency (rad/s)                  \\
             \midrule
             \multicolumn{2}{l}{\textit{Spatial Cell Representations}}                                                                          \\
-            $\mathbf{A}_t^g \in \mathbb{R}^{N_x \times N_y \times N_z}$ & 3D grid cell activity (position encoding)                           \\
+            $\mathbf{A}_t^g \in \mathbb{R}^{N_x \times N_y \times N_z}$ & 3D grid cell activity (position encoding)                            \\
             $\mathbf{A}_t^h \in \mathbb{R}^{N_\psi \times N_h}$         & Head direction cell activity (orientation encoding)                  \\
             $\mathcal{S}_t = (\mathbf{A}_t^g, \mathbf{A}_t^h)$          & Conjunctive spatial cell state                                       \\
             $\mathbf{u}_t = (\mathbf{v}_t^f, r_t^f)$                    & Fused motion cue for path integration                                \\
@@ -141,19 +141,47 @@ Table~\ref{tab:notation} summarizes the primary mathematical symbols used throug
 
 \textbf{Notation Conventions.} Superscripts indicate sensory modality ($^{\text{vis}}$: visual, $^{\text{imu}}$: inertial, $^f$: fused) or cell type ($^g$: grid cells, $^h$: head direction cells). Subscript $t$ denotes time. Bold uppercase letters denote matrices or high-dimensional arrays; bold lowercase denotes vectors; calligraphic fonts denote sets.
 
-\subsection{Framework Architecture}
-
-NeuroLocMap integrates a dual-stream visual front-end, a ves\-tib\-u\-lar (IMU) front-end, and hippocampal--entorhinal spatial representations to estimate 4-DoF pose $(x,y,z,\psi)$ and build maps in challenging 3D environments. As shown in Figure~\ref{fig:system_overview}, the visual front-end extracts appearance and motion cues along ventral (V1$\rightarrow$V2$\rightarrow$V4$\rightarrow$IT) and dorsal (V1$\rightarrow$MT/MST) path\-ways, while the ves\-tib\-u\-lar front-end provides high-frequency self-motion from gyroscopes and accelerometers. Com\-ple\-men\-tary filtering fuses these modalities in the frequency domain. Spatial representation uses 3D grid cells for $(x,y,z)$ and multilayer head-direction cells for $\psi$ with path integration and visual anchoring to limit drift. A hybrid experience map couples visual templates with spatial-cell snapshots to support loop closure and pose-graph relaxation, yielding globally consistent topology with local metric accuracy.
-
-
+\subsection{Framework Architecture and Global State-Space Formulation}
+\label{sec:framework_arch}
 
 \begin{figure*}[!htbp]
     \centering
     \includegraphics[width=0.95\textwidth]{fig/2_framework.pdf}
-    \caption{NeuroLocMap framework overview.}
+    \caption{Self-contained end-to-end data flow of the proposed multimodal visual-inertial framework. Raw inputs are monocular RGB images and IMU measurements. The visual module splits signals into scene recognition and motion estimation branches; the vestibular module outputs high-frequency inertial motion. Two modalities are fused via frequency-domain complementary filtering. The fused kinematics drive the spatial network to update the unified 4-DoF global state $\mathbf{X}_t$ defined in Eq. \eqref{eq:global_state}. The experience graph module performs loop relaxation to eliminate long-term trajectory drift. All submodules share the standardized state-space variables proposed in this section.}
     \label{fig:system_overview}
 \end{figure*}
+This work designs a multimodal visual-inertial signal processing system for robot localization, which consists of three tightly coupled functional subsystems: hierarchical multi-scale visual feature operator, vestibular-inertial sensor state estimator, and metric spatial state encoding network. Different from conventional EKF-based loosely coupled frameworks, the proposed system adopts frequency-domain complementary fusion to decouple low-frequency visual observation noise and high-frequency inertial transient noise, and updates the global metric state via a continuous attractor spatial network to suppress long-term trajectory drift.
 
+\subsubsection{Global Discrete State-Space Model}
+To provide a unified mathematical foundation for all subsequent submodule derivations, we first define the discrete state-space representation of the system at time $t$.
+
+1) Multimodal raw input vector
+\begin{equation}
+    \mathbf{U}_t = \left[ I_t,\, \mathbf{a}_t^\top,\, \boldsymbol{\omega}_t^\top \right]
+    \label{eq:input_vec}
+\end{equation}
+where $I_t$ denotes the captured monocular RGB image; $\mathbf{a}_t$ and $\boldsymbol{\omega}_t$ stand for accelerometer linear acceleration and gyroscope angular velocity measurements, respectively.
+
+2) Core 4-DoF global pose state vector
+\begin{equation}
+    \mathbf{X}_t = \left[ x_t,\, y_t,\, z_t,\, \psi_t \right]^\top \in \mathbb{R}^3 \times \mathrm{SO}(2)
+    \label{eq:global_state}
+\end{equation}
+In this formulation, $(x_t, y_t, z_t) \in \mathbb{R}^3$ represent global 3D translational coordinates (unit: meter), and $\psi_t \in [-\pi,\pi)$ denotes horizontal yaw angle (unit: radian).
+
+3) Unified state evolution mapping function
+\begin{equation}
+    \mathbf{X}_{t+1} = \mathcal{F}\big(\mathbf{X}_t,\, \mathbf{U}_t\big)
+    \label{eq:state_evolution}
+\end{equation}
+The mapping $\mathcal{F}(\cdot)$ encapsulates the complete forward pipeline, including multi-scale visual feature extraction, inertial motion calculation, frequency-domain multimodal fusion and spatial network path integration. Detailed mathematical decomposition of $\mathcal{F}(\cdot)$ will be presented in Sec. 3.3 (visual-vestibular processing) and Sec. 3.4 (spatial encoding network).
+
+As visualized in Fig.~\ref{fig:system_overview}, the end-to-end data pipeline consists of five sequential coupled modules:
+1. Hierarchical dual-stream visual front-end: Parallel ventral/dorsal branches are constructed to independently generate scene descriptors and compute pixel-wise ego-motion, eliminating mutual interference between recognition and tracking tasks.
+2. Vestibular IMU processing module: Derives high-frequency transient motion signals from raw inertial data without iterative online bias calibration.
+3. Complementary fusion unit: Adopts first-order IIR filters to separate low-frequency visual drift and high-frequency inertial noise, outputting smoothed translational and rotational kinematics.
+4. Metric spatial encoding network: Updates distributed spatial cell states using fused motion cues, and suppresses integral drift via visual template anchoring constraints.
+5. Topological experience graph: Records historical visual descriptors and spatial cell snapshots, and executes global graph relaxation once loop closures are detected to guarantee globally consistent metric poses.
 \FloatBarrier
 
 \subsection{Sensory Processing and Fusion}
