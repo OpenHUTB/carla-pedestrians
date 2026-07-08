@@ -4,140 +4,128 @@
 
 \subsection{Notation and Conventions}
 
-Table~\ref{tab:notation} summarizes the primary mathematical symbols used throughout this paper to describe our brain-inspired lo\-cal\-i\-za\-tion-and-map\-ping approach. We adopt standard conventions: scalars in italic ($x$), vectors in bold lowercase ($\mathbf{v}$), matrices in bold uppercase ($\mathbf{A}$), and sets in calligraphic font ($\mathcal{E}$).
+Table~\ref{tab:notation} summarizes the primary mathematical notations used in this paper.
 
-    {\small
-        \setlength{\LTleft}{0pt}
-        \setlength{\LTright}{0pt}
-        \setlength{\tabcolsep}{3pt}
-        \begin{longtable}{p{0.21\textwidth}p{0.68\textwidth}}
-            \caption{Primary notation and symbols used in this paper}\label{tab:notation}                                                      \\
-            \toprule
-            \textbf{Symbol}                                             & \textbf{Description}                                                 \\
-            \midrule
-            \endfirsthead
-
-            \toprule
-            \textbf{Symbol}                                             & \textbf{Description}                                                 \\
-            \midrule
-            \endhead
-
-            \bottomrule
-            \endfoot
-
-            \bottomrule
-            \endlastfoot
-            \multicolumn{2}{l}{\textit{Pose and Motion}}                                                                                       \\
-            $x, y, z$                                                   & 3D position coordinates (meters)                                     \\
-            $\psi$                                                      & Yaw angle / heading direction (radians)                              \\
-            $\mathbf{p}_t = (x_t, y_t, z_t)^T$                          & Position vector at time $t$                                          \\
-            $\mathbf{v}_t$                                              & Translational velocity (m/s)                                         \\
-            $r_t$                                                       & Yaw rate (scalar, rad/s), $r_t = \mathbf{e}_z^\top \omega_t$         \\
-            $\omega_t$                                                  & Angular velocity vector (rad/s)                                      \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Sensory Inputs}}                                                                                        \\
-            $\mathbf{I}_t$                                              & RGB image at time $t$                                                \\
-            $\mathbf{a}_t$                                              & Linear acceleration from accelerometer (m/s$^2$)                     \\
-            $\boldsymbol{\omega}_t^g$                                   & Angular velocity from gyroscope (rad/s)                              \\
-            $\mathbf{f}_v$                                              & Visual feature descriptor                                            \\
-            $\mathbf{f}_i$                                              & Inertial measurement vector                                          \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Fusion and Filtering}}                                                                                  \\
-            $\mathbf{v}_t^{\text{vis}}$                                 & Visual velocity estimate (low-freq)                                  \\
-            $\mathbf{v}_t^{\text{imu}}$                                 & IMU velocity estimate (high-freq)                                    \\
-            $\mathbf{v}_t^f$                                            & Fused velocity (complementary filter)                                \\
-            $r_t^{\text{vis}}, r_t^{\text{imu}}, r_t^f$                 & Visual, IMU, and fused yaw rates                                     \\
-            $H_{\text{LP}}(s), H_{\text{HP}}(s)$                        & Low-pass and high-pass transfer functions                            \\
-            $\omega_c$                                                  & Com\-ple\-men\-tary filter cutoff frequency (rad/s)                  \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Spatial Cell Representations}}                                                                          \\
-            $\mathbf{A}_t^g \in \mathbb{R}^{N_x \times N_y \times N_z}$ & 3D grid cell activity (position encoding)                            \\
-            $\mathbf{A}_t^h \in \mathbb{R}^{N_\psi \times N_h}$         & Head direction cell activity (orientation encoding)                  \\
-            $\mathcal{S}_t = (\mathbf{A}_t^g, \mathbf{A}_t^h)$          & Conjunctive spatial cell state                                       \\
-            $\mathbf{u}_t = (\mathbf{v}_t^f, r_t^f)$                    & Fused motion cue for path integration                                \\
-            $N_x, N_y, N_z$                                             & Grid cell network dimensions                                         \\
-            $N_\psi, N_h$                                               & Azimuth bins and number of height layers                             \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Visual Templates and Experience Map}}                                                                   \\
-            $\mathcal{T} = \{T_1, T_2, \ldots, T_M\}$                   & Set of visual templates                                              \\
-            $T_i$                                                       & Visual template $i$ (scene descriptor)                               \\
-            $d(T_i, T_j)$                                               & Similarity distance between templates                                \\
-            $\mathcal{E} = \{e_1, e_2, \ldots, e_K\}$                   & Experience map (node set)                                            \\
-            $e_k = (T_k, \mathcal{S}_k, \mathbf{p}_k)$                  & Experience node: template, spatial state, pose                       \\
-            $\mathbf{G} = (\mathcal{E}, \mathcal{L})$                   & Experience graph (nodes + links)                                     \\
-            $\mathcal{L}$                                               & Set of links/edges in the experience graph                           \\
-            $d_{thresh}$                                                & Spatial distance threshold for creating a new experience             \\
-            $T_{min}$                                                   & Minimum temporal separation for loop closure                         \\
-            $\mathbf{T}_{i \to i+1}$                                    & Relative pose edge between consecutive experiences                   \\
-            $\mathbf{T}_{loop}$                                         & Loop closure residual (pose error)                                   \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Operators and Parameters}}                                                                              \\
-            $\mathbf{K}$                                                & Camera intrinsic matrix                                              \\
-            $\mathcal{G},\,\mathcal{C}_\lambda,\,\mathcal{K}_\sigma$    & Grayscale, CLAHE (clip limit $\lambda$), Gaussian kernel ($\sigma$)  \\
-            $\mathcal{D}$                                               & Downsampling operator (to $64\times64$)                              \\
-            $\boldsymbol{\phi}_t$                                       & Vectorized visual descriptor at time $t$                             \\
-            $d_{\cos}(\cdot,\cdot)$                                     & Cosine distance for template matching                                \\
-            $\tau_{vt},\,\tau_{loop}$                                   & Thresholds for template creation and loop closure                    \\
-            $\mathcal{L}_\tau,\,\mathcal{H}_\tau$                       & Low-/high-pass filters with time constant $\tau$                     \\
-            $\eta,\,\eta_r$                                             & Fusion weights for velocity and yaw-rate                             \\
-            $\kappa_t$                                                  & Visual velocity scale factor                                         \\
-            $\Xi_{m,i,j,k},\,\rho$                                      & VT--grid association strength, correction gain                       \\
-            $\mathcal{S}_{active}$                                      & Set of currently active visual templates                             \\
-            $\Delta t$                                                  & Sampling interval                                                    \\
-            $\alpha,\,\alpha_r$                                         & Forgetting factors for low-pass filters                              \\
-            $\beta$                                                     & Adaptation gain for visual velocity scale                            \\
-            $\gamma_x,\,\gamma_y,\,\gamma_z$                            & Metric-to-index gains for grid path integration                      \\
-            $\gamma_\psi,\,\gamma_h$                                    & Gains for HDC azimuth and height updates                             \\
-            $w_i$                                                       & Robust weights for least squares                                     \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Intermediate Variables (Vision/Flow)}}                                                                  \\
-            $H,\,W$                                                     & Image height and width                                               \\
-            $Y_t,\,U_t,\,V_t,\,\tilde V_t,\,Z_t$                        & Luminance, CLAHE output, blurred, normalized, and downsampled images \\
-            $\mathbf{p}_i^t$                                            & Pixel coordinates of feature $i$ at time $t$                         \\
-            $\tilde{\mathbf{q}}_i^t,\,\mathbf{q}_i^t$                   & Homogeneous and normalized image coordinates                         \\
-            $\pi(\cdot)$                                                & Perspective projection operator                                      \\
-            $\mathbf{f}_i^{\perp}$                                      & Rotation-compensated residual flow for feature $i$                   \\
-            $\bar{\mathbf{v}}^{vis}_t$                                  & Unscaled visual velocity (before $\kappa_t$)                         \\
-            $\mathbf{A}_i$                                              & Design matrix in the translational flow model                        \\
-            $\lambda_i,\,Z_g$                                           & Inverse depth per feature and approximate ground-plane depth         \\
-            $\mathcal{VT}$                                              & Set of visual templates used for matching                            \\
-            $VT_m$                                                      & Indicator/value for active visual template $m$                       \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Filter States and Network Terms}}                                                                       \\
-            $L_t,\,H_t$                                                 & Low-pass and high-pass filtered signals                              \\
-            $L^{vis}_t,\,H^{imu}_t$                                     & Filtered visual and IMU velocities                                   \\
-            $L^{r,vis}_t,\,H^{r}_t$                                     & Filtered visual and IMU yaw-rate components                          \\
-            $s,\,\omega$                                                & Laplace/frequency variables ($s=j\omega$)                            \\
-            $\mathbf{g}_t$                                              & Raw gyroscope measurement                                            \\
-            $\mathbf{e}_z$                                              & Vertical unit vector (yaw extraction)                                \\
-            $\mathcal{K}^g,\,\mathcal{K}^h$                             & Gaussian connectivity kernels (grid/HDC)                             \\
-            $\sigma_x,\,\sigma_y,\,\sigma_z$                            & Kernel widths in grid network                                        \\
-            $\bar A^{g}$                                                & Mean grid-cell activity (for inhibition)                             \\
-            $\mathbf{c}_{i,j,k}$                                        & Grid-cell coordinates for decoding pose                              \\
-            $\hat{\mathbf{p}}_t,\,\hat{\psi}_t$                         & Decoded metric position and heading                                  \\
-            $\theta_u$                                                  & Azimuth corresponding to HDC bin $u$                                 \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Mathematical Operators}}                                                                                \\
-            $[\,\cdot\,]_+$                                             & Rectifier (ReLU) operator                                            \\
-            $\langle \cdot \rangle_{N}$                                 & Modulo-$N$ wrapping operator                                         \\
-            $\mathrm{atan2}(\cdot,\cdot)$                               & Two-argument arctangent for heading decoding                         \\
-            $\mathrm{vec}(\cdot)$                                       & Vectorization operator                                               \\
-            $\lfloor \cdot \rfloor$                                     & Floor operator                                                       \\
-            \midrule
-            \multicolumn{2}{l}{\textit{Graph and Loop-closure Terms}}                                                                          \\
-            $\mathcal{V}$                                               & Set of nodes (graph context)                                         \\
-            $\mathcal{E}$                                               & Set of edges (graph context)                                         \\
-            $\mathcal{L}$                                               & Set of links/edges in the experience graph                           \\
-            $d_{thresh}$                                                & Spatial threshold for new experience creation                        \\
-            $T_{min}$                                                   & Minimum temporal separation for loop closure                         \\
-            $\mathbf{T}_{i \to i+1}$                                    & Relative pose edge between consecutive experiences                   \\
-            $\mathbf{T}_{loop}$                                         & Loop closure residual (pose error)                                   \\
-            $\mathcal{P}$                                               & Node sequence along an identified loop path                          \\
-            \bottomrule
-        \end{longtable}
-    }
-
-\FloatBarrier
+\begin{table*}[!t]
+    \centering
+    \caption{Primary notation and symbols used in this paper}\label{tab:notation}
+    \footnotesize
+    \setlength{\tabcolsep}{2.5pt}
+    \begin{threeparttable}
+    \begin{tabular}{p{0.21\textwidth}p{0.68\textwidth}}
+    \toprule
+    \textbf{Symbol}                                             & \textbf{Description}                                                 \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Pose and Motion}}                                                                                       \\
+    $x, y, z$                                                   & 3D position coordinates (meters)                                     \\
+    $\psi$                                                      & Yaw angle / heading direction (radians)                              \\
+    $\mathbf{p}_t = (x_t, y_t, z_t)^T$                          & Position vector at time $t$                                          \\
+    $\mathbf{v}_t$                                              & Translational velocity (m/s)                                         \\
+    $r_t$                                                       & Yaw rate (scalar, rad/s), $r_t = \mathbf{e}_z^\top \omega_t$         \\
+    $\omega_t$                                                  & Angular velocity vector (rad/s)                                      \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Sensory Inputs}}                                                                                        \\
+    $\mathbf{I}_t$                                              & RGB image at time $t$                                                \\
+    $\mathbf{a}_t$                                              & Linear acceleration from accelerometer (m/s$^2$)                     \\
+    $\boldsymbol{\omega}_t^g$                                   & Angular velocity from gyroscope (rad/s)                              \\
+    $\mathbf{f}_v$                                              & Visual feature descriptor                                            \\
+    $\mathbf{f}_i$                                              & Inertial measurement vector                                          \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Fusion and Filtering}}                                                                                  \\
+    $\mathbf{v}_t^{\text{vis}}$                                 & Visual velocity estimate (low-freq)                                  \\
+    $\mathbf{v}_t^{\text{imu}}$                                 & IMU velocity estimate (high-freq)                                    \\
+    $\mathbf{v}_t^f$                                            & Fused velocity (complementary filter)                                \\
+    $r_t^{\text{vis}}, r_t^{\text{imu}}, r_t^f$                 & Visual, IMU, and fused yaw rates                                     \\
+    $H_{\text{LP}}(s), H_{\text{HP}}(s)$                        & Low-pass and high-pass transfer functions                            \\
+    $\omega_c$                                                  & Com\-ple\-men\-tary filter cutoff frequency (rad/s)                  \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Spatial Cell Representations}}                                                                          \\
+    $\mathbf{A}_t^g \in \mathbb{R}^{N_x \times N_y \times N_z}$ & 3D grid cell activity (position encoding)                            \\
+    $\mathbf{A}_t^h \in \mathbb{R}^{N_\psi \times N_h}$         & Head direction cell activity (orientation encoding)                  \\
+    $\mathcal{S}_t = (\mathbf{A}_t^g, \mathbf{A}_t^h)$          & Conjunctive spatial cell state                                       \\
+    $\mathbf{u}_t = (\mathbf{v}_t^f, r_t^f)$                    & Fused motion cue for path integration                                \\
+    $N_x, N_y, N_z$                                             & Grid cell network dimensions                                         \\
+    $N_\psi, N_h$                                               & Azimuth bins and number of height layers                             \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Visual Templates and Experience Map}}                                                                   \\
+    $\mathcal{T} = \{T_1, T_2, \ldots, T_M\}$                   & Set of visual templates                                              \\
+    $T_i$                                                       & Visual template $i$ (scene descriptor)                               \\
+    $d(T_i, T_j)$                                               & Similarity distance between templates                                \\
+    $\mathcal{E} = \{e_1, e_2, \ldots, e_K\}$                   & Experience map (node set)                                            \\
+    $e_k = (T_k, \mathcal{S}_k, \mathbf{p}_k)$                  & Experience node: template, spatial state, pose                       \\
+    $\mathbf{G} = (\mathcal{E}, \mathcal{L})$                   & Experience graph (nodes + links)                                     \\
+    $\mathcal{L}$                                               & Set of links/edges in the experience graph                           \\
+    $d_{thresh}$                                                & Spatial distance threshold for creating a new experience             \\
+    $T_{min}$                                                   & Minimum temporal separation for loop closure                         \\
+    $\mathbf{T}_{i \to i+1}$                                    & Relative pose edge between consecutive experiences                   \\
+    $\mathbf{T}_{loop}$                                         & Loop closure residual (pose error)                                   \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Operators and Parameters}}                                                                              \\
+    $\mathbf{K}$                                                & Camera intrinsic matrix                                              \\
+    $\mathcal{G},\,\mathcal{C}_\lambda,\,\mathcal{K}_\sigma$    & Grayscale, CLAHE (clip limit $\lambda$), Gaussian kernel ($\sigma$)  \\
+    $\mathcal{D}$                                               & Downsampling operator (to $64\times64$)                              \\
+    $\boldsymbol{\phi}_t$                                       & Vectorized visual descriptor at time $t$                             \\
+    $d_{\cos}(\cdot,\cdot)$                                     & Cosine distance for template matching                                \\
+    $\tau_{vt},\,\tau_{loop}$                                   & Thresholds for template creation and loop closure                    \\
+    $\mathcal{L}_\tau,\,\mathcal{H}_\tau$                       & Low-/high-pass filters with time constant $\tau$                     \\
+    $\eta,\,\eta_r$                                             & Fusion weights for velocity and yaw-rate                             \\
+    $\kappa_t$                                                  & Visual velocity scale factor                                         \\
+    $\Xi_{m,i,j,k},\,\rho$                                      & VT--grid association strength, correction gain                       \\
+    $\mathcal{S}_{active}$                                      & Set of currently active visual templates                             \\
+    $\Delta t$                                                  & Sampling interval                                                    \\
+    $\alpha,\,\alpha_r$                                         & Forgetting factors for low-pass filters                              \\
+    $\beta$                                                     & Adaptation gain for visual velocity scale                            \\
+    $\gamma_x,\,\gamma_y,\,\gamma_z$                            & Metric-to-index gains for grid path integration                      \\
+    $\gamma_\psi,\,\gamma_h$                                    & Gains for HDC azimuth and height updates                             \\
+    $w_i$                                                       & Robust weights for least squares                                     \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Intermediate Variables (Vision/Flow)}}                                                                  \\
+    $H,\,W$                                                     & Image height and width                                               \\
+    $Y_t,\,U_t,\,V_t,\,\tilde V_t,\,Z_t$                        & Luminance, CLAHE output, blurred, normalized, and downsampled images \\
+    $\mathbf{p}_i^t$                                            & Pixel coordinates of feature $i$ at time $t$                         \\
+    $\tilde{\mathbf{q}}_i^t,\,\mathbf{q}_i^t$                   & Homogeneous and normalized image coordinates                         \\
+    $\pi(\cdot)$                                                & Perspective projection operator                                      \\
+    $\mathbf{f}_i^{\perp}$                                      & Rotation-compensated residual flow for feature $i$                   \\
+    $\bar{\mathbf{v}}^{vis}_t$                                  & Unscaled visual velocity (before $\kappa_t$)                         \\
+    $\mathbf{A}_i$                                              & Design matrix in the translational flow model                        \\
+    $\lambda_i,\,Z_g$                                           & Inverse depth per feature and approximate ground-plane depth         \\
+    $\mathcal{VT}$                                              & Set of visual templates used for matching                            \\
+    $VT_m$                                                      & Indicator/value for active visual template $m$                       \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Filter States and Network Terms}}                                                                       \\
+    $L_t,\,H_t$                                                 & Low-pass and high-pass filtered signals                              \\
+    $L^{vis}_t,\,H^{imu}_t$                                     & Filtered visual and IMU velocities                                   \\
+    $L^{r,vis}_t,\,H^{r}_t$                                     & Filtered visual and IMU yaw-rate components                          \\
+    $s,\,\omega$                                                & Laplace/frequency variables ($s=j\omega$)                            \\
+    $\mathbf{g}_t$                                              & Raw gyroscope measurement                                            \\
+    $\mathbf{e}_z$                                              & Vertical unit vector (yaw extraction)                                \\
+    $\mathcal{K}^g,\,\mathcal{K}^h$                             & Gaussian connectivity kernels (grid/HDC)                             \\
+    $\sigma_x,\,\sigma_y,\,\sigma_z$                            & Kernel widths in grid network                                        \\
+    $\bar A^{g}$                                                & Mean grid-cell activity (for inhibition)                             \\
+    $\mathbf{c}_{i,j,k}$                                        & Grid-cell coordinates for decoding pose                              \\
+    $\hat{\mathbf{p}}_t,\,\hat{\psi}_t$                         & Decoded metric position and heading                                  \\
+    $\theta_u$                                                  & Azimuth corresponding to HDC bin $u$                                 \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Mathematical Operators}}                                                                                \\
+    $[\,\cdot\,]_+$                                             & Rectifier (ReLU) operator                                            \\
+    $\langle \cdot \rangle_{N}$                                 & Modulo-$N$ wrapping operator                                         \\
+    $\mathrm{atan2}(\cdot,\cdot)$                               & Two-argument arctangent for heading decoding                         \\
+    $\mathrm{vec}(\cdot)$                                       & Vectorization operator                                               \\
+    $\lfloor \cdot \rfloor$                                     & Floor operator                                                       \\
+    \midrule
+    \multicolumn{2}{l}{\textit{Graph and Loop-closure Terms}}                                                                          \\
+    $\mathcal{V}$                                               & Set of nodes (graph context)                                         \\
+    $\mathcal{E}$                                               & Set of edges (graph context)                                         \\
+    $\mathcal{L}$                                               & Set of links/edges in the experience graph                           \\
+    $d_{thresh}$                                                & Spatial threshold for new experience creation                        \\
+    $T_{min}$                                                   & Minimum temporal separation for loop closure                         \\
+    $\mathbf{T}_{i \to i+1}$                                    & Relative pose edge between consecutive experiences                   \\
+    $\mathbf{T}_{loop}$                                         & Loop closure residual (pose error)                                   \\
+    $\mathcal{P}$                                               & Node sequence along an identified loop path                          \\
+    \bottomrule
+    \end{tabular}
+    \end{threeparttable}
+    \end{table*}
 
 \textbf{Notation Conventions.} Superscripts indicate sensory modality ($^{\text{vis}}$: visual, $^{\text{imu}}$: inertial, $^f$: fused) or cell type ($^g$: grid cells, $^h$: head direction cells). Subscript $t$ denotes time. Bold uppercase letters denote matrices or high-dimensional arrays; bold lowercase denotes vectors; calligraphic fonts denote sets.
 
@@ -182,7 +170,6 @@ As visualized in Fig.~\ref{fig:system_overview}, the end-to-end data pipeline co
 3. Complementary fusion unit: Adopts first-order IIR filters to separate low-frequency visual drift and high-frequency inertial noise, outputting smoothed translational and rotational kinematics.
 4. Metric spatial encoding network: Updates distributed spatial cell states using fused motion cues, and suppresses integral drift via visual template anchoring constraints.
 5. Topological experience graph: Records historical visual descriptors and spatial cell snapshots, and executes global graph relaxation once loop closures are detected to guarantee globally consistent metric poses.
-\FloatBarrier
 
 \subsection{Sensory Processing and Fusion}
 
