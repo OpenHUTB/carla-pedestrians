@@ -7,7 +7,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(SCRIPT_DIR, '07_test', 'experiment_supplement'))
+# experiment_templates 在 07_test/07_test/experiment_supplement/ 下
+_EXP_DIR = os.path.join(SCRIPT_DIR, '07_test', 'experiment_supplement')
+if not os.path.isdir(_EXP_DIR):
+    _EXP_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), '07_test', '07_test', 'experiment_supplement')
+sys.path.insert(0, _EXP_DIR)
 from experiment_templates import ExperimentRecorder
 
 DATA_ROOT = os.path.join(SCRIPT_DIR, '..', 'data')
@@ -166,11 +170,11 @@ def make_plots(dataset_name, traj, data_dir):
 
 
 def discover_datasets():
-    """发现所有数据目录 (排除备份)"""
+    """发现所有数据目录"""
     datasets = []
     for entry in sorted(os.listdir(DATA_ROOT)):
         full = os.path.join(DATA_ROOT, entry)
-        if os.path.isdir(full) and 'Town' in entry and 'backup' not in entry.lower():
+        if os.path.isdir(full) and 'Town' in entry:
             gt = os.path.join(full, 'ground_truth.txt')
             if os.path.exists(gt):
                 datasets.append(full)
@@ -219,11 +223,7 @@ def main():
         print(recorder.to_latex_table('Ablation Study: Multi-Scenario Comparison'))
 
     # ---- 保存结果 ----
-    out_json = os.path.join(DATA_ROOT, 'ablation_summary.json')
+    out_json = os.path.join(DATA_ROOT, 'ablation_results.json')
     recorder.save_results(out_json)
 
     print("\n[OK] Ablation study complete.")
-
-
-if __name__ == '__main__':
-    main()
