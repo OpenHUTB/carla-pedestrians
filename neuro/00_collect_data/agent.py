@@ -37,17 +37,16 @@ class agent:
         self.client = carla.Client('localhost', 2000)
         self.world  = self.client.get_world()
         self.bp_lib = self.world.get_blueprint_library()
-
+        
         self.vehicle = None
         self.actor_list = []
 
         map_geo = self.world.get_map().transform_to_geolocation(carla.Location(0,0,0))
-        
+            
         self.geo_centre_lat = deg_to_rad(map_geo.latitude) 
         self.geo_centre_lon = deg_to_rad(map_geo.longitude)
         self.geo_centre_alt = map_geo.altitude
         print("✅ CARLA 连接成功！世界地图名称：", self.world.get_map().name)
-
 
     # Spawn the vehicle randomly
     def spawn_vehicle(self, index=None):
