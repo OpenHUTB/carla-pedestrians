@@ -30,13 +30,40 @@ import numpy as np
 import subprocess
 
 import sys
-sys.path.append(r"/home/d/workspace/CILv2_multiview/scenario_runner")
-sys.path.append(r"/home/d/workspace/CILv2_multiview/CARLA_0.9.13/PythonAPI/carla")
-sys.path.append(r"/home/d/workspace/CILv2_multiview/run_CARLA_driving/driving/autoagents")
-sys.path.append(r"/home/d/workspace/CILv2_multiview/run_CARLA_driving")
-# /home/d/workspace/CILv2_multiview/run_CARLA_driving/driving/__init__.py
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# 从脚本目录向上搜索项目根目录（bip/）
+_BIP_DIR = os.path.dirname(os.path.dirname(_SCRIPT_DIR))  # driving -> run_CARLA_driving -> bip
+_DRIVING_DIR = os.path.dirname(_SCRIPT_DIR)  # run_CARLA_driving
 
-# --debug=0 --scenarios=/home/d/workspace/CILv2_multiview/run_CARLA_driving/data/leaderboard/leaderboard_Town05.json --routes=/home/d/workspace/CILv2_multiview/run_CARLA_driving/data/leaderboard --repetitions=1 --resume=True --track=SENSORS --agent=${DRIVING_TEST_ROOT}/driving/autoagents/CILv2_agent.py --checkpoint=/home/d/workspace/CILv2_multiview/run_CARLA_driving/results/leaderboard   --agent-config=/home/d/workspace/CILv2_multiview/_results/_results/Ours/Town12346_5/config40.json  --docker=carlasim/carla:0.9.13 --gpus=0     --fps=20  --PedestriansSeed=0 --trafficManagerSeed=0 --save-driving-vision
+# 1) 添加 scenario_runner 路径（bip/scenario_runner）
+_SCENARIO_RUNNER_DIR = os.path.join(_BIP_DIR, 'scenario_runner')
+if os.path.isdir(_SCENARIO_RUNNER_DIR) and _SCENARIO_RUNNER_DIR not in sys.path:
+    sys.path.insert(0, _SCENARIO_RUNNER_DIR)
+
+# 2) CARLA PythonAPI：优先使用 CARLA_ROOT 环境变量
+_CARLA_PYTHONAPI = ''
+_carla_root = os.environ.get('CARLA_ROOT', '')
+if _carla_root:
+    _CARLA_PYTHONAPI = os.path.join(_carla_root, 'PythonAPI', 'carla')
+    if not os.path.isdir(_CARLA_PYTHONAPI):
+        _CARLA_PYTHONAPI = ''
+if _CARLA_PYTHONAPI and _CARLA_PYTHONAPI not in sys.path:
+    sys.path.insert(0, _CARLA_PYTHONAPI)
+
+# 3) 添加 autoagents 路径
+_AUTOAGENTS_DIR = os.path.join(_DRIVING_DIR, 'driving', 'autoagents')
+if os.path.isdir(_AUTOAGENTS_DIR) and _AUTOAGENTS_DIR not in sys.path:
+    sys.path.insert(0, _AUTOAGENTS_DIR)
+
+# 4) 添加 run_CARLA_driving 路径
+if _DRIVING_DIR not in sys.path:
+    sys.path.insert(0, _DRIVING_DIR)
+
+# Example usage:
+#   --debug=0 --scenarios=data/leaderboard/leaderboard_Town05.json --routes=data/leaderboard
+#   --repetitions=1 --resume=True --track=SENSORS --agent=driving/autoagents/CILv2_agent.py
+#   --checkpoint=results/leaderboard --agent-config=config.json --docker=carlasim/carla:0.9.13
+#   --gpus=0 --fps=20 --PedestriansSeed=0 --trafficManagerSeed=0 --save-driving-vision
 
 from srunner.scenariomanager.carla_data_provider import *
 from srunner.scenariomanager.timer import GameTime
