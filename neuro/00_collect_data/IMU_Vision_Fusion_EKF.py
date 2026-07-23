@@ -11,10 +11,200 @@ import carla
 import weakref
 from scipy.spatial.transform import Rotation as R
 
+# Monkey-patch: CARLA 0.9.8 的 Vector3D 缺少较新版本 agents 所需的 API
+# 补全兼容层，使新版 agents 代码能在 CARLA 0.9.8 的 wheel 上运行
+# 注意：hasattr 对 C 扩展属性可能返回 True（如 length 可能是 property），
+# 但 callable 为 False，因此用 callable 或无条件覆盖来确保方法可用
+
+def _vector3d_length(self):
+    """Return the length (magnitude) of this vector."""
+    return math.sqrt(self.x**2 + self.y**2 + self.z**2)
+carla.Vector3D.length = _vector3d_length
+
+def _make_unit_vector(self):
+    """Return a unit vector pointing in the same direction as this vector."""
+    length = math.sqrt(self.x**2 + self.y**2 + self.z**2)
+    if length < 1e-12:
+        return carla.Vector3D(0.0, 0.0, 0.0)
+    return carla.Vector3D(self.x / length, self.y / length, self.z / length)
+carla.Vector3D.make_unit_vector = _make_unit_vector
+
+def _vector3d_dot(self, other):
+    """Return the dot product of this vector with another."""
+    return self.x * other.x + self.y * other.y + self.z * other.z
+carla.Vector3D.dot = _vector3d_dot
+
+def _vector3d_cross(self, other):
+    """Return the cross product of this vector with another."""
+    return carla.Vector3D(
+        self.y * other.z - self.z * other.y,
+        self.z * other.x - self.x * other.z,
+        self.x * other.y - self.y * other.x
+    )
+carla.Vector3D.cross = _vector3d_cross
+
+def _vector3d_truediv(self, scalar):
+    return carla.Vector3D(self.x / scalar, self.y / scalar, self.z / scalar)
+carla.Vector3D.__truediv__ = _vector3d_truediv
+carla.Vector3D.__div__ = _vector3d_truediv
+
+def _vector3d_mul(self, scalar):
+    return carla.Vector3D(self.x * scalar, self.y * scalar, self.z * scalar)
+def _vector3d_rmul(self, scalar):
+    return carla.Vector3D(self.x * scalar, self.y * scalar, self.z * scalar)
+carla.Vector3D.__mul__ = _vector3d_mul
+carla.Vector3D.__rmul__ = _vector3d_rmul
+
+def _vector3d_add(self, other):
+    return carla.Vector3D(self.x + other.x, self.y + other.y, self.z + other.z)
+carla.Vector3D.__add__ = _vector3d_add
+
+def _vector3d_sub(self, other):
+    return carla.Vector3D(self.x - other.x, self.y - other.y, self.z - other.z)
+carla.Vector3D.__sub__ = _vector3d_sub
+
+# Monkey-patch: CARLA 0.9.8 的 Transform 缺少 get_right_vector 等方法
+# BasicAgent 的 vehicle_controller 在横向控制时调用这些方法
+import math as _math  # noqa: F811 - 已在文件顶部导入，此处确保可用
+try:
+    _ = carla.Transform().get_right_vector()
+except AttributeError:
+    def _transform_get_right_vector(self):
+        """Return the right vector of this transform."""
+        import numpy as _np
+        yaw = _math.radians(self.rotation.yaw)
+        return carla.Vector3D(_math.cos(yaw), _math.sin(yaw), 0.0)
+    carla.Transform.get_right_vector = _transform_get_right_vector
+
+    def _transform_get_forward_vector(self):
+        """Return the forward vector of this transform."""
+        import numpy as _np
+        yaw = _math.radians(self.rotation.yaw)
+        pitch = _math.radians(self.rotation.pitch)
+        return carla.Vector3D(
+            _math.cos(pitch) * _math.cos(yaw),
+            _math.cos(pitch) * _math.sin(yaw),
+            _math.sin(pitch)
+        )
+    carla.Transform.get_forward_vector = _transform_get_forward_vector
+
+    def _transform_get_up_vector(self):
+        """Return the up vector of this transform."""
+        import numpy as _np
+        yaw = _math.radians(self.rotation.yaw)
+        pitch = _math.radians(self.rotation.pitch)
+        roll = _math.radians(self.rotation.roll)
+        return carla.Vector3D(
+            _math.cos(yaw) * _math.sin(roll) * _math.sin(pitch) - _math.cos(roll) * _math.sin(yaw),
+            _math.cos(roll) * _math.cos(yaw) + _math.sin(roll) * _math.sin(pitch) * _math.sin(yaw),
+            _math.cos(pitch) * _math.sin(roll)
+        )
+    carla.Transform.get_up_vector = _transform_get_up_vector
+
+    def _transform_get_matrix(self):
+        """Return the 4x4 transformation matrix of this transform."""
+        import numpy as _np
+        yaw = _math.radians(self.rotation.yaw)
+        pitch = _math.radians(self.rotation.pitch)
+        roll = _math.radians(self.rotation.roll)
+        cy, sy = _math.cos(yaw), _math.sin(yaw)
+        cp, sp = _math.cos(pitch), _math.sin(pitch)
+        cr, sr = _math.cos(roll), _math.sin(roll)
+        matrix = _np.identity(4)
+        matrix[0, 3] = self.location.x
+        matrix[1, 3] = self.location.y
+        matrix[2, 3] = self.location.z
+        matrix[0, 0] = cp * cy
+        matrix[0, 1] = cy * sp * sr - cr * sy
+        matrix[0, 2] = sr * sy + cr * cy * sp
+        matrix[1, 0] = cp * sy
+        matrix[1, 1] = cr * cy + sp * sr * sy
+        matrix[1, 2] = cr * sp * sy - cy * sr
+        matrix[2, 0] = -sp
+        matrix[2, 1] = cp * sr
+        matrix[2, 2] = cr * cp
+        return matrix
+    carla.Transform.get_matrix = _transform_get_matrix
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
-carla_api_path = os.path.join(current_dir, '../../../../carla/PythonAPI/carla')
-sys.path.append(carla_api_path)
-from agents.navigation.behavior_agent import BehaviorAgent
+
+# 动态查找 CARLA agents 模块（agents 不在 carla wheel 中，需定位 CARLA 源码目录）
+import glob as _glob
+_carla_agents_found = False
+_carla_agents_dir = None
+
+def _search_agents():
+    """搜索 CARLA agents 目录，返回 agents_dir 或 None"""
+    # 跳过系统目录
+    _skip_dirs = {'$RECYCLE.BIN', 'System Volume Information', 'Windows', '$WinREAgent',
+                  'Config.Msi', 'MSOCache', 'PerfLogs', 'Recovery',
+                  'Temp', 'Python', 'AppData', 'Desktop', 'Documents',
+                  'Downloads', 'Music', 'Pictures', 'Videos', 'OneDrive',
+                  'Links', 'Favorites', 'Contacts', 'Searches', 'Saved Games'}
+    _candidates = []
+    _carla_root = os.environ.get('CARLA_ROOT', '')
+
+    # 1) 优先使用 CARLA_ROOT 环境变量
+    if _carla_root:
+        _candidates = _glob.glob(os.path.join(_carla_root, 'PythonAPI', 'carla', 'agents',
+                                               'navigation', '*.py'))
+
+    # 2) 搜索用户目录下的 CARLA 安装
+    if not _candidates:
+        _user_home = os.path.expanduser('~')
+        for _entry in os.listdir(_user_home):
+            _entry_path = os.path.join(_user_home, _entry)
+            if not os.path.isdir(_entry_path) or _entry in _skip_dirs:
+                continue
+            _candidates = _glob.glob(os.path.join(_entry_path, 'PythonAPI', 'carla', 'agents',
+                                                   'navigation', '*.py'))
+            if _candidates:
+                break
+
+    # 3) 从脚本目录向上搜索（最多 5 层）
+    if not _candidates:
+        _search_dir = current_dir
+        for _ in range(5):
+            _candidates = _glob.glob(os.path.join(_search_dir, 'PythonAPI', 'carla', 'agents',
+                                                   'navigation', '*.py'))
+            if _candidates:
+                break
+            _parent = os.path.dirname(_search_dir)
+            if _parent == _search_dir:
+                break
+            _search_dir = _parent
+
+    if _candidates:
+        return os.path.dirname(os.path.dirname(os.path.dirname(_candidates[0])))
+    return None
+
+_carla_agents_dir = _search_agents()
+print(f"[DEBUG] Found agents dir: {_carla_agents_dir}")
+if _carla_agents_dir:
+    if _carla_agents_dir not in sys.path:
+        sys.path.insert(0, _carla_agents_dir)
+    _carla_agents_found = True
+
+if not _carla_agents_found:
+    raise ImportError(
+        "未找到 CARLA agents 模块。请确保 CARLA 已安装，且 PythonAPI/carla/agents/ 目录存在。\n"
+        "通常位于: <CARLA_ROOT>/PythonAPI/carla/agents/\n"
+        "可通过设置环境变量 CARLA_ROOT 指定 CARLA 安装目录"
+    )
+
+# CARLA 0.9.8 兼容：使用 BasicAgent 作为基类
+# BehaviorAgent (CARLA >= 0.9.14) 需要 Vector3D.make_unit_vector，0.9.8 不支持
+from agents.navigation.basic_agent import BasicAgent
+_has_behavior_agent = False
+
+class BehaviorAgent(BasicAgent):
+    """CARLA 0.9.8 兼容的 BehaviorAgent 包装器"""
+    def __init__(self, vehicle, behavior='normal'):
+        super().__init__(vehicle)
+        self._behavior = behavior
+
+    def follow_speed_limits(self, value):
+        pass  # BasicAgent 没有此方法
 
 # 导入视觉里程计
 from visual_odometry_opencv import VisualOdometry, ScaleEstimator
@@ -130,14 +320,56 @@ def select_forward_destination(vehicle, spawn_points, min_distance=50.0):
         farthest = max(spawn_points, key=lambda sp: (sp.location - vehicle_location).length())
         return farthest.location
 
+def _get_available_vehicle_blueprint(bp_lib):
+    """获取可用的车辆蓝图，优先 CARLA 0.9.8 兼容车型，支持自动回退"""
+    # CARLA 0.9.8 兼容的车辆蓝图列表（按优先级排列）
+    preferred_vehicles = [
+        'vehicle.lincoln.mkz2017',
+        'vehicle.lincoln.mkz_2017',
+        'vehicle.tesla.model3',
+        'vehicle.tesla.cybertruck',
+        'vehicle.ford.mustang',
+        'vehicle.dodge.charger_2020',
+        'vehicle.audi.a2',
+        'vehicle.audi.tt',
+        'vehicle.chevrolet.impala',
+        'vehicle.mini.cooper_s',
+        'vehicle.nissan.patrol',
+        'vehicle.bmw.grandtourer',
+        'vehicle.jeep.wrangler_rubicon',
+        'vehicle.mercedes.coupe',
+        'vehicle.nissan.micra',
+        'vehicle.citroen.c3',
+        'vehicle.seat.leon',
+        'vehicle.volkswagen.t2',
+        'vehicle.subaru.brz',
+        'vehicle.subaru.impreza',
+    ]
+
+    for vehicle_id in preferred_vehicles:
+        bp = bp_lib.find(vehicle_id)
+        if bp is not None:
+            print(f"选择车辆蓝图: {vehicle_id}")
+            return bp
+
+    # 最后回退：取第一个可用的车辆蓝图
+    all_vehicles = list(bp_lib.filter('vehicle.*'))
+    if not all_vehicles:
+        raise RuntimeError("CARLA 蓝图库中没有任何车辆蓝图可用！")
+    fallback = all_vehicles[0]
+    print(f"[WARN] 所有优先车辆蓝图均不可用，回退至第一个可用车辆: {fallback.id}")
+    return fallback
+
+
 def safe_spawn_vehicle(world, bp_lib, max_attempts=10):
     spawn_points = world.get_map().get_spawn_points()
     if not spawn_points:
         raise ValueError(f"地图 {TARGET_MAP} 未找到生成点！")
     print(f"地图 {TARGET_MAP} 找到 {len(spawn_points)} 个生成点")
 
-    vehicle_bp = bp_lib.find('vehicle.lincoln.mkz_2020')
+    vehicle_bp = _get_available_vehicle_blueprint(bp_lib)
     vehicle_bp.set_attribute('role_name', 'hero')
+
     vehicle = None
     for attempt in range(max_attempts):
         chosen_spawn = random.choice(spawn_points)
@@ -164,7 +396,10 @@ def init_carla_environment():
     
     # 优化Traffic Manager参数以提高安全性
     traffic_manager.set_global_distance_to_leading_vehicle(3.0)  # 增加跟车距离
-    traffic_manager.set_random_device_seed(42)  # 固定随机种子，行为可复现
+    try:
+        traffic_manager.set_random_device_seed(42)  # 固定随机种子，行为可复现 (CARLA 0.9.13+)
+    except AttributeError:
+        pass  # CARLA 0.9.8 不支持此方法
     
     clear_all_actors(world)
     
@@ -182,7 +417,14 @@ def init_carla_environment():
             print(f"配置交通灯警告: {e}")
     
     bp_lib = world.get_blueprint_library()
-    vehicle, spawn_points = safe_spawn_vehicle(world, bp_lib)
+    try:
+        vehicle, spawn_points = safe_spawn_vehicle(world, bp_lib)
+    except Exception as e:
+        print(f"[ERROR] 车辆生成失败: {e}")
+        print("[INFO] 正在清理已加载的世界...")
+        clear_all_actors(world)
+        raise RuntimeError(f"车辆生成失败: {e}") from e
+
     try:
         physics_control = vehicle.get_physics_control()
         physics_control.use_sweep_wheel_collision = True
@@ -190,7 +432,12 @@ def init_carla_environment():
     except Exception as e:
         print(f"配置车辆物理参数警告: {e}")
     
-    agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
+    try:
+        agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
+    except Exception as e:
+        print(f"[ERROR] 智能体初始化失败: {e}")
+        vehicle.destroy()
+        raise RuntimeError(f"智能体初始化失败: {e}") from e
     agent.follow_speed_limits(False)  # 禁用限速，使用自定义速度
     
     # 兼容不同CARLA版本的速度设置
@@ -259,9 +506,12 @@ def create_rgb_camera(world, bp_lib, vehicle, data_queue):
     rgb_bp.set_attribute("iso", ISO)  
     rgb_bp.set_attribute("gamma", GAMMA)
     # 新增参考代码中的图像增强关闭参数，避免色彩失真
-    rgb_bp.set_attribute("bloom_intensity", "0.0")
-    rgb_bp.set_attribute("chromatic_aberration_intensity", "0.0")
-    rgb_bp.set_attribute("lens_flare_intensity", "0.0")
+    # CARLA 0.9.8 不支持以下后处理参数，使用 try/except 兼容
+    for attr_name in ("bloom_intensity", "chromatic_aberration_intensity", "lens_flare_intensity"):
+        try:
+            rgb_bp.set_attribute(attr_name, "0.0")
+        except Exception:
+            pass  # CARLA 0.9.8 不支持此属性，跳过
     
     transform = carla.Transform(
         carla.Location(x=0.2, y=0, z=4.2),  
@@ -568,7 +818,7 @@ def save_image_simple(img_array, output_dir, idx, target_width=160, target_heigh
         return False
 
 # -------------------------- 主循环 --------------------------
-def main():
+def main(headless=False):
     try:
         world, bp_lib, vehicle, spawn_points, spectator, agent, traffic_manager, collision_sensor = init_carla_environment()
     except Exception as e:
@@ -629,7 +879,8 @@ def main():
     metadata_log.write(f"# Total Frames: {MAX_SAVE_IMG}\n")
     metadata_log.close()
 
-    cv2.namedWindow('RGB Camera', cv2.WINDOW_AUTOSIZE)
+    if not headless:
+        cv2.namedWindow('RGB Camera', cv2.WINDOW_AUTOSIZE)
     stagnant_count = 0
     first_valid_imu = False  # 标记是否已跳过初始异常IMU帧
 
@@ -807,7 +1058,8 @@ def main():
                     return
 
                 # 显示原始图像
-                cv2.imshow('RGB Camera', img)
+                if not headless:
+                    cv2.imshow('RGB Camera', img)
 
             # 增强型避障智能体控制
             if agent.done():
@@ -920,9 +1172,10 @@ def main():
             )
             spectator.set_transform(spec_transform)
 
-            if cv2.waitKey(1) == ord('q'):
-                print("用户退出")
-                return
+            if not headless:
+                if cv2.waitKey(1) == ord('q'):
+                    print("用户退出")
+                    return
 
     except Exception as e:
         print(f"主循环错误: {e}")
@@ -940,9 +1193,14 @@ def main():
         settings.fixed_delta_seconds = None
         world.apply_settings(settings)
         traffic_manager.set_synchronous_mode(False)
-        cv2.destroyAllWindows()
+        if not headless:
+            cv2.destroyAllWindows()
         print("资源清理完成")
 
 
 if __name__ == "__main__":
-    main()
+    import argparse as _argparse
+    _parser = _argparse.ArgumentParser()
+    _parser.add_argument('--headless', action='store_true', help='无头模式（不显示GUI窗口）')
+    _args = _parser.parse_args()
+    main(headless=_args.headless)
