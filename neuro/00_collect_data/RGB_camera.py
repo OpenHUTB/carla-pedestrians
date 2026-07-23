@@ -12,14 +12,77 @@ import weakref
 import collections
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-carla_api_path = os.path.join(current_dir, '../../../../carla/PythonAPI/carla')
-sys.path.append(carla_api_path)
-from agents.navigation.behavior_agent import BehaviorAgent
+
+# 动态查找 CARLA agents 模块（agents 不在 carla wheel 中，需定位 CARLA 源码目录）
+import glob as _glob
+_carla_agents_found = False
+_carla_agents_dir = None
+
+def _search_agents():
+    """搜索 CARLA agents 目录，返回 agents_dir 或 None"""
+    _candidates = []
+    _carla_root = os.environ.get('CARLA_ROOT', '')
+
+    # 1) 优先使用 CARLA_ROOT 环境变量
+    if _carla_root:
+        _candidates = _glob.glob(os.path.join(_carla_root, 'PythonAPI', 'carla', 'agents',
+                                               'navigation', '*.py'))
+
+    # 2) 搜索用户目录下的 CARLA 安装
+    if not _candidates:
+        _user_home = os.path.expanduser('~')
+        _candidates = _glob.glob(os.path.join(_user_home, '*', 'PythonAPI', 'carla', 'agents',
+                                               'navigation', '*.py'))
+
+    # 3) 从脚本目录向上搜索（最多 5 层）
+    if not _candidates:
+        _search_dir = current_dir
+        for _ in range(5):
+            _candidates = _glob.glob(os.path.join(_search_dir, 'PythonAPI', 'carla', 'agents',
+                                                   'navigation', '*.py'))
+            if _candidates:
+                break
+            _parent = os.path.dirname(_search_dir)
+            if _parent == _search_dir:
+                break
+            _search_dir = _parent
+
+    if _candidates:
+        return os.path.dirname(os.path.dirname(os.path.dirname(_candidates[0])))
+    return None
+
+_carla_agents_dir = _search_agents()
+if _carla_agents_dir:
+    if _carla_agents_dir not in sys.path:
+        sys.path.insert(0, _carla_agents_dir)
+    _carla_agents_found = True
+
+if not _carla_agents_found:
+    raise ImportError(
+        "未找到 CARLA agents 模块。请确保 CARLA 已安装，且 PythonAPI/carla/agents/ 目录存在。\n"
+        "通常位于: <CARLA_ROOT>/PythonAPI/carla/agents/\n"
+        "可通过设置环境变量 CARLA_ROOT 指定 CARLA 安装目录"
+    )
+
+# CARLA 0.9.8 使用 BasicAgent，0.9.14+ 使用 BehaviorAgent
+try:
+    from agents.navigation.behavior_agent import BehaviorAgent
+    _has_behavior_agent = True
+except ImportError:
+    from agents.navigation.basic_agent import BasicAgent
+    _has_behavior_agent = False
+    # 为 CARLA 0.9.8 创建 BehaviorAgent 兼容包装
+    class BehaviorAgent(BasicAgent):
+        def __init__(self, vehicle, behavior='normal'):
+            super().__init__(vehicle)
+            self._behavior = behavior
+        def follow_speed_limits(self, value):
+            pass  # BasicAgent 没有此方法
 
 # -------------------------- 配置参数 --------------------------
 TARGET_MAP = "Town10HD"
 MAX_SAVE_IMG = 5000
-OUTPUT_DIR = '../data/01_NeuroSLAM_Datasets/test/'
+OUTPUT_DIR = os.path.join(current_dir, '..', 'data', '01_NeuroSLAM_Datasets', 'test')
 STAGNANT_SPEED = 0.1
 STAGNANT_COUNT = 100
 EXPOSURE_MODE = "manual"
@@ -41,6 +104,42 @@ imu_queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 stagnant_count = 0
 
 # -------------------------- 工具函数 --------------------------
+def _get_available_vehicle_blueprint(bp_lib):
+    """获取可用的车辆蓝图，优先 CARLA 0.9.8 兼容车型，支持自动回退"""
+    preferred_vehicles = [
+        'vehicle.lincoln.mkz2017',
+        'vehicle.lincoln.mkz_2017',
+        'vehicle.tesla.model3',
+        'vehicle.tesla.cybertruck',
+        'vehicle.ford.mustang',
+        'vehicle.dodge.charger_2020',
+        'vehicle.audi.a2',
+        'vehicle.audi.tt',
+        'vehicle.chevrolet.impala',
+        'vehicle.mini.cooper_s',
+        'vehicle.nissan.patrol',
+        'vehicle.bmw.grandtourer',
+        'vehicle.jeep.wrangler_rubicon',
+        'vehicle.mercedes.coupe',
+        'vehicle.nissan.micra',
+        'vehicle.citroen.c3',
+        'vehicle.seat.leon',
+        'vehicle.volkswagen.t2',
+        'vehicle.subaru.brz',
+        'vehicle.subaru.impreza',
+    ]
+    for vehicle_id in preferred_vehicles:
+        bp = bp_lib.find(vehicle_id)
+        if bp is not None:
+            print(f"选择车辆蓝图: {vehicle_id}")
+            return bp
+    all_vehicles = list(bp_lib.filter('vehicle.*'))
+    if not all_vehicles:
+        raise RuntimeError("CARLA 蓝图库中没有任何车辆蓝图可用！")
+    fallback = all_vehicles[0]
+    print(f"[WARN] 所有优先车辆蓝图均不可用，回退至第一个可用车辆: {fallback.id}")
+    return fallback
+
 def get_actor_display_name(actor, truncate=250):
     """获取Actor显示名称"""
     name = ' '.join(actor.type_id.replace('_', '.').title().split('.')[1:])
@@ -123,9 +222,9 @@ class World(object):
         if self.player:
             safe_destroy_actor(self.player)
         
-        # 选择车辆蓝图
+        # 选择车辆蓝图（CARLA 0.9.8 兼容，自动回退）
         bp_lib = self.world.get_blueprint_library()
-        vehicle_bp = bp_lib.find('vehicle.lincoln.mkz_2020')
+        vehicle_bp = _get_available_vehicle_blueprint(bp_lib)
         vehicle_bp.set_attribute('role_name', 'hero')
         
         # 生成车辆（多次尝试）
@@ -155,8 +254,17 @@ class World(object):
         # Agent初始化（无自定义参数修改）
         self.agent = BehaviorAgent(self.player, behavior=AGENT_BEHAVIOR)
         self.agent.follow_speed_limits(True)
-        #设置速度（CARLA 0.9.15兼容：通过局部规划器set_speed）
-        self.agent._local_planner.set_speed(AGENT_MAX_SPEED / 3.6)
+        # 兼容不同CARLA版本的速度设置
+        try:
+            self.agent.set_max_speed(AGENT_MAX_SPEED / 3.6)
+        except AttributeError:
+            try:
+                self.agent.set_target_speed(AGENT_MAX_SPEED / 3.6)
+            except AttributeError:
+                try:
+                    self.agent._local_planner.set_speed(AGENT_MAX_SPEED / 3.6)
+                except AttributeError:
+                    self.agent._max_speed = AGENT_MAX_SPEED / 3.6
         
         # 设置目标点
         destination = random.choice(self.spawn_points).location
