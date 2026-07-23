@@ -1,32 +1,56 @@
 #!/usr/bin/env python3
 """
-NeuroSLAM 一键运行入口
-串联 数据采集 -> 消融实验评估 全流程
+NeuroSLAM — 一键运行入口
+串联 数据采集 → 消融实验评估 → 可视化 全流程
 
 用法:
-    python main.py                    # 运行完整流程（需先启动CARLA）
-    python main.py --collect-only     # 仅数据采集
-    python main.py --ablate-only      # 仅消融评估（使用已有数据）
-    python main.py --skip-collect     # 跳过采集，运行后续步骤
+    python main.py                      # 一键运行完整流程
+    python main.py --setup              # 安装所有依赖
+    python main.py --collect-only       # 仅数据采集（需CARLA）
+    python main.py --skip-collect       # 跳过采集，只评估（使用已有数据）
+    python main.py --host 192.168.1.1   # 指定CARLA服务器地址
 """
 
 import os
 import sys
 import time
+import json
 import argparse
 import subprocess
 import socket
 
+# 修复 Windows 终端 GBK 编码问题
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
+# ─── 路径常量 ─────────────────────────────────────────────
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 COLLECT_SCRIPT = os.path.join(ROOT_DIR, '00_collect_data', 'IMU_Vision_Fusion_EKF.py')
 ABLATE_SCRIPT = os.path.join(ROOT_DIR, '07_test', 'run_ablation.py')
-DATA_DIR = os.path.join(ROOT_DIR, 'data', 'Town01Data_IMU_Fusion')
+REQUIREMENTS_FILE = os.path.join(ROOT_DIR, 'requirements.txt')
+DATA_DIR = os.path.join(ROOT_DIR, 'data')
 DEFAULT_HOST = 'localhost'
 DEFAULT_PORT = 2000
 
 
+# ═══════════════════════════════════════════════════════════
+#  工具函数
+# ═══════════════════════════════════════════════════════════
+
+def print_banner():
+    print()
+    print("=" * 62)
+    print("    NeuroSLAM — Bio-Inspired VIO Pipeline")
+    print("    python main.py --help  查看所有选项")
+    print("=" * 62)
+    print()
+
+
 def check_carla_server(host=DEFAULT_HOST, port=DEFAULT_PORT, timeout=3.0):
-    """检测CARLA服务器是否在运行"""
+    """检测 CARLA 服务器是否在运行"""
     try:
         sock = socket.create_connection((host, port), timeout=timeout)
         sock.close()
@@ -35,81 +59,144 @@ def check_carla_server(host=DEFAULT_HOST, port=DEFAULT_PORT, timeout=3.0):
         return False
 
 
+def find_carla_exe():
+    """
+    自动搜索 CARLA 服务器可执行文件 (CarlaUE4.exe)。
+    返回 (exe_path, carla_root) 或 (None, None)
+    """
+    # 搜索策略: 从脚本目录向上搜索，然后搜索常见盘符
+    search_roots = []
+
+    # 1) 从脚本目录向上搜索（最多 5 层）
+    d = ROOT_DIR
+    for _ in range(5):
+        search_roots.append(d)
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+
+    for root in search_roots:
+        for dirpath, dirnames, filenames in os.walk(root):
+            # 跳过系统目录和回收站
+            skip_dirs = {'$RECYCLE.BIN', 'System Volume Information', 'Windows', '$WinREAgent',
+                         'Config.Msi', 'MSOCache', 'PerfLogs', 'Recovery',
+                         'Temp', 'Python', 'AppData', 'Desktop', 'Documents',
+                         'Downloads', 'Music', 'Pictures', 'Videos', 'OneDrive'}
+            dirnames[:] = [d for d in dirnames if d not in skip_dirs
+                           and not d.startswith('$')]
+            # 限制搜索深度，避免太慢
+            depth = dirpath.replace(root, '').count(os.sep)
+            if depth > 5:
+                dirnames[:] = []  # 不继续深入
+                continue
+            if 'CarlaUE4.exe' in filenames:
+                exe_path = os.path.join(dirpath, 'CarlaUE4.exe')
+                # 确定 CARLA 根目录（需保留 WindowsNoEditor，因为 PythonAPI 在其下）
+                # 路径通常是 .../WindowsNoEditor/CarlaUE4.exe
+                # 或 .../WindowsNoEditor/CarlaUE4/Binaries/Win64/CarlaUE4.exe
+                carla_root = dirpath
+                if os.path.basename(carla_root).lower() == 'win64':
+                    # .../WindowsNoEditor/CarlaUE4/Binaries/Win64 -> WindowsNoEditor
+                    carla_root = os.path.dirname(os.path.dirname(os.path.dirname(carla_root)))
+                else:
+                    # .../WindowsNoEditor/CarlaUE4.exe -> WindowsNoEditor
+                    carla_root = os.path.dirname(carla_root)
+                return exe_path, carla_root
+    return None, None
+
+
 def find_carla_python():
     """
-    找到能导入carla模块的Python解释器。
-    CARLA 0.9.16的wheel是cp312的，需要Python 3.12。
-    返回 (python_exe_path, version_string) 或 (None, error_msg)
+    找到能导入 carla 模块的 Python 解释器。
+    支持 CARLA 0.9.8 (Python 3.7) 和 CARLA 0.9.16 (Python 3.12)。
+    返回 (python_path_or_list, description) 或 (None, error_msg)
     """
-    try:
-        result = subprocess.run(
-            [sys.executable, '-c', 'import carla'],
-            capture_output=True, timeout=10
-        )
-        if result.returncode == 0:
-            return sys.executable, f"当前Python {sys.version_info.major}.{sys.version_info.minor}"
-    except Exception:
-        pass
+    # 候选解释器: (显示名, 实际命令列表)
+    candidates = []
 
-    for launcher in ['py', 'python3']:
-        for ver_suffix in ['-3.12', '3.12']:
-            cmd = [launcher, ver_suffix] if ver_suffix.startswith('-') else [launcher + ver_suffix]
-            try:
-                result = subprocess.run(
-                    [*cmd, '-c', 'import carla'],
-                    capture_output=True, timeout=10
-                )
-                if result.returncode == 0:
-                    py_str = f"{cmd[0]} {cmd[1]}" if len(cmd) > 1 else cmd[0]
-                    return py_str, 'Python 3.12'
-            except FileNotFoundError:
-                continue
+    # 1) 当前 Python
+    candidates.append(("当前Python", [sys.executable]))
 
-    localappdata_py = os.path.expandvars(
-        r'%LOCALAPPDATA%\Programs\Python\Python312\python.exe'
-    )
-    if os.path.exists(localappdata_py):
+    # 2) Windows Python Launcher（覆盖常见版本，3.7 用于 CARLA 0.9.8）
+    for ver in ["3.12", "3.11", "3.10", "3.9", "3.8", "3.7", "3"]:
+        candidates.append((f"py -{ver}", ["py", f"-{ver}"]))
+        candidates.append((f"python{ver}", [f"python{ver}"]))
+
+    # 3) LOCALAPPDATA 下的 Python 安装
+    local_app_data = os.environ.get('LOCALAPPDATA', '')
+    if local_app_data:
+        for ver in ['312', '311', '310', '39', '38', '37']:
+            base = os.path.join(local_app_data, 'Programs', 'Python', f'Python{ver}', 'python.exe')
+            if os.path.exists(base):
+                candidates.append((base, [base]))
+    # 也检查 Program Files 下的 Python
+    for prog_env in ['ProgramFiles', 'ProgramFiles(x86)']:
+        prog_base = os.environ.get(prog_env, '')
+        if prog_base:
+            for ver in ['312', '311', '310', '39', '38', '37']:
+                base = os.path.join(prog_base, 'Python', f'Python{ver}', 'python.exe')
+                if os.path.exists(base):
+                    candidates.append((base, [base]))
+
+    # 去重（按命令列表）
+    seen = set()
+    unique = []
+    for label, cmd in candidates:
+        key = tuple(cmd)
+        if key not in seen:
+            seen.add(key)
+            unique.append((label, cmd))
+
+    for label, cmd in unique:
         try:
             result = subprocess.run(
-                [localappdata_py, '-c', 'import carla'],
-                capture_output=True, timeout=10
+                [*cmd, '-c', 'import carla; print("ok")'],
+                capture_output=True, timeout=15,
+                text=True,
             )
-            if result.returncode == 0:
-                return localappdata_py, 'Python 3.12'
-        except Exception:
-            pass
+            if result.returncode == 0 and 'ok' in result.stdout:
+                return cmd, label
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
 
     return None, (
-        "找不到可导入carla的Python解释器。\n"
-        "CARLA 0.9.16需要Python 3.12，请安装carla wheel:\n"
+        "找不到可导入 carla 的 Python 解释器。\n"
+        "CARLA 0.9.8 需要 Python 3.7，CARLA 0.9.16 需要 Python 3.12。\n"
+        "安装 carla 包:\n"
+        "  py -3.7 -m pip install <CARLA_DIR>\\PythonAPI\\carla\\dist\\carla-*.egg\n"
         "  py -3.12 -m pip install <CARLA_DIR>\\PythonAPI\\carla\\dist\\carla-*.whl"
     )
 
 
-def print_banner():
-    print("=" * 60)
-    print("   NeuroSLAM -- Bio-Inspired VIO Pipeline")
-    print("=" * 60)
-
-
-def run_script(script_path, desc, python_exe=None):
-    """运行Python脚本，返回是否成功"""
+def run_python_script(script_path, desc, python_exe=None, extra_args=None, env=None):
+    """
+    运行一个 Python 脚本。
+    python_exe: 字符串路径或字符串列表，为 None 则用 sys.executable
+    env: 额外的环境变量 dict
+    """
     if python_exe is None:
-        python_exe = sys.executable
+        python_exe = [sys.executable]
+    elif isinstance(python_exe, str):
+        python_exe = [python_exe]
 
-    print(f"\n{'=' * 60}")
-    print(f"  >>> {desc}")
-    print(f"  >>> 脚本: {os.path.basename(script_path)}")
-    print(f"{'=' * 60}\n")
+    print(f"\n{'-' * 60}")
+    print(f"  >> {desc}")
+    print(f"  >> 脚本: {os.path.basename(script_path)}")
+    print(f"{'-' * 60}\n")
 
-    if isinstance(python_exe, str) and ' ' in python_exe:
-        cmd = python_exe.split() + [script_path]
-    else:
-        cmd = [python_exe, script_path] if isinstance(python_exe, str) else python_exe + [script_path]
+    cmd = python_exe + [script_path]
+    if extra_args:
+        cmd.extend(extra_args)
 
-    print(f"[INFO] 使用解释器: {' '.join(cmd[:2])}")
+    # 合并环境变量
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
 
-    result = subprocess.run(cmd, cwd=os.path.dirname(script_path))
+    print(f"[INFO] 命令: {' '.join(cmd)}")
+
+    result = subprocess.run(cmd, cwd=os.path.dirname(script_path) or ROOT_DIR, env=run_env)
     if result.returncode != 0:
         print(f"\n[ERROR] {desc} 失败 (exit code {result.returncode})")
         return False
@@ -117,147 +204,272 @@ def run_script(script_path, desc, python_exe=None):
     return True
 
 
-def step_collect(carla_host, carla_port):
-    """Step 1: CARLA数据采集（需要Python 3.12 + carla）"""
-    carla_py, info = find_carla_python()
-    if carla_py is None:
-        print(f"\n[ERROR] {info}")
+def discover_datasets(data_root):
+    """发现 data/ 下所有有效数据集（含 ground_truth.txt 的目录，排除备份）"""
+    datasets = []
+    if not os.path.isdir(data_root):
+        return datasets
+    for entry in sorted(os.listdir(data_root)):
+        full = os.path.join(data_root, entry)
+        if not os.path.isdir(full):
+            continue
+        if 'backup' in entry.lower():
+            continue
+        gt = os.path.join(full, 'ground_truth.txt')
+        if os.path.exists(gt):
+            datasets.append(full)
+    return datasets
+
+
+def install_dependencies():
+    """安装 Python 依赖"""
+    if not os.path.exists(REQUIREMENTS_FILE):
+        print(f"[WARN] 未找到 {REQUIREMENTS_FILE}，跳过依赖安装")
+        return True
+
+    print(f"\n[INFO] 安装依赖: pip install -r {REQUIREMENTS_FILE}")
+    result = subprocess.run(
+        [sys.executable, '-m', 'pip', 'install', '-r', REQUIREMENTS_FILE],
+        cwd=ROOT_DIR,
+    )
+    if result.returncode != 0:
+        print("[ERROR] 依赖安装失败，请手动执行:")
+        print(f"  {sys.executable} -m pip install -r {REQUIREMENTS_FILE}")
         return False
-    print(f"[INFO] CARLA数据采集使用: {info}")
+    print("[OK] 依赖安装完成")
+    return True
 
+
+# ═══════════════════════════════════════════════════════════
+#  Pipeline 步骤
+# ═══════════════════════════════════════════════════════════
+
+def step_collect(carla_host, carla_port, carla_py):
+    """Step 1: CARLA 数据采集"""
+    carla_root = None
+
+    # 检查 CARLA 服务器，若未运行则自动启动
     if not check_carla_server(carla_host, carla_port):
-        print("\n" + "=" * 60)
-        print("  [阻塞] 等待CARLA服务器...")
-        print("  请手动启动CARLA (例如: CarlaUE4.exe -RenderOffScreen -quality-level=Low)")
-        print("=" * 60)
+        # 自动搜索 CARLA 可执行文件
+        carla_exe, carla_root = find_carla_exe()
+        if carla_exe:
+            print("\n" + "=" * 60)
+            print(f"  [自动启动] CARLA: {carla_exe}")
+            print("=" * 60)
+            try:
+                subprocess.Popen(
+                    [carla_exe, '-RenderOffScreen', '-quality-level=Low'],
+                    cwd=os.path.dirname(carla_exe),
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0,
+                )
+                print("  [等待] CARLA 启动中...")
+                # 等待最多 90 秒
+                for i in range(90):
+                    if check_carla_server(carla_host, carla_port):
+                        print(f"[OK] CARLA 服务器已连接 (耗时约 {i} 秒)\n")
+                        break
+                    time.sleep(1)
+                else:
+                    print("[WARN] CARLA 启动超时，但继续尝试...\n")
+            except Exception as e:
+                print(f"[WARN] 自动启动 CARLA 失败: {e}")
+                print("  请手动启动 CARLA:")
+                print(f"    {carla_exe} -RenderOffScreen -quality-level=Low")
+                print()
+                while not check_carla_server(carla_host, carla_port):
+                    time.sleep(3)
+                print("[OK] CARLA 服务器已连接\n")
+        else:
+            print("\n" + "=" * 60)
+            print("  [等待] CARLA 服务器未连接，且未找到 CarlaUE4.exe")
+            print("  请手动启动 CARLA，例如:")
+            print("    CarlaUE4.exe -RenderOffScreen -quality-level=Low")
+            print("=" * 60)
+            while not check_carla_server(carla_host, carla_port):
+                time.sleep(3)
+            print("[OK] CARLA 服务器已连接\n")
 
-        while not check_carla_server(carla_host, carla_port):
-            time.sleep(3)
-        print("[OK] CARLA服务器已连接\n")
+    # 如果还没找到 CARLA_ROOT，尝试从已启动的服务器获取
+    if not carla_root:
+        carla_exe, carla_root = find_carla_exe()
 
-    if os.path.exists(DATA_DIR):
-        existing = [f for f in os.listdir(DATA_DIR) if f.endswith('.png')]
+    # 检查已有数据
+    if os.path.isdir(DATA_DIR):
+        existing = discover_datasets(DATA_DIR)
         if existing:
-            print(f"[WARN] 数据目录已有 {len(existing)} 张图像")
-            print(f"  目录: {DATA_DIR}")
+            print(f"[WARN] 数据目录已有 {len(existing)} 个数据集:")
+            for d in existing:
+                pngs = len([f for f in os.listdir(d) if f.endswith('.png')])
+                print(f"  - {os.path.basename(d)} ({pngs} 张图像)")
             resp = input("  是否删除旧数据并重新采集? [y/N]: ").strip().lower()
             if resp == 'y':
                 import shutil
-                shutil.rmtree(DATA_DIR)
-                print("  旧数据已删除")
+                for d in existing:
+                    shutil.rmtree(d)
+                    print(f"  已删除: {os.path.basename(d)}")
             else:
                 print("  跳过数据采集")
                 return True
 
-    return run_script(COLLECT_SCRIPT,
-                      "Step 1/2: CARLA数据采集 (IMU+Vision EKF融合)",
-                      python_exe=carla_py)
+    # 传递 CARLA_ROOT 环境变量给子进程
+    env = {}
+    if carla_root:
+        env['CARLA_ROOT'] = carla_root
+        print(f"[INFO] CARLA_ROOT = {carla_root}")
+
+    return run_python_script(COLLECT_SCRIPT,
+                             "Step 1/2: CARLA 数据采集 (IMU + Vision EKF 融合)",
+                             python_exe=carla_py,
+                             extra_args=['--headless'],
+                             env=env)
 
 
 def step_ablate():
-    """Step 2: 消融实验评估（当前Python即可，无需carla）"""
-    gt_file = os.path.join(DATA_DIR, 'ground_truth.txt')
-    vo_file = os.path.join(DATA_DIR, 'visual_odometry.txt')
-    fusion_file = os.path.join(DATA_DIR, 'fusion_pose.txt')
-
-    missing = []
-    for f, name in [(gt_file, 'Ground Truth'), (vo_file, 'Visual Odometry'),
-                     (fusion_file, 'Fusion Pose')]:
-        if not os.path.exists(f):
-            missing.append(f"  - {name}: {f}")
-
-    if missing:
-        print("\n[ERROR] 缺少数据文件，无法运行消融评估:")
-        print("\n".join(missing))
-        print("\n请先运行数据采集: python main.py --collect-only")
+    """Step 2: 消融实验评估"""
+    datasets = discover_datasets(DATA_DIR)
+    if not datasets:
+        print("\n[ERROR] 没有找到有效数据集")
+        print(f"请确保 {DATA_DIR}/ 下有包含 ground_truth.txt 的数据目录")
+        print("运行数据采集: python main.py --collect-only")
         return False
 
-    return run_script(ABLATE_SCRIPT, "Step 2/2: 消融实验评估 (VO vs EKF)")
+    print(f"\n[INFO] 发现 {len(datasets)} 个数据集:")
+    for d in datasets:
+        pngs = len([f for f in os.listdir(d) if f.endswith('.png')])
+        print(f"  - {os.path.basename(d)} ({pngs} 张图像)")
+
+    return run_python_script(ABLATE_SCRIPT, "Step 2/2: 消融实验评估")
 
 
 def print_results():
-    """打印已有的评估结果"""
-    result_file = os.path.join(DATA_DIR, 'ablation_results.json')
-    if not os.path.exists(result_file):
+    """打印已有评估结果"""
+    result_files = [
+        os.path.join(DATA_DIR, 'ablation_results.json'),
+        os.path.join(DATA_DIR, 'ablation_summary.json'),
+    ]
+    for rf in result_files:
+        if os.path.exists(rf):
+            break
+    else:
         return
 
-    import json
-    with open(result_file, 'r', encoding='utf-8') as f:
-        results = json.load(f)
+    try:
+        with open(rf, 'r', encoding='utf-8') as f:
+            results = json.load(f)
+    except Exception:
+        return
 
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 62)
     print("  Evaluation Results")
-    print("=" * 60)
-    print(f"{'Method':<25} {'ATE(m)':<12} {'RPE(m/f)':<12} {'Drift%':<10}")
-    print("-" * 60)
+    print("=" * 62)
+    print(f"{'Method':<22} {'ATE(m)':<10} {'RPE(m/f)':<10} {'Drift%':<10}")
+    print("-" * 62)
     for r in results:
         ate = r.get('ATE_m', 'N/A')
         rpe = r.get('RPE_m', 'N/A')
         drift = r.get('Drift_pct', 'N/A')
-        print(f"{r['method']:<25} {str(ate):<12} {str(rpe):<12} {str(drift):<10}")
+        print(f"{r.get('method', '?'):<22} {str(ate):<10} {str(rpe):<10} {str(drift):<10}")
 
-    plot_files = ['ablation_trajectory.png', 'ablation_windowed_ate.png']
-    for pf in plot_files:
-        path = os.path.join(DATA_DIR, pf)
-        if os.path.exists(path):
-            print(f"  图表: {path}")
+    # 检查图表
+    for sub in discover_datasets(DATA_DIR):
+        for fname in ['ablation_comparison.png', 'ablation_trajectory.png']:
+            path = os.path.join(sub, fname)
+            if os.path.exists(path):
+                print(f"  图表: {path}")
 
+
+# ═══════════════════════════════════════════════════════════
+#  主入口
+# ═══════════════════════════════════════════════════════════
 
 def main():
     parser = argparse.ArgumentParser(
-        description='NeuroSLAM -- 一键数据采集+消融评估',
+        description='NeuroSLAM — 一键数据采集 + 消融评估',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python main.py                    一键运行完整流程
-  python main.py --collect-only     仅采集CARLA数据
-  python main.py --ablate-only      仅运行消融评估
-  python main.py --skip-collect     跳过采集，只评估
-"""
+  python main.py                      一键运行完整流程
+  python main.py --setup              安装所有 Python 依赖
+  python main.py --collect-only       仅采集 CARLA 数据
+  python main.py --skip-collect       跳过采集，只评估已有数据
+  python main.py --host 192.168.1.1   连接远程 CARLA 服务器
+        """,
     )
+    parser.add_argument('--setup', action='store_true',
+                        help='安装所有 Python 依赖后退出')
     parser.add_argument('--collect-only', action='store_true',
-                        help='仅运行数据采集')
-    parser.add_argument('--ablate-only', action='store_true',
-                        help='仅运行消融评估（需要已有数据）')
+                        help='仅运行 CARLA 数据采集')
     parser.add_argument('--skip-collect', action='store_true',
-                        help='跳过数据采集，直接评估')
+                        help='跳过数据采集，仅运行评估')
     parser.add_argument('--host', default=DEFAULT_HOST,
-                        help=f'CARLA服务器地址 (默认: {DEFAULT_HOST})')
+                        help=f'CARLA 服务器地址 (默认: {DEFAULT_HOST})')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT,
-                        help=f'CARLA服务器端口 (默认: {DEFAULT_PORT})')
+                        help=f'CARLA 服务器端口 (默认: {DEFAULT_PORT})')
 
     args = parser.parse_args()
 
     print_banner()
 
-    if args.collect_only or (not args.ablate_only and not args.skip_collect):
+    # ── --setup: 安装依赖 ──
+    if args.setup:
+        if install_dependencies():
+            print("\n[OK] 环境准备完成，现在可以运行: python main.py")
+        else:
+            sys.exit(1)
+        return
+
+    # ── 检查数据采集是否需要 carla ──
+    need_carla = not args.skip_collect
+    carla_py = None
+    if need_carla:
         carla_py, info = find_carla_python()
         if carla_py is None:
-            print(f"\n[FATAL] {info}")
-            sys.exit(1)
-        print(f"[INFO] CARLA Python: {info}")
+            print(f"\n[WARN] {info}")
+            print()
+            datasets = discover_datasets(DATA_DIR)
+            if datasets:
+                resp = input("是否跳过数据采集，直接使用已有数据进行评估? [Y/n]: ").strip().lower()
+                if resp != 'n':
+                    need_carla = False
+                    print("  将跳过数据采集\n")
+                else:
+                    sys.exit(1)
+            else:
+                sys.exit(1)
+        else:
+            print(f"[INFO] CARLA Python: {info}")
 
+    # ── 执行流程 ──
     start_time = time.time()
     success = True
 
     if args.collect_only:
-        success = step_collect(args.host, args.port)
-    elif args.ablate_only:
-        success = step_ablate()
+        # 仅采集
+        if carla_py is None:
+            carla_py, _ = find_carla_python()
+        if carla_py is None:
+            print("[ERROR] 需要 CARLA Python 环境")
+            sys.exit(1)
+        success = step_collect(args.host, args.port, carla_py)
     elif args.skip_collect:
+        # 仅评估
         success = step_ablate()
     else:
-        success = step_collect(args.host, args.port)
-        if success:
-            success = step_ablate()
+        # 完整流程
+        if need_carla and carla_py:
+            success = step_collect(args.host, args.port, carla_py)
+            if not success:
+                print("\n[WARN] 数据采集未完全成功，尝试继续评估...")
+        success = step_ablate() and success
 
+    # ── 结果汇总 ──
     elapsed = time.time() - start_time
     mins, secs = divmod(int(elapsed), 60)
-    print(f"\n总耗时: {mins}分{secs}秒")
+    print(f"\n总耗时: {mins} 分 {secs} 秒")
 
     if success:
         print_results()
-        print("\n[SUCCESS] NeuroSLAM流程全部完成!")
+        print("\n[SUCCESS] NeuroSLAM 流程全部完成!")
     else:
         print("\n[FAILED] 流程中断，请检查上方错误信息")
         sys.exit(1)
