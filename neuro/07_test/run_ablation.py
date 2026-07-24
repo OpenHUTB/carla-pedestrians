@@ -74,6 +74,9 @@ def evaluate_dataset(data_dir):
     fusion = load_csv(fusion_path)
 
     n_frames = min(len(gt), len(vo), len(fusion))
+    if n_frames == 0:
+        print(f"  [SKIP] {name}: no valid data frames")
+        return None
     dataset_name = f"{name} ({n_frames} frames)"
 
     # ---- 提取轨迹 ----
@@ -227,3 +230,7 @@ def main():
     recorder.save_results(out_json)
 
     print("\n[OK] Ablation study complete.")
+
+
+if __name__ == '__main__':
+    main()
