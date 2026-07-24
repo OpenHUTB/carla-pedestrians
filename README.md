@@ -55,29 +55,10 @@ We provide pre-processed datasets with aligned IMU-visual data:
 
 ## 🚀 Quick Start
 
-See [START_HERE.md](neuro/START_HERE.md) for detailed instructions.
-
 ### Prerequisites
 
-```matlab
-MATLAB R2020b or later
-Computer Vision Toolbox
-Image Processing Toolbox
-```
-
-```python
-Python 3.8+
-numpy
-opencv-python
-scipy
-```
-
-### Core Components
-
-1. **Visual Template Matching**: `neuro/04_visual_template/visual_template.m`
-2. **Main SLAM System**: `neuro/06_main/main.m`
-3. **IMU-Visual Fusion**: `neuro/09_vestibular/imu_aided_visual_odometry.m`
-4. **Baseline Comparison**: `neuro/07_test/07_test/test_imu_visual_slam/core/test_imu_visual_fusion_slam2.m`
+- **Python 3.8+**
+- **CARLA Simulator 0.9.8+** (for data collection)
 
 ### Installation
 
@@ -89,26 +70,59 @@ cd carla-pedestrians
 
 2. Install Python dependencies:
 ```bash
-cd neuro/00_collect_data
-pip install -r requirements.txt
+pip install -r neuro/requirements.txt
 ```
 
-3. Download datasets (see Datasets section above)
-
-4. Configure data paths in MATLAB:
-```matlab
-cd neuro/06_main
-% Edit config_neuro_features.m to set your data paths
+3. Install CARLA Python API:
+```bash
+pip install <CARLA_DIR>\PythonAPI\carla\dist\carla-*.whl
 ```
+
+### One-Click Run
+
+```bash
+# 1. Start CARLA server (in a separate terminal)
+cd <CARLA_DIR>
+CarlaUE4.exe -RenderOffScreen -quality-level=Low
+
+# 2. Run the full pipeline
+cd carla-pedestrians
+python main.py
+```
+
+This will automatically:
+- Collect 5000 frames of IMU + Visual data from CARLA Town01
+- Run ablation study (Pure IMU / Pure VO / EKF Fusion)
+- Generate comparison charts
+
+### Available Options
+
+| Command | Description |
+|---------|-------------|
+| `python main.py` | Full pipeline: collect + evaluate |
+| `python main.py --skip-collect` | Skip collection, only evaluate existing data |
+| `python main.py --collect-only` | Only collect data, skip evaluation |
+| `python main.py --host 192.168.1.1` | Connect to remote CARLA server |
+
+### Core Components (Python)
+
+1. **Data Collection**: `neuro/00_collect_data/IMU_Vision_Fusion_EKF.py`
+2. **One-Click Entry**: `neuro/main.py`
+3. **Ablation Study**: `neuro/07_test/run_ablation.py`
+4. **Visual Odometry**: `neuro/00_collect_data/visual_odometry_opencv.py`
 
 ## 📊 Experiments
 
-### Run Multi-Dataset Comparison
+### Run Ablation Study
 
-```matlab
-cd neuro/07_test/07_test/test_imu_visual_slam/quickstart
-RUN_ALL_DATASETS_COMPARISON
+```bash
+cd carla-pedestrians
+python main.py --skip-collect    # Use existing data
 ```
+
+Results are saved to `neuro/data/`:
+- `ablation_comparison.png` — comparison chart
+- `ablation_results.json` — detailed metrics
 
 ## 📝 Paper
 
@@ -123,20 +137,25 @@ RUN_ALL_DATASETS_COMPARISON
 
 ## 🔧 Requirements
 
-### MATLAB
-- MATLAB R2020b or later
-- Computer Vision Toolbox
-- Image Processing Toolbox
-- Statistics and Machine Learning Toolbox
-
 ### Python
 - Python 3.8+
 - numpy >= 1.19.0
 - opencv-python >= 4.5.0
 - scipy >= 1.5.0
 - matplotlib >= 3.3.0
+- pandas >= 1.1.0
 
-See `neuro/00_collect_data/requirements.txt` for complete Python dependencies.
+### CARLA
+- CARLA Simulator 0.9.8+
+- CARLA Python API (`carla` wheel)
+
+### MATLAB (Legacy)
+- MATLAB R2020b or later
+- Computer Vision Toolbox
+- Image Processing Toolbox
+- Statistics and Machine Learning Toolbox
+
+See `neuro/requirements.txt` for complete Python dependencies.
 
 ## 🤝 Contributing
 
