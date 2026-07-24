@@ -32,9 +32,9 @@ def _search_agents():
     if not _candidates:
         _user_home = os.path.expanduser('~')
         _candidates = _glob.glob(os.path.join(_user_home, '*', 'PythonAPI', 'carla', 'agents',
-                                               'navigation', '*.py'))
+                                                'navigation', '*.py'))
 
-    # 3) 从脚本目录向上搜索（最多 5 层）
+    # 4) 从脚本目录向上搜索（最多 5 层）
     if not _candidates:
         _search_dir = current_dir
         for _ in range(5):
@@ -107,7 +107,6 @@ stagnant_count = 0
 def _get_available_vehicle_blueprint(bp_lib):
     """获取可用的车辆蓝图，优先 CARLA 0.9.8 兼容车型，支持自动回退"""
     preferred_vehicles = [
-        'vehicle.lincoln.mkz2017',
         'vehicle.lincoln.mkz_2017',
         'vehicle.tesla.model3',
         'vehicle.tesla.cybertruck',
@@ -129,7 +128,10 @@ def _get_available_vehicle_blueprint(bp_lib):
         'vehicle.subaru.impreza',
     ]
     for vehicle_id in preferred_vehicles:
-        bp = bp_lib.find(vehicle_id)
+        try:
+            bp = bp_lib.find(vehicle_id)
+        except RuntimeError:
+            continue
         if bp is not None:
             print(f"选择车辆蓝图: {vehicle_id}")
             return bp
