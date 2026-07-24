@@ -66,9 +66,20 @@ def find_carla_exe():
     自动搜索 CARLA 服务器可执行文件 (CarlaUE4.exe)。
     返回 (exe_path, carla_root) 或 (None, None)
     """
+    # 1) 从脚本目录向上搜索 CARLA 安装（最多 5 层）
+    _search_dir = ROOT_DIR
+    for _ in range(5):
+        _exe = os.path.join(_search_dir, 'CarlaUE4.exe')
+        if os.path.isfile(_exe):
+            return _exe, _search_dir
+        _parent = os.path.dirname(_search_dir)
+        if _parent == _search_dir:
+            break
+        _search_dir = _parent
+
     search_roots = []
 
-    # 1) 从脚本目录向上搜索（最多 5 层）
+    # 2) 从脚本目录向上搜索（最多 5 层）
     d = ROOT_DIR
     for _ in range(5):
         search_roots.append(d)
@@ -93,9 +104,9 @@ def find_carla_exe():
                 exe_path = os.path.join(dirpath, 'CarlaUE4.exe')
                 carla_root = dirpath
                 if os.path.basename(carla_root).lower() == 'win64':
+                    # CARLA packaged build: .../WindowsNoEditor/CarlaUE4/Binaries/Win64/
                     carla_root = os.path.dirname(os.path.dirname(os.path.dirname(carla_root)))
-                else:
-                    carla_root = os.path.dirname(carla_root)
+                # else: carla_root is already the directory containing CarlaUE4.exe
                 return exe_path, carla_root
     return None, None
 
@@ -106,26 +117,26 @@ def find_carla_python():
     返回 (python_path_or_list, description) 或 (None, error_msg)
     """
     candidates = []
-
+ 
     # 1) 当前 Python
     candidates.append(("当前Python", [sys.executable]))
-
+ 
     # 2) Windows Python Launcher
-    for ver in ["3.12", "3.11", "3.10", "3.9", "3.8", "3.7", "3"]:
+    for ver in ["3.12", "3.11", "3.10", "3.9", "3.8", "3"]:
         candidates.append((f"py -{ver}", ["py", f"-{ver}"]))
         candidates.append((f"python{ver}", [f"python{ver}"]))
-
+ 
     # 3) LOCALAPPDATA 下的 Python 安装
     local_app_data = os.environ.get('LOCALAPPDATA', '')
     if local_app_data:
-        for ver in ['312', '311', '310', '39', '38', '37']:
+        for ver in ['312', '311', '310', '39', '38']:
             base = os.path.join(local_app_data, 'Programs', 'Python', f'Python{ver}', 'python.exe')
             if os.path.exists(base):
                 candidates.append((base, [base]))
     for prog_env in ['ProgramFiles', 'ProgramFiles(x86)']:
         prog_base = os.environ.get(prog_env, '')
         if prog_base:
-            for ver in ['312', '311', '310', '39', '38', '37']:
+            for ver in ['312', '311', '310', '39', '38']:
                 base = os.path.join(prog_base, 'Python', f'Python{ver}', 'python.exe')
                 if os.path.exists(base):
                     candidates.append((base, [base]))
