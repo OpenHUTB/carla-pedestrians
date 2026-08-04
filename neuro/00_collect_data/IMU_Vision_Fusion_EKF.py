@@ -569,10 +569,20 @@ class EKF_VIO:
         ], dtype=np.float64)
         self.dt = dt
         self.init_z = init_pose[2]
+        self.init_pose = np.array(init_pose, dtype=np.float64)  # 保存初始位姿用于 VO 绝对位姿对齐
 
-        self.P = np.diag([0.1, 0.1, 0.01, 0.5, 0.5, 0.1, 0.01, 0.01, 0.01])
-        self.Q = np.diag([0.05, 0.05, 0.001, 0.2, 0.2, 0.1, 0.005, 0.005, 0.005])
-        self.R_base = np.diag([0.5, 0.5, 0.1, 0.05, 0.05, 0.05])
+        # 初始协方差：位置不确定性 0.5m²，速度 1.0 (m/s)²，姿态 0.02 rad²
+        self.P = np.diag([0.5, 0.5, 0.1, 1.0, 1.0, 0.5, 0.02, 0.02, 0.02])
+
+        # 过程噪声 Q（连续时间，将乘以 dt 离散化）
+        # 位置噪声小（IMU 双重积分），速度噪声中等，姿态噪声小
+        self.Q_cont = np.diag([0.01, 0.01, 0.001,   # 位置
+                                0.1, 0.1, 0.05,      # 速度
+                                0.001, 0.001, 0.001])  # 姿态
+
+        # 视觉观测噪声 R：信任 VO 位姿观测（位置 ~2m std，姿态 ~0.05rad std → 方差）
+        self.R_base = np.diag([4.0, 4.0, 1.0,    # 位置观测噪声 (m²)
+                                0.0025, 0.0025, 0.0025])  # 姿态观测噪声 (rad²)
         self.R = self.R_base.copy()
 
         self._nis_ema = 1.0
@@ -585,9 +595,15 @@ class EKF_VIO:
         self.uncertainty_history = []
         self.mahalanobis_history = []
 
-        self.chi2_threshold = 1000.0
+        # 卡方检验阈值：6 自由度，95% 置信度 ≈ 12.6，适当放宽到 25
+        self.chi2_threshold = 25.0
         self.innovation_accepted = 0
         self.innovation_rejected = 0
+
+        # 调试日志开关
+        self._debug_log = True
+        self._log_counter = 0
+        self._last_vo_pose = None  # 上一帧 VO 绝对位姿，用于异常检测
 
     def _gate_innovation(self, y, S):
         try:
@@ -655,7 +671,19 @@ class EKF_VIO:
         self.x = np.array([new_x, new_y, new_z,
                            new_vx, new_vy, new_vz,
                            new_roll, new_pitch, new_yaw])
-        self.P += self.Q
+
+        # 状态转移矩阵 F = I + A*dt (连续时间线性化)
+        # 简化：位置由速度驱动，速度有衰减，姿态由陀螺仪驱动
+        F = np.eye(9)
+        F[0, 3] = self.dt   # x += vx * dt
+        F[1, 4] = self.dt   # y += vy * dt
+        F[3, 3] = velocity_decay  # vx *= decay
+        F[4, 4] = velocity_decay  # vy *= decay
+
+        # 离散化过程噪声: Q_d = Q_cont * dt
+        Q_d = self.Q_cont * self.dt
+        self.P = F @ self.P @ F.T + Q_d
+        self.P = 0.5 * (self.P + self.P.T)  # 强制对称
 
     def visual_update(self, visual_pose):
         z = np.array(visual_pose, dtype=np.float64)
@@ -879,6 +907,13 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
     vo = VisualOdometry()
     scale_estimator = ScaleEstimator()
 
+    # ---- VO 绝对位姿累积器（关键修复） ----
+    # VO process_frame() 返回的是帧间相对运动 [dx,dy,dz,roll,pitch,yaw]
+    # EKF visual_update() 需要绝对位姿观测
+    # 因此需要累积 VO 相对运动，构建 VO 绝对位姿
+    vo_abs_pose = list(init_pose)  # 初始化为车辆初始位姿
+    vo_prev_relative = None  # 上一帧 VO 相对运动，用于尺度估计
+
     # 打开输出文件
     gt_log = open(os.path.join(OUTPUT_DIR, 'ground_truth.txt'), 'w', encoding='utf-8')
     fusion_log = open(os.path.join(OUTPUT_DIR, 'fusion_pose.txt'), 'w', encoding='utf-8')
@@ -930,25 +965,169 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 if vo_pose is None:
                     continue
 
-                # 尺度估计
-                scale = scale_estimator.estimate_scale(vo_pose[:3],
-                    [vehicle.get_location().x,
-                     vehicle.get_location().y,
-                     vehicle.get_location().z])
-                vo_pose_scaled = vo_pose.copy()
-                vo_pose_scaled[:3] = [vo_pose[0] * scale,
-                                      vo_pose[1] * scale,
-                                      vo_pose[2] * scale]
+                # ---- 时间戳对齐校验 ----
+                timestamp_diff = abs(img_data.data.timestamp - imu_data.data.timestamp)
+                if timestamp_diff > 0.05:
+                    print(f"[EKF DEBUG] timestamp diff too large: {timestamp_diff:.4f}s, skip update")
+                    # 仍执行 IMU 预测，但跳过 VO 更新
+                    ekf.imu_prediction(imu_data.data)
+                    # 捕获纯 IMU 位置（预测后、更新前）
+                    imu_pos, _ = ekf.get_current_pose()
+                    fusion_pos, fusion_att = imu_pos.copy(), ekf.x[6:9].copy()
+                    fusion_vel = ekf.get_current_velocity()
+                    pos_uncertainty = ekf.get_position_uncertainty()
+                    ekf._log_counter += 1
+                    if ekf._debug_log and ekf._log_counter % 50 == 0:
+                        print(f"[EKF DEBUG] Frame {img_idx}: timestamp diff={timestamp_diff:.4f}s > 0.05s, VO update SKIPPED. "
+                              f"Accum: accepted={ekf.innovation_accepted}, rejected={ekf.innovation_rejected}")
+                    # 仍写入记录
+                    gt_loc = vehicle.get_location()
+                    gt_rot = vehicle.get_transform().rotation
+                    gt_log.write(f"{img_data.data.timestamp:.6f},"
+                                 f"{gt_loc.x:.6f},{gt_loc.y:.6f},{gt_loc.z:.6f},"
+                                 f"{math.radians(gt_rot.roll):.6f},"
+                                 f"{math.radians(gt_rot.pitch):.6f},"
+                                 f"{math.radians(gt_rot.yaw):.6f}\n")
+                    vo_log.write(f"{img_data.data.timestamp:.6f},0,0,0,0,0,0\n")
+                    img_idx += 1
+                    save_image_simple(img, OUTPUT_DIR, img_idx)
+                    aligned_imu_f.write(
+                        f"{imu_data.data.timestamp:.6f},"
+                        f"{imu_data.data.accelerometer.x:.6f},"
+                        f"{imu_data.data.accelerometer.y:.6f},"
+                        f"{imu_data.data.accelerometer.z:.6f},"
+                        f"{imu_data.data.gyroscope.x:.6f},"
+                        f"{imu_data.data.gyroscope.y:.6f},"
+                        f"{imu_data.data.gyroscope.z:.6f}\n")
+                    fusion_log.write(
+                        f"{img_data.data.timestamp:.6f},"
+                        f"{fusion_pos[0]:.6f},{fusion_pos[1]:.6f},{fusion_pos[2]:.6f},"
+                        f"{math.degrees(fusion_att[0]):.6f},"
+                        f"{math.degrees(fusion_att[1]):.6f},"
+                        f"{math.degrees(fusion_att[2]):.6f},"
+                        f"{imu_pos[0]:.6f},{imu_pos[1]:.6f},{imu_pos[2]:.6f},"
+                        f"{fusion_vel[0]:.6f},{fusion_vel[1]:.6f},{fusion_vel[2]:.6f},"
+                        f"{pos_uncertainty[0]:.6f},{pos_uncertainty[1]:.6f},{pos_uncertainty[2]:.6f}\n")
+                    if img_idx % 10 == 0:
+                        fusion_log.flush()
+                        gt_log.flush()
+                        vo_log.flush()
+                        aligned_imu_f.flush()
+                    continue
 
-                # EKF 预测 + 更新
+                # ---- VO 异常值过滤：零运动检测 ----
+                vo_motion_norm = np.linalg.norm(vo_pose[:3])
+                vo_rot_norm = np.linalg.norm(vo_pose[3:6])
+                if vo_motion_norm < 1e-6 and vo_rot_norm < 1e-6:
+                    # VO 返回零运动（特征不足/匹配失败），跳过 VO 更新
+                    ekf.imu_prediction(imu_data.data)
+                    imu_pos, _ = ekf.get_current_pose()
+                    fusion_pos, fusion_att = imu_pos.copy(), ekf.x[6:9].copy()
+                    fusion_vel = ekf.get_current_velocity()
+                    pos_uncertainty = ekf.get_position_uncertainty()
+                    ekf._log_counter += 1
+                    if ekf._debug_log and ekf._log_counter % 50 == 0:
+                        print(f"[EKF DEBUG] Frame {img_idx}: VO zero motion (matches={num_matches}), VO update SKIPPED. "
+                              f"Accum: accepted={ekf.innovation_accepted}, rejected={ekf.innovation_rejected}")
+                    # 同步写入 GT / VO 零运动 / 纯 IMU 状态
+                    gt_loc = vehicle.get_location()
+                    gt_rot = vehicle.get_transform().rotation
+                    gt_log.write(f"{img_data.data.timestamp:.6f},"
+                                 f"{gt_loc.x:.6f},{gt_loc.y:.6f},{gt_loc.z:.6f},"
+                                 f"{math.radians(gt_rot.roll):.6f},"
+                                 f"{math.radians(gt_rot.pitch):.6f},"
+                                 f"{math.radians(gt_rot.yaw):.6f}\n")
+                    vo_log.write(f"{img_data.data.timestamp:.6f},0,0,0,0,0,0\n")
+                    img_idx += 1
+                    save_image_simple(img, OUTPUT_DIR, img_idx)
+                    aligned_imu_f.write(
+                        f"{imu_data.data.timestamp:.6f},"
+                        f"{imu_data.data.accelerometer.x:.6f},"
+                        f"{imu_data.data.accelerometer.y:.6f},"
+                        f"{imu_data.data.accelerometer.z:.6f},"
+                        f"{imu_data.data.gyroscope.x:.6f},"
+                        f"{imu_data.data.gyroscope.y:.6f},"
+                        f"{imu_data.data.gyroscope.z:.6f}\n")
+                    fusion_log.write(
+                        f"{img_data.data.timestamp:.6f},"
+                        f"{fusion_pos[0]:.6f},{fusion_pos[1]:.6f},{fusion_pos[2]:.6f},"
+                        f"{math.degrees(fusion_att[0]):.6f},"
+                        f"{math.degrees(fusion_att[1]):.6f},"
+                        f"{math.degrees(fusion_att[2]):.6f},"
+                        f"{imu_pos[0]:.6f},{imu_pos[1]:.6f},{imu_pos[2]:.6f},"
+                        f"{fusion_vel[0]:.6f},{fusion_vel[1]:.6f},{fusion_vel[2]:.6f},"
+                        f"{pos_uncertainty[0]:.6f},{pos_uncertainty[1]:.6f},{pos_uncertainty[2]:.6f}\n")
+                    if img_idx % 10 == 0:
+                        fusion_log.flush()
+                        gt_log.flush()
+                        vo_log.flush()
+                        aligned_imu_f.flush()
+                    continue
+
+                # ---- 尺度估计（使用固定尺度，由外部 ScaleEstimator 管理） ----
+                # 注意：单目 VO 尺度不可观，使用恒定尺度因子
+                scale = scale_estimator.get_current_scale()
+
+                # ---- 累积 VO 相对运动 → 绝对位姿（关键修复） ----
+                # VO process_frame() 返回的是帧间相对运动 [dx, dy, dz, roll, pitch, yaw]
+                # 需要按尺度缩放后累积到绝对位姿 vo_abs_pose
+                vo_relative = vo_pose.copy()
+                vo_relative[:3] = [vo_pose[0] * scale,
+                                   vo_pose[1] * scale,
+                                   vo_pose[2] * scale]
+
+                # 累积：绝对位置 += 相对位移（世界坐标系下近似）
+                vo_abs_pose[0] += vo_relative[0]
+                vo_abs_pose[1] += vo_relative[1]
+                vo_abs_pose[2] += vo_relative[2]
+                # 姿态：相对旋转叠加（用欧拉角近似）
+                vo_abs_pose[3] = (vo_abs_pose[3] + vo_relative[3] + np.pi) % (2 * np.pi) - np.pi
+                vo_abs_pose[4] = (vo_abs_pose[4] + vo_relative[4] + np.pi) % (2 * np.pi) - np.pi
+                vo_abs_pose[5] = (vo_abs_pose[5] + vo_relative[5] + np.pi) % (2 * np.pi) - np.pi
+
+                # 构建当前 VO 绝对位姿观测（深拷贝）
+                vo_abs_pose_current = list(vo_abs_pose)
+
+                # ---- VO 位姿异常值检测 ----
+                vo_jump_skip = False
+                if ekf._last_vo_pose is not None:
+                    vo_abs_delta = np.linalg.norm(
+                        np.array(vo_abs_pose_current[:3]) - np.array(ekf._last_vo_pose[:3]))
+                    if vo_abs_delta > 10.0:  # 位置跳变超过 10m 视为异常
+                        vo_jump_skip = True
+                        print(f"[EKF DEBUG] Frame {img_idx}: VO position jump detected: "
+                              f"delta={vo_abs_delta:.2f}m > 10m, skip update")
+                ekf._last_vo_pose = vo_abs_pose_current.copy()
+
+                # ---- EKF 预测 + 更新 ----
                 ekf.imu_prediction(imu_data.data)
-                ekf.visual_update(vo_pose_scaled)
-                fusion_pos, fusion_att = ekf.get_current_pose()
-                imu_pos, _ = ekf.get_current_pose()  # 使用 IMU 预测后的位置
+
+                # 捕获纯 IMU 位置（预测后，VO 更新前）
+                imu_pos, _ = ekf.get_current_pose()
+
+                # 执行 VO 视觉更新（如果无异常跳变）
+                if not vo_jump_skip:
+                    ekf.visual_update(vo_abs_pose_current)
+                    fusion_pos, fusion_att = ekf.get_current_pose()
+                else:
+                    fusion_pos, fusion_att = imu_pos.copy(), ekf.x[6:9].copy()
+
                 fusion_vel = ekf.get_current_velocity()
                 pos_uncertainty = ekf.get_position_uncertainty()
 
-                # 写入 Ground Truth
+                # ---- 调试日志 ----
+                ekf._log_counter += 1
+                if ekf._debug_log and ekf._log_counter % 50 == 0:
+                    kalman_gain_trace = np.trace(ekf.P[:3, :3])  # 位置协方差迹作为 Kalman 增益的代理指标
+                    innovation_norm = ekf.innovation_history[-1] if ekf.innovation_history else 0.0
+                    print(f"[EKF DEBUG] Frame {img_idx}: "
+                          f"VO update={'EXECUTED' if not vo_jump_skip else 'SKIPPED(jump)'}, "
+                          f"accepted={ekf.innovation_accepted}, rejected={ekf.innovation_rejected}, "
+                          f"innov_norm={innovation_norm:.4f}, "
+                          f"P_trace_pos={kalman_gain_trace:.4f}, "
+                          f"matches={num_matches}, scale={scale:.4f}")
+
+                # ---- 写入 Ground Truth ----
                 gt_loc = vehicle.get_location()
                 gt_rot = vehicle.get_transform().rotation
                 gt_log.write(f"{img_data.data.timestamp:.6f},"
@@ -957,10 +1136,10 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                              f"{math.radians(gt_rot.pitch):.6f},"
                              f"{math.radians(gt_rot.yaw):.6f}\n")
 
-                # 写入 VO
+                # ---- 写入 VO（绝对位姿） ----
                 vo_log.write(f"{img_data.data.timestamp:.6f},"
-                             f"{vo_pose_scaled[0]:.6f},{vo_pose_scaled[1]:.6f},{vo_pose_scaled[2]:.6f},"
-                             f"{vo_pose_scaled[3]:.6f},{vo_pose_scaled[4]:.6f},{vo_pose_scaled[5]:.6f}\n")
+                             f"{vo_abs_pose_current[0]:.6f},{vo_abs_pose_current[1]:.6f},{vo_abs_pose_current[2]:.6f},"
+                             f"{vo_abs_pose_current[3]:.6f},{vo_abs_pose_current[4]:.6f},{vo_abs_pose_current[5]:.6f}\n")
 
                 # 保存图像
                 img_idx += 1
