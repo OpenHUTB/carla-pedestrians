@@ -37,21 +37,28 @@ def _search_agents():
         _candidates = _glob.glob(os.path.join(_carla_root, 'PythonAPI', 'carla',
                                               'agents', 'navigation', '*.py'))
 
-    # 2) 搜索用户目录下的 CARLA 安装
+    # 2) 搜索用户主目录下常见 CARLA 目录名
     if not _candidates:
-        _user_home = os.path.expanduser('~')
-        _skip_dirs = {'$RECYCLE.BIN', 'System Volume Information', 'Windows',
-                      '$WinREAgent', 'Config.Msi', 'MSOCache', 'PerfLogs',
-                      'Recovery', 'Temp', 'Python', 'AppData', 'Desktop',
-                      'Documents', 'Downloads', 'Music', 'Pictures', 'Videos',
-                      'OneDrive'}
-        for _entry in os.listdir(_user_home):
-            _entry_path = os.path.join(_user_home, _entry)
-            if not os.path.isdir(_entry_path) or _entry in _skip_dirs:
+        _home = os.path.expanduser('~')
+        _carla_dir_names = ['CARLA', 'carla', 'CARLA_0.9.16', 'CARLA_0.9.15',
+                            'CARLA_0.9.14', 'carla-0.9.16']
+        for _name in _carla_dir_names:
+            _parent = os.path.join(_home, _name)
+            if not os.path.isdir(_parent):
                 continue
-            _candidates = _glob.glob(os.path.join(_entry_path, 'PythonAPI',
+            # 直接搜索
+            _candidates = _glob.glob(os.path.join(_parent, 'PythonAPI',
                                                   'carla', 'agents',
                                                   'navigation', '*.py'))
+            if _candidates:
+                break
+            # 搜索一级子目录
+            for _sub in os.listdir(_parent):
+                _candidates = _glob.glob(os.path.join(_parent, _sub, 'PythonAPI',
+                                                      'carla', 'agents',
+                                                      'navigation', '*.py'))
+                if _candidates:
+                    break
             if _candidates:
                 break
 
