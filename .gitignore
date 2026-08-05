@@ -162,3 +162,4 @@ resources/
 !neuro/START_HERE.md
 !neuro/07_test/07_test/test_imu_visual_slam/core/README_test_imu_visual_fusion_slam2.md
 !neuro/07_test/07_test/test_imu_visual_slam/parameter_search/参数网格搜索指南.md
+carla/

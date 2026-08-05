@@ -16,7 +16,9 @@ import os
 import sys
 import time
 import json
+import glob
 import shutil
+import shlex
 import argparse
 import subprocess
 import socket
@@ -28,7 +30,7 @@ if sys.platform == 'win32':
     except Exception:
         pass
 
-# ─── 路径常量 ─────────────────────────────────────────────
+# ─── 路径常量（全部相对路径，无绝对路径依赖） ─────────────────
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 COLLECT_SCRIPT = os.path.join(ROOT_DIR, '00_collect_data', 'IMU_Vision_Fusion_EKF.py')
 ABLATE_SCRIPT = os.path.join(ROOT_DIR, '07_test', 'run_ablation.py')
@@ -61,15 +63,35 @@ def check_carla_server(host=DEFAULT_HOST, port=DEFAULT_PORT, timeout=3.0):
         return False
 
 
+def _carla_exe_name():
+    """返回当前平台 CARLA 可执行文件名称"""
+    return 'CarlaUE4.exe' if sys.platform == 'win32' else 'CarlaUE4.sh'
+
+
 def find_carla_exe():
     """
-    自动搜索 CARLA 服务器可执行文件 (CarlaUE4.exe)。
+    自动搜索 CARLA 服务器可执行文件（跨平台）。
     返回 (exe_path, carla_root) 或 (None, None)
+
+    搜索策略：
+    1. 环境变量 CARLA_ROOT
+    2. 从脚本目录向上逐层搜索（最多 6 层）
+    3. 搜索用户主目录下常见 CARLA 目录名
+    4. 深度遍历（限制深度 5，跳过无关目录）
     """
-    # 1) 从脚本目录向上搜索 CARLA 安装（最多 5 层）
+    _exe_name = _carla_exe_name()
+
+    # 1) 优先使用 CARLA_ROOT 环境变量
+    _carla_root_env = os.environ.get('CARLA_ROOT', '')
+    if _carla_root_env:
+        _exe = os.path.join(_carla_root_env, _exe_name)
+        if os.path.isfile(_exe):
+            return _exe, _carla_root_env
+
+    # 2) 从脚本目录向上搜索（最多 6 层）
     _search_dir = ROOT_DIR
-    for _ in range(5):
-        _exe = os.path.join(_search_dir, 'CarlaUE4.exe')
+    for _ in range(6):
+        _exe = os.path.join(_search_dir, _exe_name)
         if os.path.isfile(_exe):
             return _exe, _search_dir
         _parent = os.path.dirname(_search_dir)
@@ -77,69 +99,107 @@ def find_carla_exe():
             break
         _search_dir = _parent
 
-    search_roots = []
+    # 3) 搜索用户主目录下常见 CARLA 目录名
+    _home = os.path.expanduser('~')
+    _carla_dir_names = ['CARLA', 'carla', 'CARLA_0.9.16', 'CARLA_0.9.15',
+                        'CARLA_0.9.14', 'carla-0.9.16']
+    for _name in _carla_dir_names:
+        _check = os.path.join(_home, _name, _exe_name)
+        if os.path.isfile(_check):
+            return _check, os.path.dirname(_check)
+        # 也搜索一级子目录（如 ~/CARLA/CARLA_0.9.16/）
+        _parent_dir = os.path.join(_home, _name)
+        if os.path.isdir(_parent_dir):
+            for _sub in os.listdir(_parent_dir):
+                _check = os.path.join(_parent_dir, _sub, _exe_name)
+                if os.path.isfile(_check):
+                    return _check, os.path.dirname(_check)
 
-    # 2) 从脚本目录向上搜索（最多 5 层）
-    d = ROOT_DIR
+    # 4) 从脚本目录向上深度搜索（限制深度 5，跳过无关目录）
+    _skip_dirs = {
+        '$RECYCLE.BIN', 'System Volume Information', 'Windows', '$WinREAgent',
+        'Config.Msi', 'MSOCache', 'PerfLogs', 'Recovery',
+        'Temp', 'Python', 'AppData', 'Desktop', 'Documents',
+        'Downloads', 'Music', 'Pictures', 'Videos', 'OneDrive',
+        '__pycache__', '.git', 'node_modules', '.venv', 'venv',
+        'alphapose', 'openpose', 'bip', 'walker', 'pedestrians-scenarios',
+        'pedestrians-video-2-carla', 'carla-common', 'resources', 'docs',
+    }
+
+    _search_roots = []
+    _d = ROOT_DIR
     for _ in range(5):
-        search_roots.append(d)
-        parent = os.path.dirname(d)
-        if parent == d:
+        _search_roots.append(_d)
+        _parent = os.path.dirname(_d)
+        if _parent == _d:
             break
-        d = parent
+        _d = _parent
 
-    for root in search_roots:
-        for dirpath, dirnames, filenames in os.walk(root):
-            skip_dirs = {'$RECYCLE.BIN', 'System Volume Information', 'Windows', '$WinREAgent',
-                         'Config.Msi', 'MSOCache', 'PerfLogs', 'Recovery',
-                         'Temp', 'Python', 'AppData', 'Desktop', 'Documents',
-                         'Downloads', 'Music', 'Pictures', 'Videos', 'OneDrive'}
-            dirnames[:] = [d for d in dirnames if d not in skip_dirs
-                           and not d.startswith('$')]
-            depth = dirpath.replace(root, '').count(os.sep)
-            if depth > 5:
-                dirnames[:] = []
+    for _root in _search_roots:
+        for _dirpath, _dirnames, _filenames in os.walk(_root):
+            # 跳过无关目录
+            _dirnames[:] = [d for d in _dirnames
+                            if d not in _skip_dirs
+                            and not d.startswith('$')
+                            and not d.startswith('.')]
+            _depth = _dirpath.replace(_root, '').count(os.sep)
+            if _depth > 5:
+                _dirnames[:] = []
                 continue
-            if 'CarlaUE4.exe' in filenames:
-                exe_path = os.path.join(dirpath, 'CarlaUE4.exe')
-                carla_root = dirpath
-                if os.path.basename(carla_root).lower() == 'win64':
-                    # CARLA packaged build: .../WindowsNoEditor/CarlaUE4/Binaries/Win64/
-                    carla_root = os.path.dirname(os.path.dirname(os.path.dirname(carla_root)))
-                # else: carla_root is already the directory containing CarlaUE4.exe
-                return exe_path, carla_root
+            if _exe_name in _filenames:
+                _exe_path = os.path.join(_dirpath, _exe_name)
+                _carla_root = _dirpath
+                if os.path.basename(_carla_root).lower() == 'win64':
+                    _carla_root = os.path.dirname(os.path.dirname(os.path.dirname(_carla_root)))
+                return _exe_path, _carla_root
+
     return None, None
 
 
 def find_carla_python():
     """
-    找到能导入 carla 模块的 Python 解释器。
-    返回 (python_path_or_list, description) 或 (None, error_msg)
+    找到能导入 carla 模块的 Python 解释器（跨平台）。
+    返回 (python_path_list, description) 或 (None, error_msg)
+
+    搜索策略：
+    1. 当前 Python 解释器
+    2. (Windows) py 启动器 / LOCALAPPDATA / ProgramFiles 下的 Python
+    3. (Linux/macOS) PATH 中的 python3 系列
     """
     candidates = []
- 
-    # 1) 当前 Python
+
+    # 1) 当前 Python（优先）
     candidates.append(("当前Python", [sys.executable]))
- 
-    # 2) Windows Python Launcher
-    for ver in ["3.12", "3.11", "3.10", "3.9", "3.8", "3"]:
-        candidates.append((f"py -{ver}", ["py", f"-{ver}"]))
-        candidates.append((f"python{ver}", [f"python{ver}"]))
- 
-    # 3) LOCALAPPDATA 下的 Python 安装
-    local_app_data = os.environ.get('LOCALAPPDATA', '')
-    if local_app_data:
-        for ver in ['312', '311', '310', '39', '38']:
-            base = os.path.join(local_app_data, 'Programs', 'Python', f'Python{ver}', 'python.exe')
-            if os.path.exists(base):
-                candidates.append((base, [base]))
-    for prog_env in ['ProgramFiles', 'ProgramFiles(x86)']:
-        prog_base = os.environ.get(prog_env, '')
-        if prog_base:
+
+    if sys.platform == 'win32':
+        # Windows Python Launcher
+        for ver in ["3.12", "3.11", "3.10", "3.9", "3.8", "3"]:
+            candidates.append((f"py -{ver}", ["py", f"-{ver}"]))
+            candidates.append((f"python{ver}", [f"python{ver}"]))
+        # LOCALAPPDATA 下的 Python 安装
+        local_app_data = os.environ.get('LOCALAPPDATA', '')
+        if local_app_data:
             for ver in ['312', '311', '310', '39', '38']:
-                base = os.path.join(prog_base, 'Python', f'Python{ver}', 'python.exe')
+                base = os.path.join(local_app_data, 'Programs', 'Python',
+                                    f'Python{ver}', 'python.exe')
                 if os.path.exists(base):
                     candidates.append((base, [base]))
+        for prog_env in ['ProgramFiles', 'ProgramFiles(x86)']:
+            prog_base = os.environ.get(prog_env, '')
+            if prog_base:
+                for ver in ['312', '311', '310', '39', '38']:
+                    base = os.path.join(prog_base, 'Python', f'Python{ver}', 'python.exe')
+                    if os.path.exists(base):
+                        candidates.append((base, [base]))
+    else:
+        # Linux/macOS: 搜索 PATH 中的 python3 解释器
+        _seen = set()
+        for _cmd in ['python3', 'python3.12', 'python3.11', 'python3.10',
+                     'python3.9', 'python3.8', 'python']:
+            _found = shutil.which(_cmd)
+            if _found and _found not in _seen:
+                _seen.add(_found)
+                candidates.append((_found, [_found]))
 
     # 去重
     seen = set()
@@ -162,13 +222,45 @@ def find_carla_python():
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
 
-    return None, (
-        "找不到可导入 carla 的 Python 解释器。\n"
-        "CARLA 0.9.8 需要 Python 3.7，CARLA 0.9.16 需要 Python 3.12。\n"
-        "安装 carla 包:\n"
-        "  py -3.7 -m pip install <CARLA_DIR>\\PythonAPI\\carla\\dist\\carla-*.egg\n"
-        "  py -3.12 -m pip install <CARLA_DIR>\\PythonAPI\\carla\\dist\\carla-*.whl"
-    )
+    if sys.platform == 'win32':
+        return None, (
+            "找不到可导入 carla 的 Python 解释器。\n"
+            "CARLA 0.9.8 需要 Python 3.7，CARLA 0.9.16 需要 Python 3.12。\n"
+            "安装 carla 包:\n"
+            "  py -3.7 -m pip install <CARLA_DIR>\\PythonAPI\\carla\\dist\\carla-*.egg\n"
+            "  py -3.12 -m pip install <CARLA_DIR>\\PythonAPI\\carla\\dist\\carla-*.whl"
+        )
+    else:
+        return None, (
+            "找不到可导入 carla 的 Python 解释器。\n"
+            "请确保已在 Python 环境中安装 carla wheel:\n"
+            "  pip install <CARLA_DIR>/PythonAPI/carla/dist/carla-*.whl"
+        )
+
+
+def _launch_carla(carla_exe):
+    """启动 CARLA 服务器（跨平台），返回 Popen 对象"""
+    _cwd = os.path.dirname(carla_exe)
+    if sys.platform == 'win32':
+        return subprocess.Popen(
+            [carla_exe, '-RenderOffScreen', '-quality-level=Low'],
+            cwd=_cwd,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    else:
+        return subprocess.Popen(
+            ['bash', carla_exe, '-RenderOffScreen', '-quality-level=Low'],
+            cwd=_cwd,
+            start_new_session=True,
+        )
+
+
+def _carla_launch_cmd_str(carla_exe):
+    """返回人类可读的 CARLA 启动命令字符串"""
+    if sys.platform == 'win32':
+        return f"{carla_exe} -RenderOffScreen -quality-level=Low"
+    else:
+        return f"bash {carla_exe} -RenderOffScreen -quality-level=Low"
 
 
 def run_python_script(script_path, desc, python_exe=None, extra_args=None, env=None):
@@ -176,6 +268,7 @@ def run_python_script(script_path, desc, python_exe=None, extra_args=None, env=N
     运行一个 Python 脚本。
     python_exe: 字符串路径或字符串列表，为 None 则用 sys.executable
     env: 额外的环境变量 dict
+    返回 bool 表示是否成功
     """
     if python_exe is None:
         python_exe = [sys.executable]
@@ -195,7 +288,7 @@ def run_python_script(script_path, desc, python_exe=None, extra_args=None, env=N
     if env:
         run_env.update(env)
 
-    print(f"[INFO] 命令: {' '.join(cmd)}")
+    print(f"[INFO] 命令: {shlex.join(cmd)}")
 
     result = subprocess.run(cmd, cwd=os.path.dirname(script_path) or ROOT_DIR, env=run_env)
     if result.returncode != 0:
@@ -261,11 +354,7 @@ def step_collect(carla_host, carla_port, carla_py, keep_data=False):
             print(f"  [自动启动] CARLA: {carla_exe}")
             print("=" * 60)
             try:
-                subprocess.Popen(
-                    [carla_exe, '-RenderOffScreen', '-quality-level=Low'],
-                    cwd=os.path.dirname(carla_exe),
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0,
-                )
+                _launch_carla(carla_exe)
                 print("  [等待] CARLA 启动中...")
                 for i in range(90):
                     if check_carla_server(carla_host, carla_port):
@@ -277,16 +366,17 @@ def step_collect(carla_host, carla_port, carla_py, keep_data=False):
             except Exception as e:
                 print(f"[WARN] 自动启动 CARLA 失败: {e}")
                 print("  请手动启动 CARLA:")
-                print(f"    {carla_exe} -RenderOffScreen -quality-level=Low")
+                print(f"    {_carla_launch_cmd_str(carla_exe)}")
                 print()
                 while not check_carla_server(carla_host, carla_port):
                     time.sleep(3)
                 print("[OK] CARLA 服务器已连接\n")
         else:
+            _exe_name = _carla_exe_name()
             print("\n" + "=" * 60)
-            print("  [等待] CARLA 服务器未连接，且未找到 CarlaUE4.exe")
+            print(f"  [等待] CARLA 服务器未连接，且未找到 {_exe_name}")
             print("  请手动启动 CARLA，例如:")
-            print("    CarlaUE4.exe -RenderOffScreen -quality-level=Low")
+            print(f"    {_exe_name} -RenderOffScreen -quality-level=Low")
             print("=" * 60)
             while not check_carla_server(carla_host, carla_port):
                 time.sleep(3)
@@ -304,9 +394,6 @@ def step_collect(carla_host, carla_port, carla_py, keep_data=False):
                 for d in existing:
                     pngs = len([f for f in os.listdir(d) if f.endswith('.png')])
                     print(f"  - {os.path.basename(d)} ({pngs} 张图像)")
-                # 修改采集脚本的输出目录名，避免覆盖
-                # 通过设置环境变量让采集脚本使用带时间戳的目录名
-                pass
             else:
                 print(f"[INFO] 自动清理旧数据: {len(existing)} 个数据集")
                 for d in existing:
