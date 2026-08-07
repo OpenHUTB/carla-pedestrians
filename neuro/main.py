@@ -342,7 +342,7 @@ def install_dependencies():
 #  Pipeline 步骤
 # ═══════════════════════════════════════════════════════════
 
-def step_collect(carla_host, carla_port, carla_py, keep_data=False):
+def step_collect(carla_host, carla_port, carla_py, keep_data=False, map_name=None):
     """Step 1: CARLA 数据采集（非交互式）"""
     carla_root = None
 
@@ -406,10 +406,15 @@ def step_collect(carla_host, carla_port, carla_py, keep_data=False):
         env['CARLA_ROOT'] = carla_root
         print(f"[INFO] CARLA_ROOT = {carla_root}")
 
+    extra_args = ['--headless']
+    if map_name:
+        extra_args.extend(['--map', map_name])
+        print(f"[INFO] 目标地图: {map_name}")
+
     return run_python_script(COLLECT_SCRIPT,
                              "Step 1/2: CARLA 数据采集 (IMU + Vision EKF 融合)",
                              python_exe=carla_py,
-                             extra_args=['--headless'],
+                             extra_args=extra_args,
                              env=env)
 
 
@@ -477,6 +482,7 @@ def main():
         epilog="""
 示例:
   python main.py                      一键采集 + 评估（自动清理旧数据）
+  python main.py --map Town10HD       在 Town10HD 地图采集
   python main.py --keep-data          保留旧数据，追加采集新数据
   python main.py --setup              安装所有 Python 依赖
   python main.py --collect-only       仅采集 CARLA 数据
@@ -496,6 +502,9 @@ def main():
                         help=f'CARLA 服务器地址 (默认: {DEFAULT_HOST})')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT,
                         help=f'CARLA 服务器端口 (默认: {DEFAULT_PORT})')
+    parser.add_argument('--map', default=None,
+                        help='CARLA 地图名称 (默认: 不干预，由采集脚本 DEFAULT_TARGET_MAP 决定), '
+                             '例如: Town01, Town02, Town03, Town05, Town10HD')
 
     args = parser.parse_args()
 
@@ -539,13 +548,13 @@ def main():
         if carla_py is None:
             print("[ERROR] 需要 CARLA Python 环境")
             sys.exit(1)
-        success = step_collect(args.host, args.port, carla_py, keep_data=args.keep_data)
+        success = step_collect(args.host, args.port, carla_py, keep_data=args.keep_data, map_name=args.map)
     elif args.skip_collect:
         success = step_ablate()
     else:
         # 完整流程：采集 + 评估
         if need_carla and carla_py:
-            success = step_collect(args.host, args.port, carla_py, keep_data=args.keep_data)
+            success = step_collect(args.host, args.port, carla_py, keep_data=args.keep_data, map_name=args.map)
             if not success:
                 print("\n[WARN] 数据采集未完全成功，尝试继续评估...")
         success = step_ablate() and success

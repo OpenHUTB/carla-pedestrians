@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 IMU + Visual Odometry EKF Fusion — CARLA 数据采集
-用法: python IMU_Vision_Fusion_EKF.py [--headless] [--host HOST] [--port PORT]
+用法: python IMU_Vision_Fusion_EKF.py [--headless] [--host HOST] [--port PORT] [--map MAP]
 """
 
 import os
@@ -101,12 +101,13 @@ from agents.navigation.behavior_agent import BehaviorAgent  # noqa: E402
 from visual_odometry_opencv import VisualOdometry, ScaleEstimator  # noqa: E402
 
 # ═════════════════════════════════════════════════════════════
-#  配置参数
+#  配置参数（TARGET_MAP / OUTPUT_DIR 可通过 --map 命令行参数覆盖）
 # ═════════════════════════════════════════════════════════════
 
-TARGET_MAP = "Town01"
+DEFAULT_TARGET_MAP = "Town05"
+TARGET_MAP = DEFAULT_TARGET_MAP
 MAX_SAVE_IMG = 5000
-OUTPUT_DIR = os.path.join(current_dir, '..', 'data', 'Town01Data_IMU_Fusion')
+OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
 
 # IMU-视觉融合参数
 IMU_SAMPLE_RATE = 60       # Hz
@@ -118,8 +119,8 @@ FSTOP = "4.0"
 ISO = "250"
 GAMMA = "2.2"
 AGENT_BEHAVIOR = "cautious"
-AGENT_MAX_SPEED = 20                # km/h
-AGENT_SAFE_DISTANCE = 5.0           # 米
+AGENT_MAX_SPEED = 12                # 【MOD:A1】20→12 km/h，Town02 密集城市需降速避免撞车
+AGENT_SAFE_DISTANCE = 6.0           # 【MOD:E1】8.0→6.0 米，空旷道路避免误触发避险刹车
 COLLISION_RESET_THRESHOLD = 3       # 碰撞次数阈值
 
 # CARLA 连接参数（可通过命令行覆盖）
@@ -193,30 +194,223 @@ def clear_all_actors(world):
     time.sleep(1)
 
 
-def select_forward_destination(vehicle, spawn_points, min_distance=50.0):
-    """选择车辆前方的目标点，优先直行路径"""
+def select_forward_destination(vehicle, spawn_points, min_distance=25.0):
+    """选择车辆前方的目标点，优先直行路径，带多级容错降级
+
+    解决 Town03/Town05 等弯道多、分叉路口多的地图找不到合法路点的问题：
+    - Tier 1: 严格筛选（原始逻辑，min_distance=25, dot>0.4）
+    - Tier 2: 放宽距离至 15m，dot>0.2
+    - Tier 3: 大幅放宽，基本只要在前半球 (dot>-0.3)
+    - Tier 4: 最终兜底，选最远生成点
+    """
     vehicle_transform = vehicle.get_transform()
     vehicle_location = vehicle_transform.location
     vehicle_forward = vehicle_transform.get_forward_vector()
 
-    forward_points = []
-    for sp in spawn_points:
-        to_spawn = sp.location - vehicle_location
-        distance = to_spawn.length()
-        if distance > min_distance:
-            direction = to_spawn / distance
-            dot_product = (vehicle_forward.x * direction.x +
-                           vehicle_forward.y * direction.y)
-            if dot_product > 0.7:
-                forward_points.append((sp.location, distance, dot_product))
+    # 多级降级策略
+    tiers = [
+        (25.0, 0.4,  "Tier1-strict"),    # 原逻辑
+        (15.0, 0.2,  "Tier2-relaxed"),   # 放宽距离和方向
+        (8.0,  -0.3, "Tier3-hemisphere"), # 大幅放宽，前半球即可
+    ]
 
-    if forward_points:
-        forward_points.sort(key=lambda x: x[2], reverse=True)
-        return forward_points[0][0]
+    for dist_thresh, dot_thresh, tier_name in tiers:
+        forward_points = []
+        for sp in spawn_points:
+            to_spawn = sp.location - vehicle_location
+            distance = to_spawn.length()
+            if distance > dist_thresh:
+                direction = to_spawn / (distance + 1e-8)
+                dot_product = (vehicle_forward.x * direction.x +
+                               vehicle_forward.y * direction.y)
+                if dot_product > dot_thresh:
+                    forward_points.append((sp.location, distance, dot_product))
+
+        if forward_points:
+            forward_points.sort(key=lambda x: x[2], reverse=True)
+            chosen = forward_points[0][0]
+            if tier_name != "Tier1-strict":
+                print(f"[NAV] select_forward_destination 降级: {tier_name} "
+                      f"(dist>{dist_thresh}m, dot>{dot_thresh}), "
+                      f"候选 {len(forward_points)} 个")
+            return chosen
+
+    # 最终兜底：选最远生成点
+    farthest = max(spawn_points,
+                   key=lambda sp: (sp.location - vehicle_location).length())
+    print(f"[NAV] select_forward_destination 最终兜底(fallback): 使用最远生成点, "
+          f"距离={(farthest.location - vehicle_location).length():.1f}m")
+    return farthest.location
+
+
+# ═════════════════════════════════════════════════════════════
+#  地图自适应辅助函数
+# ═════════════════════════════════════════════════════════════
+
+def estimate_road_width(vehicle, world):
+    """估算当前车辆所在道路的宽度（米）
+
+    通过 CARLA waypoint API 获取当前车道宽度，用于自适应安全距离。
+    """
+    try:
+        vehicle_loc = vehicle.get_location()
+        waypoint = world.get_map().get_waypoint(vehicle_loc)
+        if waypoint is not None:
+            return waypoint.lane_width
+    except Exception:
+        pass
+    return 4.0  # 默认 4m
+
+
+def compute_adaptive_safe_distance(road_width):
+    """根据道路宽度计算自适应安全距离
+
+    窄路（<3.5m，如 Town10HD）: 2.5m  → 避免误判墙壁为障碍物
+    中等（3.5-5m）:         4.0m
+    较宽（5-7m）:           5.5m
+    宽路（>7m）:            7.0m
+    """
+    if road_width < 3.5:
+        return 2.5
+    elif road_width < 5.0:
+        return 4.0
+    elif road_width < 7.0:
+        return 5.5
     else:
-        farthest = max(spawn_points,
-                       key=lambda sp: (sp.location - vehicle_location).length())
-        return farthest.location
+        return 7.0
+
+
+def estimate_path_curvature(agent):
+    """估算路径前方曲率（弧度），用于自适应 PID 参数
+
+    通过采样路点队列首/中/尾三点计算转弯角度。
+    返回 0 表示直道，越大表示弯道越急。
+    """
+    try:
+        if not hasattr(agent, '_local_planner'):
+            return 0.0
+        wp_queue = agent._local_planner.waypoints_queue
+        if not wp_queue or len(wp_queue) < 3:
+            return 0.0
+        # 采样 3 个点：起点、中点、终点
+        indices = [0, len(wp_queue) // 2, len(wp_queue) - 1]
+        pts = []
+        for i in indices:
+            wp = wp_queue[i][0]
+            pts.append(np.array([wp.transform.location.x,
+                                 wp.transform.location.y]))
+        v1 = pts[1] - pts[0]
+        v2 = pts[2] - pts[1]
+        n1 = np.linalg.norm(v1)
+        n2 = np.linalg.norm(v2)
+        if n1 < 1e-6 or n2 < 1e-6:
+            return 0.0
+        cos_angle = np.dot(v1, v2) / (n1 * n2)
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)
+        angle = np.arccos(cos_angle)
+        return float(abs(angle))
+    except Exception:
+        return 0.0
+
+
+def count_nearby_dynamic_actors(vehicle, world, radius=15.0):
+    """统计车辆周围半径内的动态 actor（车辆/行人）数量
+
+    用于判断当前是否真的存在动态障碍物，避免窄路误判墙壁触发避险刹车。
+    """
+    try:
+        vehicle_loc = vehicle.get_location()
+        actor_list = world.get_actors()
+        count = 0
+        for actor in actor_list:
+            if actor.id == vehicle.id:
+                continue
+            type_id = actor.type_id
+            # 只统计车辆和行人
+            if not (type_id.startswith('vehicle.') or type_id.startswith('walker.')):
+                continue
+            try:
+                dist = actor.get_location().distance(vehicle_loc)
+                if dist < radius:
+                    count += 1
+            except Exception:
+                pass
+        return count
+    except Exception:
+        return 0
+
+
+def validate_agent_path(agent, vehicle, spawn_points, world, max_retries=3):
+    """验证导航路径有效性，无效则重试选择新目标
+
+    解决 Town03/Town05 路径生成失败导致车辆不动的问题。
+    返回 True 表示路径有效，False 表示重试耗尽。
+    """
+    for attempt in range(max_retries):
+        try:
+            if hasattr(agent, '_local_planner'):
+                wp_queue = agent._local_planner.waypoints_queue
+                if wp_queue is not None and len(wp_queue) > 0:
+                    target_wp = wp_queue[-1][0]
+                    twp_loc = target_wp.transform.location
+                    veh_loc = vehicle.get_location()
+                    print(f"[NAV] 路径有效: {len(wp_queue)} 个路点, "
+                          f"目标=({twp_loc.x:.1f}, {twp_loc.y:.1f}), "
+                          f"距离={veh_loc.distance(twp_loc):.1f}m")
+                    return True
+        except Exception as e:
+            print(f"[NAV] 路径检查异常: {e}")
+
+        # 路径无效，重试
+        print(f"[NAV] 路径无效 (attempt {attempt+1}/{max_retries}), 重新选择目标...")
+        destination = select_forward_destination(vehicle, spawn_points)
+        agent.set_destination(destination)
+        # set_destination 内部同步更新 _local_planner，无需额外 tick
+
+    print(f"[NAV] 路径验证失败，已重试 {max_retries} 次，使用当前设置继续")
+    # 最终兜底：设前方 50m 为目的地，确保车辆至少有一个目标
+    try:
+        vehicle_loc = vehicle.get_location()
+        forward = vehicle.get_transform().get_forward_vector()
+        fallback = carla.Location(
+            vehicle_loc.x + forward.x * 50,
+            vehicle_loc.y + forward.y * 50,
+            vehicle_loc.z
+        )
+        agent.set_destination(fallback)
+        print(f"[NAV] 兜底目标: 前方 50m ({fallback.x:.1f}, {fallback.y:.1f})")
+    except Exception:
+        pass
+    return False
+
+
+def apply_adaptive_pid(agent, curvature):
+    """根据路径曲率自适应调整 PID 参数
+
+    弯道：降低 K_P 防止转向过猛，增大 K_D 增加阻尼
+    直道：使用默认参数
+    """
+    try:
+        if not hasattr(agent, '_vehicle_controller') or agent._vehicle_controller is None:
+            return
+        if not hasattr(agent._vehicle_controller, '_args_lateral_dict'):
+            return
+
+        lat = agent._vehicle_controller._args_lateral_dict
+        if curvature > 0.3:  # 急弯（约 17°+）
+            lat['K_P'] = 0.2
+            lat['K_I'] = 0.005
+            lat['K_D'] = 0.15
+        elif curvature > 0.15:  # 中等弯道
+            lat['K_P'] = 0.25
+            lat['K_I'] = 0.008
+            lat['K_D'] = 0.12
+        else:  # 直道/缓弯
+            lat['K_P'] = 0.3
+            lat['K_I'] = 0.01
+            lat['K_D'] = 0.1
+    except (AttributeError, KeyError, TypeError):
+        pass
 
 
 def _get_available_vehicle_blueprint(bp_lib):
@@ -432,24 +626,38 @@ def init_carla_environment(host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             print(f"使用备用方式设置速度: {AGENT_MAX_SPEED} km/h")
 
     # 增强避障参数
+    # 【MOD:MAP】自适应安全距离：根据道路宽度动态调整，窄路降低避免误触发避险刹车
+    road_width = estimate_road_width(vehicle, world)
+    adaptive_safe_dist = compute_adaptive_safe_distance(road_width)
+    print(f"[MAP] 道路宽度: {road_width:.1f}m, 自适应安全距离: {adaptive_safe_dist:.1f}m")
+
     try:
+        # 【MOD:C1】降低横向 PID 增益：K_P 0.8→0.3, K_I 0.02→0.01, 新增 K_D=0.1
+        # 理由：原 K_P=0.8 导致转向过猛，Town02 窄路频繁甩头撞墙
         if hasattr(agent, '_vehicle_controller') and agent._vehicle_controller is not None:
             if hasattr(agent._vehicle_controller, '_args_lateral_dict'):
-                agent._vehicle_controller._args_lateral_dict['K_P'] = 0.8
-                agent._vehicle_controller._args_lateral_dict['K_I'] = 0.02
-                agent._vehicle_controller._args_lateral_dict['K_D'] = 0.0
+                agent._vehicle_controller._args_lateral_dict['K_P'] = 0.3
+                agent._vehicle_controller._args_lateral_dict['K_I'] = 0.01
+                agent._vehicle_controller._args_lateral_dict['K_D'] = 0.1
+            # 【MOD:C2】纵向 PID 增益：降低 I 项防积分饱和
+            if hasattr(agent._vehicle_controller, '_args_longitudinal_dict'):
+                agent._vehicle_controller._args_longitudinal_dict['K_P'] = 1.0
+                agent._vehicle_controller._args_longitudinal_dict['K_I'] = 0.02   # 【MOD:E3】0.05→0.02
+                agent._vehicle_controller._args_longitudinal_dict['K_D'] = 0.0
         if hasattr(agent, '_min_distance'):
-            agent._min_distance = AGENT_SAFE_DISTANCE
+            agent._min_distance = adaptive_safe_dist
         if hasattr(agent, '_max_brake'):
             agent._max_brake = 0.8
     except (AttributeError, KeyError, TypeError):
         pass
 
-    # 9) 选择目标点
+    # 9) 选择目标点 + 路径验证
     destination = select_forward_destination(vehicle, spawn_points)
     agent.set_destination(destination)
+    # 【MOD:MAP】验证路径有效性，失败则重试
+    validate_agent_path(agent, vehicle, spawn_points, world)
     print(f"避障智能体初始化完成（最大速度: {AGENT_MAX_SPEED} km/h，"
-          f"安全距离: {AGENT_SAFE_DISTANCE}m）")
+          f"安全距离: {adaptive_safe_dist:.1f}m）")
     print(f"目标位置: ({destination.x:.1f}, {destination.y:.1f}, {destination.z:.1f})")
 
     # 10) 碰撞传感器
@@ -612,14 +820,37 @@ class EKF_VIO:
         self._log_counter = 0
         self._last_vo_pose = None  # 上一帧 VO 绝对位姿，用于异常检测
 
+        # 【MOD:1】新增：VO 尺度在线估计状态
+        self._vo_scale_ema = 1.0          # VO 尺度的 EMA 估计
+        self._vo_scale_initialized = False  # 尺度估计是否已初始化
+
+        # 【MOD:1】新增：调试用存储最近一次卡尔曼增益和新息
+        self._last_K = None       # 最近一次卡尔曼增益矩阵 (9x6)
+        self._last_residual = None  # 最近一次观测残差 y (6,)
+
+        # 【MOD:11】新增：独立存储上一帧 VO 观测用于帧间位移计算
+        # 理由：_last_vo_pose 被主循环在 visual_update 之前覆盖为当前帧值，
+        #       需要独立变量 _prev_vo_obs 保存真正的上一帧 VO 观测
+        self._prev_vo_obs = None
+
+    # 【MOD:2】软门控：返回 weight∈[0,1] 替代硬拒绝 bool
+    # 理由：VO 尺度未收敛时新息可能较大，硬拒绝导致全部观测被丢弃
     def _gate_innovation(self, y, S):
         try:
             S_inv = np.linalg.inv(S)
             d = float(y.T @ S_inv @ y)
-            return d < self.chi2_threshold, d
+            # 软门控：马氏距离超过阈值时指数衰减权重，而非硬拒绝
+            if d < self.chi2_threshold:
+                weight = 1.0
+            else:
+                weight = np.exp(-(d - self.chi2_threshold) / self.chi2_threshold)
+                weight = max(weight, 0.05)  # 最低保留 5% 权重，不完全丢弃
+            return weight, d
         except np.linalg.LinAlgError:
-            return False, float('inf')
+            return 0.0, float('inf')
 
+    # 【MOD:3】R 自适应缩放上限从 10.0 降至 2.0，下限从 0.2 提升至 0.5
+    # 理由：上限 10x 导致 R 过大，滤波器几乎忽略 VO；下限 0.5 防止过度信任
     def _adapt_R(self, y, S):
         try:
             S_inv = np.linalg.inv(S + np.eye(6) * 1e-8)
@@ -628,7 +859,7 @@ class EKF_VIO:
             return
         expected_nis = 6.0
         self._nis_ema = 0.9 * self._nis_ema + 0.1 * (nis / expected_nis)
-        scale = np.clip(self._nis_ema, 0.2, 10.0)
+        scale = np.clip(self._nis_ema, 0.5, 2.0)  # 【MOD:3】原 [0.2, 10.0] → [0.5, 2.0]
         self.R = self.R_base * scale
 
     def _estimate_imu_bias(self, accel, gyro):
@@ -654,6 +885,13 @@ class EKF_VIO:
                              imu_data.gyroscope.y,
                              imu_data.gyroscope.z])
 
+        # 【MOD:12】加速度尖峰过滤：CARLA IMU 首帧可能出现 >1000g 的尖峰噪声
+        # 理由：首帧 accel_y=121027 m/s²（约12000g），远超车辆物理极限（<2g）
+        #       阈值 100 m/s²（~10g）过滤掉明显异常值，正常车辆加速度 < 10 m/s²
+        accel_mag = np.linalg.norm(accel_raw)
+        if accel_mag > 100.0:
+            return  # 跳过本次 IMU 预测，避免污染状态向量
+
         self._estimate_imu_bias(accel_raw, gyro_raw)
         gyro = gyro_raw - self._gyro_bias
         accel = accel_raw - self._accel_bias
@@ -666,26 +904,31 @@ class EKF_VIO:
         R_body2world = R.from_euler('xyz', [roll, pitch, yaw]).as_matrix()
         accel_world = R_body2world @ accel
 
-        velocity_decay = 0.98
-        new_vx = velocity_decay * (self.x[3] + accel_world[0] * self.dt)
-        new_vy = velocity_decay * (self.x[4] + accel_world[1] * self.dt)
+        # 【MOD:4】移除 velocity_decay（0.98），人为速度衰减无物理依据
+        # 【MOD:4】位置更新使用当前速度 self.x[3]/self.x[4]，与 F 矩阵一致
+        # 保存当前速度（用于位置更新）
+        vx_curr = self.x[3]
+        vy_curr = self.x[4]
+
+        new_vx = self.x[3] + accel_world[0] * self.dt
+        new_vy = self.x[4] + accel_world[1] * self.dt
         new_vz = 0.0
 
-        new_x = self.x[0] + new_vx * self.dt
-        new_y = self.x[1] + new_vy * self.dt
+        new_x = self.x[0] + vx_curr * self.dt      # 【MOD:4】原 new_vx*dt → vx_curr*dt
+        new_y = self.x[1] + vy_curr * self.dt      # 【MOD:4】原 new_vy*dt → vy_curr*dt
         new_z = self.x[2]
 
         self.x = np.array([new_x, new_y, new_z,
                            new_vx, new_vy, new_vz,
                            new_roll, new_pitch, new_yaw])
 
-        # 状态转移矩阵 F = I + A*dt (连续时间线性化)
-        # 简化：位置由速度驱动，速度有衰减，姿态由陀螺仪驱动
+        # 【MOD:5】F 矩阵：删除 velocity_decay，添加加速度→速度耦合雅可比
+        # 理由：加速度在世界系下对速度的 Jacobian 为单位阵×dt（简化），
+        # 且加速度对姿态的依赖通过 R_body2world 体现在速度更新中
         F = np.eye(9)
-        F[0, 3] = self.dt   # x += vx * dt
-        F[1, 4] = self.dt   # y += vy * dt
-        F[3, 3] = velocity_decay  # vx *= decay
-        F[4, 4] = velocity_decay  # vy *= decay
+        F[0, 3] = self.dt   # ∂x/∂vx = dt
+        F[1, 4] = self.dt   # ∂y/∂vy = dt
+        # 速度对自身 Jacobian 为 1（无衰减），不再设 F[3,3]/F[4,4]
 
         # 离散化过程噪声: Q_d = Q_cont * dt
         Q_d = self.Q_cont * self.dt
@@ -694,22 +937,74 @@ class EKF_VIO:
 
     def visual_update(self, visual_pose):
         z = np.array(visual_pose, dtype=np.float64)
+
+        # 【MOD:6v2】VO 尺度在线估计：逐帧 VO 位移 vs IMU 速度，而非累积位置比
+        # 理由：VO 单帧位移为归一化单位步长，IMU 速度给出真实米/秒，
+        #       逐帧 scale = imu_vel_norm * dt / vo_disp_norm，避免累积误差反馈
+        # 【MOD:11】使用 _prev_vo_obs（独立变量）而非 _last_vo_pose，
+        #       因为 _last_vo_pose 被主循环在调用前覆盖为当前帧值
+        vo_disp_pos = np.zeros(3)  # 默认零位移
+        if self._prev_vo_obs is not None:
+            vo_disp_pos = z[:3] - self._prev_vo_obs[:3]   # 帧间 VO 位移（归一化单位）
+            vo_disp_norm = np.linalg.norm(vo_disp_pos)
+            imu_vel_norm = np.linalg.norm(self.x[3:6])     # 当前 IMU 速度 (m/s)
+
+            if vo_disp_norm > 1e-6 and imu_vel_norm > 0.05:
+                # 逐帧尺度：真实位移 / VO 归一化位移
+                frame_scale = imu_vel_norm * self.dt / (vo_disp_norm + 1e-8)
+                frame_scale = np.clip(frame_scale, 0.02, 50.0)
+                if not self._vo_scale_initialized:
+                    self._vo_scale_ema = frame_scale
+                    self._vo_scale_initialized = True
+                else:
+                    self._vo_scale_ema = 0.85 * self._vo_scale_ema + 0.15 * frame_scale
+        self._prev_vo_obs = z.copy()  # 【MOD:11】保存当前 VO 观测供下一帧计算位移
+
+        # 【MOD:6v2】将 VO 帧间位移缩放到米制，作为速度观测
+        # 观测模型改为 [vx, vy, vz, roll, pitch, yaw]（速度 + 姿态）
+        if self._vo_scale_initialized:
+            vo_disp_scaled = vo_disp_pos * self._vo_scale_ema
+            v_obs = vo_disp_scaled / self.dt  # 速度观测 (m/s)
+        else:
+            v_obs = np.zeros(3)  # 首帧无位移，速度观测为 0
+
+        # 构建观测向量：速度 + 姿态（不使用 VO 绝对位置，因其尺度不可靠）
+        z_obs = np.zeros(6)
+        z_obs[0:3] = v_obs           # 速度观测
+        z_obs[3:6] = z[3:6].copy()   # 姿态观测（roll, pitch, yaw）
+
+        # 观测矩阵：速度 + 姿态
         H = np.zeros((6, 9))
-        H[0, 0] = H[1, 1] = H[2, 2] = 1
-        H[3, 6] = H[4, 7] = H[5, 8] = 1
+        H[0, 3] = H[1, 4] = H[2, 5] = 1  # 速度观测
+        H[3, 6] = H[4, 7] = H[5, 8] = 1  # 姿态观测
 
-        y = z - H @ self.x
-        S = H @ self.P @ H.T + self.R + np.eye(6) * 1e-8
+        y = z_obs - H @ self.x
 
-        accepted, mahal_dist = self._gate_innovation(y, S)
+        # 【MOD:7】角度新息 wrapping 到 [-π, π]
+        y[3] = (y[3] + np.pi) % (2 * np.pi) - np.pi
+        y[4] = (y[4] + np.pi) % (2 * np.pi) - np.pi
+        y[5] = (y[5] + np.pi) % (2 * np.pi) - np.pi
+
+        # 【MOD:6v2】使用自适应 R：速度观测噪声随尺度估计质量变化
+        R_vel = np.diag([0.5, 0.5, 0.2])  # 速度观测噪声 (m/s)²
+        R_att = np.diag([0.005, 0.005, 0.005])  # 姿态观测噪声 (rad²)
+        R_use = np.block([[R_vel, np.zeros((3, 3))],
+                          [np.zeros((3, 3)), R_att]])
+        S = H @ self.P @ H.T + R_use + np.eye(6) * 1e-8
+
+        # 【MOD:8】软门控替代硬拒绝：weight∈[0.05, 1.0]
+        weight, mahal_dist = self._gate_innovation(y, S)
         self.mahalanobis_history.append(mahal_dist)
-        if not accepted:
-            self.innovation_rejected += 1
-            self.innovation_history.append(np.linalg.norm(y))
-            return
 
-        self.innovation_accepted += 1
-        self.innovation_history.append(np.linalg.norm(y))
+        # 记录新息范数
+        innov_norm = float(np.linalg.norm(y))
+        self.innovation_history.append(innov_norm)
+
+        if weight < 1.0:
+            self.innovation_rejected += 1
+        else:
+            self.innovation_accepted += 1
+
         self.uncertainty_history.append(np.trace(self.P[:3, :3]))
 
         try:
@@ -717,18 +1012,22 @@ class EKF_VIO:
         except np.linalg.LinAlgError:
             K = np.eye(9, 6) * 0.1
 
-        self.x += K @ y
-        I_KH = np.eye(9) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
-        self.P = 0.5 * (self.P + self.P.T)
+        # 【MOD:9】存储最近一次 K 和 residual，供调试打印
+        self._last_K = K.copy()
+        self._last_residual = y.copy()
 
-        self._adapt_R(y, S)
+        # 【MOD:8】软门控：用 weight 缩放卡尔曼增益更新
+        self.x += weight * (K @ y)
+        I_KH = np.eye(9) - K @ H
+        self.P = I_KH @ self.P @ I_KH.T + K @ R_use @ K.T
+        self.P = 0.5 * (self.P + self.P.T)
 
         # Soft flat-ground pseudo-measurement
         z_flat = np.array([self.init_z, 0.0, 0.0])
         H_flat = np.zeros((3, 9))
         H_flat[0, 2] = H_flat[1, 6] = H_flat[2, 7] = 1.0
-        R_flat = np.diag([0.01, 0.001, 0.001])
+        # 【MOD:10】放宽 flat-ground 伪观测噪声，避免过度约束 z/roll/pitch
+        R_flat = np.diag([0.1, 0.01, 0.01])
 
         y_flat = z_flat - H_flat @ self.x
         S_flat = H_flat @ self.P @ H_flat.T + R_flat + np.eye(3) * 1e-8
@@ -945,6 +1244,10 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
     img_idx = 0
     stagnant_count = 0
+
+    # 【MOD:D2】油门/刹车平滑状态初始化
+    prev_throttle = 0.0
+    prev_brake = 0.0
 
     print(f"\n{'=' * 60}")
     print(f"  开始数据采集...")
@@ -1200,10 +1503,84 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 destination = select_forward_destination(vehicle, spawn_points)
                 agent.set_destination(destination)
                 print(f"[OK] 到达目标, 新目标: ({destination.x:.1f}, {destination.y:.1f})")
+                # 【MOD:MAP】换目标后验证路径有效性
+                validate_agent_path(agent, vehicle, spawn_points, world)
+
+            # 【MOD:MAP】每 100 帧动态更新自适应安全距离和 PID
+            if img_idx % 100 == 0:
+                road_width = estimate_road_width(vehicle, world)
+                adaptive_safe_dist = compute_adaptive_safe_distance(road_width)
+                try:
+                    if hasattr(agent, '_min_distance'):
+                        agent._min_distance = adaptive_safe_dist
+                except (AttributeError, KeyError, TypeError):
+                    pass
+                # 曲率自适应 PID
+                curvature = estimate_path_curvature(agent)
+                apply_adaptive_pid(agent, curvature)
+
+            # 【MOD:E6】提前获取车速，供控制逻辑和停滞检测使用
+            vel = vehicle.get_velocity()
+            speed = math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
+
+            # 【MOD:MAP】诊断日志：每 200 帧打印路径和路点信息
+            if img_idx % 200 == 0 and img_idx > 0:
+                try:
+                    if hasattr(agent, '_local_planner'):
+                        wpq = agent._local_planner.waypoints_queue
+                        wp_count = len(wpq) if wpq else 0
+                        curv = estimate_path_curvature(agent)
+                        rw = estimate_road_width(vehicle, world)
+                        n_dyn = count_nearby_dynamic_actors(vehicle, world)
+                        print(f"[DIAG] Frame {img_idx}: speed={speed:.1f}m/s, "
+                              f"waypoints={wp_count}, curvature={curv:.3f}rad, "
+                              f"road_width={rw:.1f}m, nearby_dynamic={n_dyn}, "
+                              f"collisions={collision_sensor.collision_count}")
+                except Exception:
+                    pass
 
             try:
                 control = agent.run_step()
                 control.manual_gear_shift = False
+
+                # 【MOD:D1】转向角限幅：最大 ±0.5（约 ±30°），防止急转弯
+                max_steer = 0.5
+                control.steer = max(-max_steer, min(max_steer, control.steer))
+
+                # 【MOD:E4】油门/刹车平滑，α 从 0.3 提高到 0.6，减少过度压制
+                alpha = 0.6
+                control.throttle = alpha * control.throttle + (1 - alpha) * prev_throttle
+                control.brake = alpha * control.brake + (1 - alpha) * prev_brake
+                prev_throttle = control.throttle
+                prev_brake = control.brake
+
+                # 【MOD:E5】碰撞制动时限：仅碰撞后 1.5 秒内强制减速，之后自动释放
+                # 理由：原逻辑 collision_count>0 永真，一次碰撞后永久刹车导致停滞
+                if collision_sensor.collision_count > 0:
+                    if time.time() - collision_sensor.last_collision_time < 1.5:
+                        control.throttle = 0.0
+                        control.brake = max(control.brake, 0.3)
+
+                # 【MOD:MAP】刹车歧视：窄路无动态障碍物时抑制过度刹车
+                # 避免 Town10HD 等窄地图误判墙壁为障碍物导致频繁无故刹停
+                if control.brake > 0.3 and collision_sensor.collision_count == 0:
+                    rw = estimate_road_width(vehicle, world)
+                    n_dyn = count_nearby_dynamic_actors(vehicle, world)
+                    if rw < 5.0 and n_dyn == 0:
+                        # 窄路且无动态障碍物，大幅降低刹车
+                        control.brake = min(control.brake, 0.15)
+                        # 低速时补充油门，防止卡死
+                        if speed < 2.0:
+                            control.throttle = max(control.throttle, 0.15)
+
+                # 【MOD:E6】停滞恢复：车速 < 0.05 且无碰撞时，连续 80 帧后强制释放刹车
+                if speed < 0.05 and collision_sensor.collision_count == 0:
+                    if stagnant_count > 80:
+                        control.brake = 0.0
+                        control.throttle = max(control.throttle, 0.3)
+                        if stagnant_count == 81:
+                            print(f"[STUCK RECOVERY] Frame {img_idx}: 强制释放刹车，尝试恢复前进")
+
                 vehicle.apply_control(control)
             except Exception as e:
                 print(f"警告：控制命令执行失败 - {e}")
@@ -1220,8 +1597,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 reset_needed = True
                 reset_reason = "碰撞过多"
 
-            vel = vehicle.get_velocity()
-            speed = math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
+            # 【MOD:E6】speed 已在控制段之前计算，此处复用；停滞超 150 帧重置
             if speed < 0.1:
                 stagnant_count += 1
                 if stagnant_count > 150:
@@ -1259,13 +1635,21 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                             agent._max_speed = AGENT_MAX_SPEED / 3.6
 
                     try:
+                        # 【MOD:C1】重置时同步 PID 参数，与 init_carla_environment 保持一致
                         if hasattr(agent, '_vehicle_controller') and agent._vehicle_controller is not None:
                             if hasattr(agent._vehicle_controller, '_args_lateral_dict'):
-                                agent._vehicle_controller._args_lateral_dict['K_P'] = 0.8
-                                agent._vehicle_controller._args_lateral_dict['K_I'] = 0.02
-                                agent._vehicle_controller._args_lateral_dict['K_D'] = 0.0
+                                agent._vehicle_controller._args_lateral_dict['K_P'] = 0.3
+                                agent._vehicle_controller._args_lateral_dict['K_I'] = 0.01
+                                agent._vehicle_controller._args_lateral_dict['K_D'] = 0.1
+                            if hasattr(agent._vehicle_controller, '_args_longitudinal_dict'):
+                                agent._vehicle_controller._args_longitudinal_dict['K_P'] = 1.0
+                                agent._vehicle_controller._args_longitudinal_dict['K_I'] = 0.02
+                                agent._vehicle_controller._args_longitudinal_dict['K_D'] = 0.0
+                        # 【MOD:MAP】重置时使用自适应安全距离
+                        rw = estimate_road_width(vehicle, world)
+                        adaptive_safe_dist = compute_adaptive_safe_distance(rw)
                         if hasattr(agent, '_min_distance'):
-                            agent._min_distance = AGENT_SAFE_DISTANCE
+                            agent._min_distance = adaptive_safe_dist
                         if hasattr(agent, '_max_brake'):
                             agent._max_brake = 0.8
                     except (AttributeError, KeyError, TypeError):
@@ -1273,12 +1657,16 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
                     destination = select_forward_destination(vehicle, spawn_points)
                     agent.set_destination(destination)
+                    # 【MOD:MAP】重置后验证路径
+                    validate_agent_path(agent, vehicle, spawn_points, world)
                     print(f"新目标: ({destination.x:.1f}, {destination.y:.1f})")
 
                     camera, cam_transform = create_rgb_camera(world, bp_lib, vehicle, sensor_queue)
                     imu = create_imu_sensor(world, bp_lib, vehicle, sensor_queue, cam_transform)
                     collision_sensor = CollisionSensor(vehicle)
                     stagnant_count = 0
+                    prev_throttle = 0.0   # 【MOD:D2】重置时清空平滑状态
+                    prev_brake = 0.0
                     print(f"[OK] 重置完成")
                 except Exception as e:
                     print(f"[ERROR] 重置失败: {e}")
@@ -1373,5 +1761,13 @@ if __name__ == "__main__":
                          help=f'CARLA 服务器地址 (默认: {DEFAULT_CARLA_HOST})')
     _parser.add_argument('--port', type=int, default=DEFAULT_CARLA_PORT,
                          help=f'CARLA 服务器端口 (默认: {DEFAULT_CARLA_PORT})')
+    _parser.add_argument('--map', type=str, default=DEFAULT_TARGET_MAP,
+                         help=f'CARLA 地图名称 (默认: {DEFAULT_TARGET_MAP}), '
+                              f'例如: Town01, Town02, Town03, Town05, Town10HD')
     _args = _parser.parse_args()
+
+    # 根据命令行参数覆盖地图和输出目录
+    TARGET_MAP = _args.map
+    OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
+
     main(headless=_args.headless, host=_args.host, port=_args.port)
