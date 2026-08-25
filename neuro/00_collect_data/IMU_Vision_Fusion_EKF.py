@@ -18,6 +18,11 @@ import numpy as np
 import cv2
 import carla
 from scipy.spatial.transform import Rotation as R
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator
+import pandas as pd
 
 # ─── 动态路径解析 ─────────────────────────────────────────────
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -104,7 +109,7 @@ from visual_odometry_opencv import VisualOdometry, ScaleEstimator  # noqa: E402
 #  配置参数（TARGET_MAP / OUTPUT_DIR 可通过 --map 命令行参数覆盖）
 # ═════════════════════════════════════════════════════════════
 
-DEFAULT_TARGET_MAP = "Town05"
+DEFAULT_TARGET_MAP = "Town01"
 TARGET_MAP = DEFAULT_TARGET_MAP
 MAX_SAVE_IMG = 5000
 OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
@@ -786,14 +791,16 @@ class EKF_VIO:
         self.init_z = init_pose[2]
         self.init_pose = np.array(init_pose, dtype=np.float64)  # 保存初始位姿用于 VO 绝对位姿对齐
 
-        # 初始协方差：位置不确定性 0.5m²，速度 1.0 (m/s)²，姿态 0.02 rad²
-        self.P = np.diag([0.5, 0.5, 0.1, 1.0, 1.0, 0.5, 0.02, 0.02, 0.02])
+        # 初始协方差：位置不确定性 2.0m²，速度 2.0 (m/s)²，姿态 0.05 rad²
+        # 增大初始位置不确定性，让滤波器早期就接受 VO 位置观测修正
+        self.P = np.diag([2.0, 2.0, 0.5, 2.0, 2.0, 1.0, 0.05, 0.05, 0.05])
 
         # 过程噪声 Q（连续时间，将乘以 dt 离散化）
-        # 位置噪声小（IMU 双重积分），速度噪声中等，姿态噪声小
-        self.Q_cont = np.diag([0.01, 0.01, 0.001,   # 位置
-                                0.1, 0.1, 0.05,      # 速度
-                                0.001, 0.001, 0.001])  # 姿态
+        # 位置噪声：反映 IMU 速度积分的不确定性，0.15m²/s → 0.0075m²/step
+        # 速度噪声：反映 IMU 加速度测量噪声，0.5(m/s)²/s → 0.025(m/s)²/step
+        self.Q_cont = np.diag([0.1, 0.1, 0.02,     # 位置 (基准附近)
+                                0.5, 0.5, 0.2,        # 速度
+                                0.002, 0.002, 0.002])  # 姿态
 
         # 视觉观测噪声 R：信任 VO 位姿观测（位置 ~2m std，姿态 ~0.05rad std → 方差）
         self.R_base = np.diag([4.0, 4.0, 1.0,    # 位置观测噪声 (m²)
@@ -832,6 +839,12 @@ class EKF_VIO:
         # 理由：_last_vo_pose 被主循环在 visual_update 之前覆盖为当前帧值，
         #       需要独立变量 _prev_vo_obs 保存真正的上一帧 VO 观测
         self._prev_vo_obs = None
+
+        # 位置观测跳过计数器（残差过大被硬拒绝的帧数）
+        self._pos_skip_count = 0
+
+        # visual_update 调用计数器
+        self._update_call_count = 0
 
     # 【MOD:2】软门控：返回 weight∈[0,1] 替代硬拒绝 bool
     # 理由：VO 尺度未收敛时新息可能较大，硬拒绝导致全部观测被丢弃
@@ -934,93 +947,104 @@ class EKF_VIO:
         Q_d = self.Q_cont * self.dt
         self.P = F @ self.P @ F.T + Q_d
         self.P = 0.5 * (self.P + self.P.T)  # 强制对称
+        self._clamp_covariance()  # 协方差防爆炸
 
     def visual_update(self, visual_pose):
+        self._update_call_count += 1
         z = np.array(visual_pose, dtype=np.float64)
 
-        # 【MOD:6v2】VO 尺度在线估计：逐帧 VO 位移 vs IMU 速度，而非累积位置比
-        # 理由：VO 单帧位移为归一化单位步长，IMU 速度给出真实米/秒，
-        #       逐帧 scale = imu_vel_norm * dt / vo_disp_norm，避免累积误差反馈
-        # 【MOD:11】使用 _prev_vo_obs（独立变量）而非 _last_vo_pose，
-        #       因为 _last_vo_pose 被主循环在调用前覆盖为当前帧值
-        vo_disp_pos = np.zeros(3)  # 默认零位移
+        # === 尺度在线估计（慢速 EMA，α=0.99，避免反馈振荡） ===
+        vo_disp_pos = np.zeros(3)
+        imu_vel_norm = np.linalg.norm(self.x[3:6])  # EKF 速度，已被 VO 修正
         if self._prev_vo_obs is not None:
-            vo_disp_pos = z[:3] - self._prev_vo_obs[:3]   # 帧间 VO 位移（归一化单位）
+            vo_disp_pos = z[:3] - self._prev_vo_obs[:3]
             vo_disp_norm = np.linalg.norm(vo_disp_pos)
-            imu_vel_norm = np.linalg.norm(self.x[3:6])     # 当前 IMU 速度 (m/s)
 
-            if vo_disp_norm > 1e-6 and imu_vel_norm > 0.05:
-                # 逐帧尺度：真实位移 / VO 归一化位移
+            if vo_disp_norm > 0.001 and imu_vel_norm > 0.05:
                 frame_scale = imu_vel_norm * self.dt / (vo_disp_norm + 1e-8)
-                frame_scale = np.clip(frame_scale, 0.02, 50.0)
+                frame_scale = np.clip(frame_scale, 0.05, 30.0)
                 if not self._vo_scale_initialized:
                     self._vo_scale_ema = frame_scale
                     self._vo_scale_initialized = True
                 else:
-                    self._vo_scale_ema = 0.85 * self._vo_scale_ema + 0.15 * frame_scale
-        self._prev_vo_obs = z.copy()  # 【MOD:11】保存当前 VO 观测供下一帧计算位移
+                    self._vo_scale_ema = (0.99 * self._vo_scale_ema
+                                          + 0.01 * frame_scale)
+        if self._vo_scale_initialized:
+            self._vo_scale_ema = max(self._vo_scale_ema, 0.05)
+        self._prev_vo_obs = z.copy()
 
-        # 【MOD:6v2】将 VO 帧间位移缩放到米制，作为速度观测
-        # 观测模型改为 [vx, vy, vz, roll, pitch, yaw]（速度 + 姿态）
+        # === 速度观测 ===
         if self._vo_scale_initialized:
             vo_disp_scaled = vo_disp_pos * self._vo_scale_ema
-            v_obs = vo_disp_scaled / self.dt  # 速度观测 (m/s)
+            v_obs = vo_disp_scaled / self.dt
         else:
-            v_obs = np.zeros(3)  # 首帧无位移，速度观测为 0
+            v_obs = np.zeros(3)
 
-        # 构建观测向量：速度 + 姿态（不使用 VO 绝对位置，因其尺度不可靠）
         z_obs = np.zeros(6)
-        z_obs[0:3] = v_obs           # 速度观测
-        z_obs[3:6] = z[3:6].copy()   # 姿态观测（roll, pitch, yaw）
+        z_obs[0:3] = v_obs
+        z_obs[3:6] = z[3:6].copy()
 
-        # 观测矩阵：速度 + 姿态
         H = np.zeros((6, 9))
-        H[0, 3] = H[1, 4] = H[2, 5] = 1  # 速度观测
-        H[3, 6] = H[4, 7] = H[5, 8] = 1  # 姿态观测
+        H[0, 3] = H[1, 4] = H[2, 5] = 1
+        H[3, 6] = H[4, 7] = H[5, 8] = 1
 
         y = z_obs - H @ self.x
-
-        # 【MOD:7】角度新息 wrapping 到 [-π, π]
         y[3] = (y[3] + np.pi) % (2 * np.pi) - np.pi
         y[4] = (y[4] + np.pi) % (2 * np.pi) - np.pi
         y[5] = (y[5] + np.pi) % (2 * np.pi) - np.pi
 
-        # 【MOD:6v2】使用自适应 R：速度观测噪声随尺度估计质量变化
-        R_vel = np.diag([0.5, 0.5, 0.2])  # 速度观测噪声 (m/s)²
-        R_att = np.diag([0.005, 0.005, 0.005])  # 姿态观测噪声 (rad²)
+        R_vel = np.diag([0.5, 0.5, 0.2])
+        R_att = np.diag([0.005, 0.005, 0.005])
         R_use = np.block([[R_vel, np.zeros((3, 3))],
                           [np.zeros((3, 3)), R_att]])
         S = H @ self.P @ H.T + R_use + np.eye(6) * 1e-8
 
-        # 【MOD:8】软门控替代硬拒绝：weight∈[0.05, 1.0]
         weight, mahal_dist = self._gate_innovation(y, S)
         self.mahalanobis_history.append(mahal_dist)
-
-        # 记录新息范数
         innov_norm = float(np.linalg.norm(y))
         self.innovation_history.append(innov_norm)
-
         if weight < 1.0:
             self.innovation_rejected += 1
         else:
             self.innovation_accepted += 1
-
         self.uncertainty_history.append(np.trace(self.P[:3, :3]))
 
         try:
             K = self.P @ H.T @ np.linalg.inv(S)
         except np.linalg.LinAlgError:
             K = np.eye(9, 6) * 0.1
-
-        # 【MOD:9】存储最近一次 K 和 residual，供调试打印
         self._last_K = K.copy()
         self._last_residual = y.copy()
 
-        # 【MOD:8】软门控：用 weight 缩放卡尔曼增益更新
         self.x += weight * (K @ y)
         I_KH = np.eye(9) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ R_use @ K.T
         self.P = 0.5 * (self.P + self.P.T)
+
+        # === 位置观测（硬门控：残差过大直接跳过） ===
+        if self._vo_scale_initialized:
+            z_pos = z[:3] * self._vo_scale_ema
+            H_pos = np.zeros((3, 9))
+            H_pos[0, 0] = H_pos[1, 1] = H_pos[2, 2] = 1.0
+
+            y_pos = z_pos - H_pos @ self.x
+            pos_innov_norm = np.linalg.norm(y_pos[:2])
+
+            if pos_innov_norm < 100.0:
+                R_pos = np.diag([9.0, 9.0, 1.0])
+                S_pos = (H_pos @ self.P @ H_pos.T + R_pos
+                         + np.eye(3) * 1e-8)
+                try:
+                    K_pos = self.P @ H_pos.T @ np.linalg.inv(S_pos)
+                except np.linalg.LinAlgError:
+                    K_pos = np.zeros((9, 3))
+                self.x += K_pos @ y_pos
+                I_KH_pos = np.eye(9) - K_pos @ H_pos
+                self.P = (I_KH_pos @ self.P @ I_KH_pos.T
+                          + K_pos @ R_pos @ K_pos.T)
+                self.P = 0.5 * (self.P + self.P.T)
+            else:
+                self._pos_skip_count += 1
 
         # Soft flat-ground pseudo-measurement
         z_flat = np.array([self.init_z, 0.0, 0.0])
@@ -1040,6 +1064,8 @@ class EKF_VIO:
         self.P = I_KH_flat @ self.P @ I_KH_flat.T + K_flat @ R_flat @ K_flat.T
         self.P = 0.5 * (self.P + self.P.T)
 
+        self._clamp_covariance()  # 协方差防爆炸
+
     def get_current_pose(self):
         return self.x[:3].copy(), self.x[6:9].copy()
 
@@ -1048,6 +1074,16 @@ class EKF_VIO:
 
     def get_position_uncertainty(self):
         return np.sqrt(np.diag(self.P[:3, :3]))
+
+    def _clamp_covariance(self):
+        """协方差防爆炸：限制 P 对角线元素最大值，防止后期发散"""
+        max_diag = np.array([100.0, 100.0, 25.0,   # 位置方差上限
+                              25.0, 25.0, 10.0,     # 速度方差上限
+                              0.5, 0.5, 0.5])       # 姿态方差上限
+        for i in range(9):
+            if self.P[i, i] > max_diag[i]:
+                self.P[i, i] = max_diag[i]
+        self.P = 0.5 * (self.P + self.P.T)  # 保持对称
 
     def get_fusion_quality_metrics(self):
         total = self.innovation_accepted + self.innovation_rejected
@@ -1172,6 +1208,183 @@ def validate_output_data(output_dir, min_images=10):
     report_lines.append("=" * 60)
 
     return all_ok, report_lines
+
+
+# ═════════════════════════════════════════════════════════════
+#  轨迹可视化（论文用图）
+# ═════════════════════════════════════════════════════════════
+
+def _load_csv_columns(path, col_names):
+    """Read CSV and return numpy array of specified columns. Returns None on failure."""
+    if not os.path.isfile(path):
+        return None
+    try:
+        df = pd.read_csv(path, encoding='utf-8')
+        vals = df[col_names].to_numpy(dtype=float)
+        if len(vals) == 0:
+            return None
+        return vals  # (N, len(col_names))
+    except Exception:
+        return None
+
+
+def compute_ate(gt_xy, pred_xy):
+    """Absolute Trajectory Error (RMSE) in meters."""
+    n = min(len(gt_xy), len(pred_xy))
+    diff = gt_xy[:n] - pred_xy[:n]
+    return float(np.sqrt(np.mean(np.sum(diff ** 2, axis=1))))
+
+
+def compute_rpe(gt_xy, pred_xy):
+    """Relative Pose Error per step (mean) in meters/frame."""
+    n = min(len(gt_xy), len(pred_xy))
+    if n < 2:
+        return 0.0
+    gt_delta = np.diff(gt_xy[:n], axis=0)
+    pred_delta = np.diff(pred_xy[:n], axis=0)
+    return float(np.mean(np.linalg.norm(gt_delta - pred_delta, axis=1)))
+
+
+def compute_max_error(gt_xy, pred_xy):
+    """Maximum pointwise Euclidean error in meters."""
+    n = min(len(gt_xy), len(pred_xy))
+    diff = gt_xy[:n] - pred_xy[:n]
+    return float(np.max(np.linalg.norm(diff, axis=1)))
+
+
+def compute_drift_rate(gt_xy, pred_xy):
+    """Drift rate: ATE / total GT path length (%)."""
+    n = min(len(gt_xy), len(pred_xy))
+    gt_dist = np.sum(np.linalg.norm(np.diff(gt_xy[:n], axis=0), axis=1))
+    ate = compute_ate(gt_xy, pred_xy)
+    return float(ate / gt_dist * 100) if gt_dist > 0 else float('inf')
+
+
+def plot_trajectory_comparison(output_dir, town_name=None):
+    """Generate publication-quality trajectory comparison figure.
+
+    Reads ground_truth.txt and fusion_pose.txt from output_dir,
+    produces a two-panel figure saved as PNG and PDF.
+    """
+    gt_path = os.path.join(output_dir, 'ground_truth.txt')
+    fusion_path = os.path.join(output_dir, 'fusion_pose.txt')
+
+    gt_data = _load_csv_columns(gt_path, ['pos_x', 'pos_y'])
+    fusion_data = _load_csv_columns(fusion_path, ['pos_x', 'pos_y'])
+
+    if gt_data is None:
+        print(f"[VIZ] 跳过: 缺少 ground_truth.txt 或数据为空")
+        return
+    if fusion_data is None:
+        print(f"[VIZ] 跳过: 缺少 fusion_pose.txt 或数据为空")
+        return
+
+    # 归一化到起点
+    gt_xy = gt_data - gt_data[0]
+    fusion_xy = fusion_data - fusion_data[0]
+
+    # 截断到较短长度
+    n = min(len(gt_xy), len(fusion_xy))
+    gt_xy = gt_xy[:n]
+    fusion_xy = fusion_xy[:n]
+
+    # 计算指标
+    ate = compute_ate(gt_xy, fusion_xy)
+    rpe = compute_rpe(gt_xy, fusion_xy)
+    max_err = compute_max_error(gt_xy, fusion_xy)
+    drift = compute_drift_rate(gt_xy, fusion_xy)
+
+    # 逐帧位置误差
+    frame_errors = np.linalg.norm(gt_xy - fusion_xy, axis=1)
+
+    # ---- 论文风格设置 ----
+    plt.rcParams.update({
+        'font.family': 'serif',
+        'font.serif': ['Times New Roman', 'DejaVu Serif'],
+        'mathtext.fontset': 'stix',
+        'font.size': 11,
+        'axes.titlesize': 13,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'figure.dpi': 150,
+        'savefig.dpi': 300,
+        'savefig.bbox': 'tight',
+        'savefig.pad_inches': 0.05,
+    })
+
+    fig, (ax_traj, ax_err) = plt.subplots(1, 2, figsize=(14, 5.5))
+
+    # ── 左图：轨迹对比 ──
+    ax_traj.plot(gt_xy[:, 0], gt_xy[:, 1], color='#1f77b4', lw=1.8,
+                 label='Ground Truth', zorder=3)
+    ax_traj.plot(fusion_xy[:, 0], fusion_xy[:, 1], color='#d62728', lw=1.4,
+                 ls='--', label='EKF Fusion', zorder=4)
+
+    # 起点和终点标记
+    ax_traj.scatter(gt_xy[0, 0], gt_xy[0, 1], marker='o', s=60,
+                    c='#1f77b4', edgecolors='k', linewidths=0.5, zorder=5)
+    ax_traj.scatter(gt_xy[-1, 0], gt_xy[-1, 1], marker='s', s=60,
+                    c='#1f77b4', edgecolors='k', linewidths=0.5, zorder=5)
+    ax_traj.scatter(fusion_xy[0, 0], fusion_xy[0, 1], marker='o', s=60,
+                    c='#d62728', edgecolors='k', linewidths=0.5, zorder=5)
+    ax_traj.scatter(fusion_xy[-1, 0], fusion_xy[-1, 1], marker='s', s=60,
+                    c='#d62728', edgecolors='k', linewidths=0.5, zorder=5)
+
+    ax_traj.set_xlabel('X (m)')
+    ax_traj.set_ylabel('Y (m)')
+    title = f'Trajectory Comparison'
+    if town_name:
+        title += f' — {town_name}'
+    ax_traj.set_title(title)
+    ax_traj.legend(loc='best', framealpha=0.85)
+    ax_traj.grid(True, alpha=0.3, linestyle='--')
+    ax_traj.set_aspect('equal', adjustable='box')
+    ax_traj.xaxis.set_minor_locator(AutoMinorLocator(2))
+    ax_traj.yaxis.set_minor_locator(AutoMinorLocator(2))
+
+    # ── 右图：定位偏差随时间变化 ──
+    ax_err.plot(np.arange(n), frame_errors, color='#9467bd', lw=1.0, alpha=0.85)
+    ax_err.fill_between(np.arange(n), 0, frame_errors, color='#9467bd', alpha=0.12)
+    ax_err.axhline(y=ate, color='#d62728', lw=1.2, ls='--',
+                   label=f'ATE = {ate:.2f} m')
+    ax_err.set_xlabel('Frame')
+    ax_err.set_ylabel('Position Error (m)')
+    ax_err.set_title('Localization Error Over Time')
+    ax_err.legend(loc='upper right', framealpha=0.85)
+    ax_err.grid(True, alpha=0.3, linestyle='--')
+    ax_err.xaxis.set_minor_locator(AutoMinorLocator(2))
+    ax_err.yaxis.set_minor_locator(AutoMinorLocator(2))
+
+    # 统计信息文本
+    stats_text = (
+        f'ATE: {ate:.3f} m\n'
+        f'RPE: {rpe:.4f} m/frame\n'
+        f'Max Error: {max_err:.3f} m\n'
+        f'Drift: {drift:.2f}%'
+    )
+    ax_err.text(0.97, 0.97, stats_text, transform=ax_err.transAxes,
+                fontsize=9, verticalalignment='top', horizontalalignment='right',
+                bbox=dict(boxstyle='round,pad=0.4', facecolor='white',
+                          edgecolor='gray', alpha=0.85))
+
+    plt.tight_layout()
+
+    # 保存 PNG 和 PDF
+    png_path = os.path.join(output_dir, 'trajectory_comparison.png')
+    pdf_path = os.path.join(output_dir, 'trajectory_comparison.pdf')
+    fig.savefig(png_path, dpi=300)
+    fig.savefig(pdf_path, dpi=300)
+    plt.close(fig)
+
+    print(f"\n[VIZ] 轨迹对比图已保存:")
+    print(f"      PNG: {png_path}")
+    print(f"      PDF: {pdf_path}")
+    print(f"      指标: ATE={ate:.3f}m, RPE={rpe:.4f}m/frame, "
+          f"MaxErr={max_err:.3f}m, Drift={drift:.2f}%")
+
+    return ate, rpe, max_err, drift
 
 
 # ═════════════════════════════════════════════════════════════
@@ -1386,9 +1599,13 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                                    vo_pose[1] * scale,
                                    vo_pose[2] * scale]
 
-                # 累积：绝对位置 += 相对位移（世界坐标系下近似）
-                vo_abs_pose[0] += vo_relative[0]
-                vo_abs_pose[1] += vo_relative[1]
+                # 累积：VO 位移在相机坐标系，需旋转到世界坐标系再累加
+                # 理由：车辆转弯时相机坐标系随之旋转，直接累加导致方向错误
+                vo_yaw = vo_abs_pose[5]  # 当前 VO 偏航角（世界系）
+                cos_y = np.cos(vo_yaw)
+                sin_y = np.sin(vo_yaw)
+                vo_abs_pose[0] += vo_relative[0] * cos_y - vo_relative[1] * sin_y
+                vo_abs_pose[1] += vo_relative[0] * sin_y + vo_relative[1] * cos_y
                 vo_abs_pose[2] += vo_relative[2]
                 # 姿态：相对旋转叠加（用欧拉角近似）
                 vo_abs_pose[3] = (vo_abs_pose[3] + vo_relative[3] + np.pi) % (2 * np.pi) - np.pi
@@ -1428,14 +1645,19 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 # ---- 调试日志 ----
                 ekf._log_counter += 1
                 if ekf._debug_log and ekf._log_counter % 50 == 0:
-                    kalman_gain_trace = np.trace(ekf.P[:3, :3])  # 位置协方差迹作为 Kalman 增益的代理指标
+                    kalman_gain_trace = np.trace(ekf.P[:3, :3])
                     innovation_norm = ekf.innovation_history[-1] if ekf.innovation_history else 0.0
+                    vel_K = ekf._last_K
+                    vel_K_norm = np.linalg.norm(vel_K[:3, :3]) if vel_K is not None else 0
                     print(f"[EKF DEBUG] Frame {img_idx}: "
-                          f"VO update={'EXECUTED' if not vo_jump_skip else 'SKIPPED(jump)'}, "
-                          f"accepted={ekf.innovation_accepted}, rejected={ekf.innovation_rejected}, "
-                          f"innov_norm={innovation_norm:.4f}, "
-                          f"P_trace_pos={kalman_gain_trace:.4f}, "
-                          f"matches={num_matches}, scale={scale:.4f}")
+                          f"VO={'OK' if not vo_jump_skip else 'SKIP'}, "
+                          f"calls={ekf._update_call_count}, "
+                          f"scale_ema={ekf._vo_scale_ema:.4f}, "
+                          f"vel_K={vel_K_norm:.4f}, "
+                          f"innov={innovation_norm:.3f}, "
+                          f"pos_skip={ekf._pos_skip_count}, "
+                          f"accepted={ekf.innovation_accepted}, "
+                          f"matches={num_matches}")
 
                 # ---- 写入 Ground Truth ----
                 gt_loc = vehicle.get_location()
@@ -1749,6 +1971,27 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
         else:
             print(f"[OK] 数据采集成功！共 {img_idx} 帧，输出目录: {OUTPUT_DIR}")
             print(f"     绝对路径: {os.path.abspath(OUTPUT_DIR)}")
+
+        # EKF 融合统计
+        try:
+            total = ekf.innovation_accepted + ekf.innovation_rejected
+            acc_rate = (ekf.innovation_accepted / total * 100) if total > 0 else 0
+            print(f"\n[EKF STATS] 尺度初始化: {ekf._vo_scale_initialized}")
+            print(f"            尺度 EMA: {ekf._vo_scale_ema:.4f}")
+            print(f"            visual_update 调用: {ekf._update_call_count}")
+            print(f"            速度/姿态更新: accepted={ekf.innovation_accepted}, "
+                  f"rejected={ekf.innovation_rejected} "
+                  f"({acc_rate:.1f}% accepted)")
+            print(f"            位置观测跳过(残差>100m): {ekf._pos_skip_count}")
+            print(f"            总帧数: {total_frames}")
+        except Exception as e:
+            print(f"[EKF STATS] 统计失败: {e}")
+
+        # 生成轨迹可视化对比图（论文用图）
+        try:
+            plot_trajectory_comparison(OUTPUT_DIR, town_name=TARGET_MAP)
+        except Exception as e:
+            print(f"[VIZ] 轨迹可视化失败: {e}")
 
 
 if __name__ == "__main__":
