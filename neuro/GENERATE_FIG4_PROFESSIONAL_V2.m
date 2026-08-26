@@ -14,7 +14,8 @@ vo = [240,155,100,85,3,20];
 imp = [42.6, 51.2, 58.5, 12.6, -2.6, 25.0];
 success = [83,17];
 
-figure('Position',[100 100 1000 800]);
+% 画布尺寸，适合双栏论文
+figure('Position',[100 100 900 720]);
 
 subplot(2,2,[1 2]);
 bar([neuro;ekf;vo]');
@@ -26,11 +27,11 @@ grid on;
 
 subplot(2,2,3);
 scatter(imp,1:6,100:10:150,'filled');
-yticks(1:6); 
+yticks(1:6);
 yticklabels(datasets);
 xlabel('Improvement vs EKF (%)','FontName','Times New Roman','FontSize',11);
 ylabel('Dataset','FontName','Times New Roman','FontSize',11);
-title('(b) Improvement','FontName','Times New Roman','FontSize',12);
+title('(b) Improvement (bubble size = length)','FontName','Times New Roman','FontSize',12);
 grid on;
 
 for i = 1:6
@@ -43,4 +44,6 @@ pie(success);
 colormap([0.2 0.6 0.9; 0.8 0.4 0.4]);
 title('(c) Success Rate: 83%','FontName','Times New Roman','FontSize',12);
 
-print('Fig2_Performance_Comparison','-depsc','-r600');
+%% =====关键导出代码=====
+% -depsc：矢量eps；-loose：消除多余空白边距
+print('Fig2_Performance_Comparison','-depsc','-loose');
