@@ -54,7 +54,7 @@ datasets(2).name = 'Town01 (125)';          datasets(2).color = [0.2,0.6,0.8];  
 datasets(3).name = 'Town02 (165)';          datasets(3).color = [0.9,0.4,0.1];  datasets(3).style = '-';
 datasets(4).name = 'Town10 (195)';          datasets(4).color = [0.6,0.8,0.2];  datasets(4).style = '-';
 datasets(5).name = 'MH03 (171)';             datasets(5).color = [0.8,0.2,0.2];  datasets(5).style = '-';
-datasets(6).name = 'KITTI 07 (112)';        datasets(6).color = [0.5,0.2,0.7];  datasets(6).style = '-'; % 改为紫色
+datasets(6).name = 'KITTI 07 (112)';        datasets(6).color = [0.5,0.2,0.7];  datasets(6).style = '-'; 
 datasets(7).name = 'MH01(166)';                 datasets(7).color = [0.9,0.7,0.2];  datasets(7).style = '-';
 
 frame_nums = linspace(0, 1800, 100); 
@@ -86,3 +86,7 @@ hold off;
 
 %% 布局
 set(gcf, 'Units', 'normalized', 'OuterPosition', [0.05, 0.2, 0.9, 0.6]);
+
+%% ============导出EPS矢量图【关键】============
+% -depsc 输出彩色eps，论文标准
+print(gcf, 'ablation_unified.eps', '-depsc', '-r300');

@@ -1,4 +1,4 @@
-﻿% Adjust float placement parameters to prevent figures from appearing alone on pages
+% Adjust float placement parameters to prevent figures from appearing alone on pages
 \renewcommand{\topfraction}{0.85}       % Allow up to 85% of page top for floats
 \renewcommand{\textfraction}{0.10}      % Require at least 10% text on text pages
 \renewcommand{\floatpagefraction}{0.75} % Float pages must be at least 75% full
@@ -170,9 +170,7 @@ To quantify the con\-tri\-bu\-tion of each component in our bio-inspired framewo
 \begin{figure*}[!t]
     \centering
 
-    \includegraphics[width=0.48\textwidth]{fig/ablation_unified.pdf}%
-    \hfill
-    \includegraphics[width=0.48\textwidth]{fig/vt_growth_all_datasets.pdf}%
+    \includegraphics[width=0.82\textwidth]{fig/ablation_unified.eps}%
     \caption{Ablation analysis.
         (a) RMSE comparison across configurations: full framework (145.5~m) vs
         ablated versions. See Table~\ref{tab:ablation} for details.
@@ -200,7 +198,7 @@ The 25.8\% Trans\-form\-er-in\-spired con\-tri\-bu\-tion (Table~\ref{tab:ablatio
 % ���������ܽ�ͼ��
 \begin{figure*}[!htbp]
     \centering
-    \includegraphics[width=0.85\textwidth]{fig/performance_summary.pdf}
+    \includegraphics[width=0.85\textwidth]{fig/performance_summary.eps}
     \caption{Performance summary across 6 datasets.
         (a) RMSE comparison for NeuroLocMap, EKF, and VO baselines.
         (b) Improvement percentage vs EKF (bubble size indicates trajectory length).
