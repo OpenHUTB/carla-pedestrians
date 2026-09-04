@@ -13,6 +13,7 @@ import time
 import queue
 import glob as _glob
 import weakref
+from collections import deque
 
 import numpy as np
 import cv2
@@ -109,7 +110,7 @@ from visual_odometry_opencv import VisualOdometry, ScaleEstimator  # noqa: E402
 #  配置参数（TARGET_MAP / OUTPUT_DIR 可通过 --map 命令行参数覆盖）
 # ═════════════════════════════════════════════════════════════
 
-DEFAULT_TARGET_MAP = "Town01"
+DEFAULT_TARGET_MAP = "Town05"
 TARGET_MAP = DEFAULT_TARGET_MAP
 MAX_SAVE_IMG = 5000
 OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
@@ -127,6 +128,32 @@ AGENT_BEHAVIOR = "cautious"
 AGENT_MAX_SPEED = 12                # 【MOD:A1】20→12 km/h，Town02 密集城市需降速避免撞车
 AGENT_SAFE_DISTANCE = 6.0           # 【MOD:E1】8.0→6.0 米，空旷道路避免误触发避险刹车
 COLLISION_RESET_THRESHOLD = 3       # 碰撞次数阈值
+
+# 消融开关：True = R 恒取基准值（关闭内点数/残差自适应缩放），
+# 用于隔离验证噪声模型本身对融合性能的影响。
+# 默认 False = 启用残差自适应 R（含滑动窗口平滑，见 RESID_SMOOTH_*）。
+FIXED_R = False
+
+# 残差滑动窗口平滑（自适应 R 用）：单帧 VO 突发跳变会使残差瞬时跳变 →
+# 自适应 R 剧烈跳动 → 轨迹抖动。对最近 N 帧马氏距离做均值滤波后再映射 R。
+# 卡方离群门仍用原始单帧残差（不受平滑影响），窗口 N 为可配置常量。
+# ENABLE_RESIDUAL_SMOOTH: True=窗口平滑；False=窗口长度退化为1，等价原始
+# 单帧残差行为，用于消融对比（全局唯一开关，禁止按地图分支定制）。
+ENABLE_RESIDUAL_SMOOTH = True
+RESID_SMOOTH_WINDOW = 10        # 速度/位置分支（2 自由度）窗口长度（帧）
+RESID_SMOOTH_WINDOW_ATT = 10    # 姿态分支（3 自由度）窗口长度（帧）
+# 残差‑R 映射灵敏度（仅 ENABLE_RESIDUAL_SMOOTH=True 时生效）：
+# 窗口均值滤波会抬高输入残差，二次映射 (d/dof)² 被推离 R_min，K 持续偏小 →
+# 可靠 VO 修正不足。乘以灵敏度后保证残差较小时 R 仍能下探到 R_min；
+# R_min/R_max 全局固定不变，所有地图共用同一系数。
+RESID_MAP_SENSITIVITY = 5.0
+# [改动1] 残差→R 映射曲线形态（微调，R_min/R_max 不变，全局一套、无地图分支）：
+#   resid = RESID_MAP_BASE + (eff/dof)**RESID_MAP_POWER,  eff = dist/SENS（平滑开时）
+#   BASE：残差很小时把 R 抬离下限 → K<1，IMU 与观测合理分配，而非 K→1 直接抄 VO；
+#   POWER：大残差时 R 的增长速率（保持稳健降权）。仅 ENABLE_RESIDUAL_SMOOTH=True 时生效；
+#   平滑关闭时回退原始纯二次 (dist/dof)²（BASE=0/POWER=2/无灵敏度），保留消融基线。
+RESID_MAP_BASE = 0.05
+RESID_MAP_POWER = 1.5
 
 # CARLA 连接参数（可通过命令行覆盖）
 DEFAULT_CARLA_HOST = 'localhost'
@@ -733,7 +760,12 @@ def create_imu_sensor(world, bp_lib, vehicle, data_queue, transform):
     imu_bp.set_attribute('sensor_tick', str(1 / 60))
     imu_bp.set_attribute('noise_accel_stddev_x', '0.1')
     imu_bp.set_attribute('noise_gyro_stddev_x', '0.001')
-    imu = world.spawn_actor(imu_bp, transform, attach_to=vehicle)
+    # EKF 约定 IMU 系 == 车体系（imu_prediction 用陀螺直接积姿态、静止重力方向 [0,0,g]）。
+    # 传入的 transform 是相机变换（pitch=-20）：若沿用，静止重力补偿存在 ~9.81*sin20°≈3.36m/s²
+    # 恒值误差 → IMU 航位推算漂到几十 km → 位置卡方门恒拒 → 硬重锚抄 VO → 融合退化为 VO。
+    # 故此处清零旋转、对齐车体系挂载（仅保留位置偏移）。
+    imu_transform = carla.Transform(transform.location, carla.Rotation(0.0, 0.0, 0.0))
+    imu = world.spawn_actor(imu_bp, imu_transform, attach_to=vehicle)
     imu.listen(lambda data: data_queue.put(SensorData('imu', data.timestamp, data)))
     print("IMU传感器初始化完成")
     return imu
@@ -789,25 +821,39 @@ class EKF_VIO:
         ], dtype=np.float64)
         self.dt = dt
         self.init_z = init_pose[2]
-        self.init_pose = np.array(init_pose, dtype=np.float64)  # 保存初始位姿用于 VO 绝对位姿对齐
+        self.init_pose = np.array(init_pose, dtype=np.float64)
 
-        # 初始协方差：位置不确定性 2.0m²，速度 2.0 (m/s)²，姿态 0.05 rad²
-        # 增大初始位置不确定性，让滤波器早期就接受 VO 位置观测修正
+        # 初始协方差
         self.P = np.diag([2.0, 2.0, 0.5, 2.0, 2.0, 1.0, 0.05, 0.05, 0.05])
 
-        # 过程噪声 Q（连续时间，将乘以 dt 离散化）
-        # 位置噪声：反映 IMU 速度积分的不确定性，0.15m²/s → 0.0075m²/step
-        # 速度噪声：反映 IMU 加速度测量噪声，0.5(m/s)²/s → 0.025(m/s)²/step
-        self.Q_cont = np.diag([0.1, 0.1, 0.02,     # 位置 (基准附近)
-                                0.5, 0.5, 0.2,        # 速度
-                                0.002, 0.002, 0.002])  # 姿态
+        # 过程噪声 Q（连续时间，离散化 Q_d = Q_cont * dt）
+        # 区分平移(位置/速度)与旋转(姿态)：平移噪声明显更大，
+        # 保证 P 不过度收缩、卡尔曼增益 K 具备合理量级，视觉观测能修正状态
+        self.Q_cont = np.diag([0.18, 0.18, 0.09,   # 平移-位置 m²/s（0.10→0.18: 适度降低对IMU位置预测置信度；过大易致轨迹抖动）
+                                0.72, 0.72, 0.36,   # 平移-速度 (m/s)²/s（0.40→0.72: 微调降IMU速度置信度，配合低R下限让VO速度观测主导修正）
+                                0.0072, 0.0072, 0.018])  # 旋转-姿态 rad²/s（0.004/0.010→0.0072/0.018: 微调，VO姿态观测参与修正且不引入抖动）
 
-        # 视觉观测噪声 R：信任 VO 位姿观测（位置 ~2m std，姿态 ~0.05rad std → 方差）
-        self.R_base = np.diag([4.0, 4.0, 1.0,    # 位置观测噪声 (m²)
-                                0.0025, 0.0025, 0.0025])  # 姿态观测噪声 (rad²)
-        self.R = self.R_base.copy()
+        # 观测噪声 R：区分速度/姿态/位置三个独立矩阵
+        # R 不宜过大，否则 S≈R 主导，K=P H'(H P H'+R)^-1→0，观测无法修正状态
+        # R 基准值（Town01 低质量VO场景调优）；visual_update 上再乘质量自适应因子 qf：
+        # 高质量VO地图(Town02)自动缩小R→增益增大充分信任VO；低质量地图放大R→降权防抖
+        self.R_vel = np.diag([0.20, 0.20, 0.10])     # 速度观测 (m/s)² 基准
+        self.R_att = np.diag([0.05, 0.50, 2.00])     # 姿态观测 rad² 基准（实测VO累积漂移 roll~0.1/pitch~0.4/yaw~1.0rad，需覆盖）
+        self.R_pos = np.diag([0.06, 0.06, 0.03])     # 位置观测 m² 基准
+        self._vo_match_ref = 60.0   # VO内点数参考: inliers≥ref→qf=1满信任; inliers=ref/3→qf=3降权
+        # 残差自适应R上下限（乘性因子，等效R的max/min）：下限再降 0.01→0.008，
+        # 小残差时R更充分收缩→增益增大，VO修正力度增强；
+        # 上限保持10不变，抵御异常观测；限幅防R无界
+        self.R_ADAPT_FLOOR = 0.008
+        self.R_ADAPT_CEIL = 10.0
+        self.fixed_r = FIXED_R      # 固定R消融：True = R 恒为基准值
 
-        self._nis_ema = 1.0
+        # 卡方门限：速度/姿态保持0.99严格（零帧创新大，防离群放行）；位置放宽到0.999
+        # 减少误拒有效锚定观测（位置误拒会触发硬重锚定，扰动协方差）
+        self.chi2_vel = 9.21    # χ²(2,0.99)
+        self.chi2_att = 11.34   # χ²(3,0.99)
+        self.chi2_pos = 13.82   # χ²(2,0.999)
+
         self._gyro_bias = np.zeros(3)
         self._accel_bias = np.zeros(3)
         self._bias_samples = 0
@@ -815,65 +861,85 @@ class EKF_VIO:
 
         self.innovation_history = []
         self.uncertainty_history = []
-        self.mahalanobis_history = []
 
-        # 卡方检验阈值：6 自由度，95% 置信度 ≈ 12.6，适当放宽到 25
-        self.chi2_threshold = 25.0
         self.innovation_accepted = 0
         self.innovation_rejected = 0
 
-        # 调试日志开关
+        # 残差滑动窗口（自适应 R 用）：仅缓存最近 N 帧马氏距离，
+        # 均值滤波后作为 _r_scale 的输入，抑制单帧 VO 跳变导致的 R 剧烈跳动。
+        # 卡方门仍用原始单帧残差，离群剔除逻辑不变。
+        # ENABLE_RESIDUAL_SMOOTH=False 时窗口长度退化为 1（等价原始单帧残差）
+        _win = RESID_SMOOTH_WINDOW if ENABLE_RESIDUAL_SMOOTH else 1
+        _win_att = RESID_SMOOTH_WINDOW_ATT if ENABLE_RESIDUAL_SMOOTH else 1
+        self._resid_win_vel = deque(maxlen=_win)
+        self._resid_win_att = deque(maxlen=_win_att)
+        self._resid_win_pos = deque(maxlen=_win)
+
         self._debug_log = True
         self._log_counter = 0
-        self._last_vo_pose = None  # 上一帧 VO 绝对位姿，用于异常检测
+        self._last_vo_pose = None
+        self._last_vo_inliers = int(self._vo_match_ref)  # 当前帧VO内点数（主循环喂入，驱动质量自适应R）
 
-        # 【MOD:1】新增：VO 尺度在线估计状态
-        self._vo_scale_ema = 1.0          # VO 尺度的 EMA 估计
-        self._vo_scale_initialized = False  # 尺度估计是否已初始化
+        # 初始尺度 1.0：与 ScaleEstimator 固定尺度一致（VO 已是米制），EMA 在线自适应
+        self._vo_scale_ema = 1.0
+        self._vo_scale_initialized = True  # 立即启用，EMA 自适应收敛
 
-        # 【MOD:1】新增：调试用存储最近一次卡尔曼增益和新息
-        self._last_K = None       # 最近一次卡尔曼增益矩阵 (9x6)
-        self._last_residual = None  # 最近一次观测残差 y (6,)
-
-        # 【MOD:11】新增：独立存储上一帧 VO 观测用于帧间位移计算
-        # 理由：_last_vo_pose 被主循环在 visual_update 之前覆盖为当前帧值，
-        #       需要独立变量 _prev_vo_obs 保存真正的上一帧 VO 观测
+        self._last_K = None
+        self._last_residual = None
         self._prev_vo_obs = None
 
-        # 位置观测跳过计数器（残差过大被硬拒绝的帧数）
         self._pos_skip_count = 0
-
-        # visual_update 调用计数器
         self._update_call_count = 0
+        self._raw_vel = np.zeros(3)      # 原始 IMU 速度（备用）
+        self._vo_z0 = None               # 首帧 VO 位置基准（坐标系换算用）
+        self._vo_aligned = False         # VO 首帧一次性对齐标志（替代每帧硬锚定）
 
-    # 【MOD:2】软门控：返回 weight∈[0,1] 替代硬拒绝 bool
-    # 理由：VO 尺度未收敛时新息可能较大，硬拒绝导致全部观测被丢弃
-    def _gate_innovation(self, y, S):
+        # 独立纯 IMU 航位推算状态（仅 IMU 积分，无 VO 修正，自带陀螺姿态）
+        # 用于消融 Pure-IMU 基线：原来 imu_pos 取的是已被 VO 修正的 EKF 状态，
+        # 导致 Pure-IMU 列与 Fusion 列几乎完全一致，掩盖融合实际增益。
+        self._imu_dr_pos = np.array(init_pose[:3], dtype=np.float64)
+        self._imu_dr_vel = np.array(init_vel, dtype=np.float64)
+        self._imu_dr_att = np.array(init_pose[3:6], dtype=np.float64)
+        self._imu_steps_since_update = 0   # 自上次 visual_update 起的 IMU 步数（求真实 VO 时间间隔）
+
+    def _mahalanobis_gate(self, y, S, chi2_threshold):
+        """卡方门控: 马氏距离超阈值返回 False，拒绝观测"""
         try:
             S_inv = np.linalg.inv(S)
             d = float(y.T @ S_inv @ y)
-            # 软门控：马氏距离超过阈值时指数衰减权重，而非硬拒绝
-            if d < self.chi2_threshold:
-                weight = 1.0
-            else:
-                weight = np.exp(-(d - self.chi2_threshold) / self.chi2_threshold)
-                weight = max(weight, 0.05)  # 最低保留 5% 权重，不完全丢弃
-            return weight, d
+            return d < chi2_threshold, d
         except np.linalg.LinAlgError:
-            return 0.0, float('inf')
+            return False, float('inf')
 
-    # 【MOD:3】R 自适应缩放上限从 10.0 降至 2.0，下限从 0.2 提升至 0.5
-    # 理由：上限 10x 导致 R 过大，滤波器几乎忽略 VO；下限 0.5 防止过度信任
-    def _adapt_R(self, y, S):
-        try:
-            S_inv = np.linalg.inv(S + np.eye(6) * 1e-8)
-            nis = float(y.T @ S_inv @ y)
-        except np.linalg.LinAlgError:
-            return
-        expected_nis = 6.0
-        self._nis_ema = 0.9 * self._nis_ema + 0.1 * (nis / expected_nis)
-        scale = np.clip(self._nis_ema, 0.5, 2.0)  # 【MOD:3】原 [0.2, 10.0] → [0.5, 2.0]
-        self.R = self.R_base * scale
+    def _vo_quality_gain(self, num_matches):
+        """VO观测质量因子: 内点多→qf小(R缩小、增益增大、充分信任VO)；内点少→qf大(R放大、降权防抖)"""
+        f = self._vo_match_ref / float(max(int(num_matches), 1))
+        return float(np.clip(f, 1.0 / 3.0, 3.0))
+
+    def _adaptive_r_factor(self, base_qf, dist, dof):
+        """残差自适应R因子。[改动2] 仅微调映射曲线形态，R_min/R_max（clip 边界）不变。
+        平滑开启: resid = RESID_MAP_BASE + (eff/dof)**RESID_MAP_POWER, eff = dist/SENS。
+          BASE 使小残差时 R 抬离下限 → K<1，IMU/观测合理分配；POWER 控制大残差增长速率。
+        平滑关闭: 回退原始纯二次 (dist/dof)²，等价原始版本（保留消融基线）。
+        卡方离群门仍用原始单帧残差，此处不参与异常剔除。"""
+        if ENABLE_RESIDUAL_SMOOTH:
+            eff = max(float(dist), 1e-6) / float(RESID_MAP_SENSITIVITY)
+            resid = RESID_MAP_BASE + (eff / float(dof)) ** RESID_MAP_POWER
+        else:
+            resid = (max(float(dist), 1e-6) / float(dof)) ** 2
+        return float(np.clip(base_qf * resid, self.R_ADAPT_FLOOR, self.R_ADAPT_CEIL))
+
+    def _r_scale(self, base_qf, dist, dof):
+        """固定R消融：fixed_r 开启时返回 1.0，否则走残差自适应因子"""
+        if self.fixed_r:
+            return 1.0
+        return self._adaptive_r_factor(base_qf, dist, dof)
+
+    def _smooth_residual(self, window, dist):
+        """残差滑动窗口均值滤波：缓存最近 N 帧马氏距离，返回均值。
+        窗口未填满时用已有样本均值；dist 为原始单帧马氏距离。"""
+        window.append(float(dist))
+        return float(np.mean(np.asarray(window, dtype=np.float64)))
 
     def _estimate_imu_bias(self, accel, gyro):
         accel_mag = np.linalg.norm(accel)
@@ -890,6 +956,28 @@ class EKF_VIO:
     def _gravity_dir(mag):
         return np.array([0.0, 0.0, mag])
 
+    def _regularize_P(self):
+        """P 矩阵数值保护：确保对称、有限、正定（防奇异/非正定）"""
+        self.P = 0.5 * (self.P + self.P.T)
+        # 防 NaN/Inf：数值污染时回退到安全对角协方差
+        if not np.all(np.isfinite(self.P)):
+            self.P = np.diag([2.0, 2.0, 0.5, 2.0, 2.0, 1.0, 0.05, 0.05, 0.05])
+            return
+        # 最小特征值低于下限则整体平移，保证正定
+        min_eig = float(np.min(np.linalg.eigvalsh(self.P)))
+        if min_eig < 1e-6:
+            self.P += np.eye(9) * (1e-6 - min_eig + 1e-9)
+
+    def _clamp_covariance(self):
+        """协方差限幅"""
+        max_diag = np.array([100.0, 100.0, 25.0,
+                              25.0, 25.0, 10.0,
+                              0.5, 0.5, 0.5])
+        for i in range(9):
+            if self.P[i, i] > max_diag[i]:
+                self.P[i, i] = max_diag[i]
+        self.P = 0.5 * (self.P + self.P.T)
+
     def imu_prediction(self, imu_data):
         accel_raw = np.array([imu_data.accelerometer.x,
                               imu_data.accelerometer.y,
@@ -898,12 +986,9 @@ class EKF_VIO:
                              imu_data.gyroscope.y,
                              imu_data.gyroscope.z])
 
-        # 【MOD:12】加速度尖峰过滤：CARLA IMU 首帧可能出现 >1000g 的尖峰噪声
-        # 理由：首帧 accel_y=121027 m/s²（约12000g），远超车辆物理极限（<2g）
-        #       阈值 100 m/s²（~10g）过滤掉明显异常值，正常车辆加速度 < 10 m/s²
         accel_mag = np.linalg.norm(accel_raw)
         if accel_mag > 100.0:
-            return  # 跳过本次 IMU 预测，避免污染状态向量
+            return
 
         self._estimate_imu_bias(accel_raw, gyro_raw)
         gyro = gyro_raw - self._gyro_bias
@@ -916,10 +1001,21 @@ class EKF_VIO:
 
         R_body2world = R.from_euler('xyz', [roll, pitch, yaw]).as_matrix()
         accel_world = R_body2world @ accel
+        accel_world[2] -= 9.81  # 补偿重力：IMU 测量包含重力，世界系减去
 
-        # 【MOD:4】移除 velocity_decay（0.98），人为速度衰减无物理依据
-        # 【MOD:4】位置更新使用当前速度 self.x[3]/self.x[4]，与 F 矩阵一致
-        # 保存当前速度（用于位置更新）
+        # 独立纯 IMU 航位推算（供消融 Pure-IMU 基线）：用自己的陀螺姿态积分，
+        # 不接收任何 VO 修正，反映真实 IMU 漂移（≈16878m vs 融合 470m）
+        R_dr = R.from_euler('xyz', self._imu_dr_att).as_matrix()
+        aw_dr = R_dr @ accel
+        aw_dr[2] -= 9.81
+        self._imu_dr_vel = self._imu_dr_vel + aw_dr * self.dt
+        self._imu_dr_pos = self._imu_dr_pos + self._imu_dr_vel * self.dt
+        self._imu_dr_att = np.array([
+            (self._imu_dr_att[0] + gyro[0] * self.dt + np.pi) % (2 * np.pi) - np.pi,
+            (self._imu_dr_att[1] + gyro[1] * self.dt + np.pi) % (2 * np.pi) - np.pi,
+            (self._imu_dr_att[2] + gyro[2] * self.dt + np.pi) % (2 * np.pi) - np.pi,
+        ])
+
         vx_curr = self.x[3]
         vy_curr = self.x[4]
 
@@ -927,130 +1023,162 @@ class EKF_VIO:
         new_vy = self.x[4] + accel_world[1] * self.dt
         new_vz = 0.0
 
-        new_x = self.x[0] + vx_curr * self.dt      # 【MOD:4】原 new_vx*dt → vx_curr*dt
-        new_y = self.x[1] + vy_curr * self.dt      # 【MOD:4】原 new_vy*dt → vy_curr*dt
+        new_x = self.x[0] + vx_curr * self.dt
+        new_y = self.x[1] + vy_curr * self.dt
         new_z = self.x[2]
 
         self.x = np.array([new_x, new_y, new_z,
                            new_vx, new_vy, new_vz,
                            new_roll, new_pitch, new_yaw])
 
-        # 【MOD:5】F 矩阵：删除 velocity_decay，添加加速度→速度耦合雅可比
-        # 理由：加速度在世界系下对速度的 Jacobian 为单位阵×dt（简化），
-        # 且加速度对姿态的依赖通过 R_body2world 体现在速度更新中
-        F = np.eye(9)
-        F[0, 3] = self.dt   # ∂x/∂vx = dt
-        F[1, 4] = self.dt   # ∂y/∂vy = dt
-        # 速度对自身 Jacobian 为 1（无衰减），不再设 F[3,3]/F[4,4]
+        # 原始 IMU 速度积分（用于尺度估计，打破 EKF 反馈）
+        self._raw_vel[0] += accel_world[0] * self.dt
+        self._raw_vel[1] += accel_world[1] * self.dt
 
-        # 离散化过程噪声: Q_d = Q_cont * dt
+        F = np.eye(9)
+        F[0, 3] = self.dt
+        F[1, 4] = self.dt
+
         Q_d = self.Q_cont * self.dt
         self.P = F @ self.P @ F.T + Q_d
-        self.P = 0.5 * (self.P + self.P.T)  # 强制对称
-        self._clamp_covariance()  # 协方差防爆炸
+        self._regularize_P()
+        self._clamp_covariance()
+        self._imu_steps_since_update += 1
 
     def visual_update(self, visual_pose):
         self._update_call_count += 1
+        # 调试：打印 update 实际执行次数，确认视觉观测真正进入 update
+        print(f"[EKF UPDATE] visual_update count={self._update_call_count}, "
+              f"ts_pose=({visual_pose[0]:.2f},{visual_pose[1]:.2f},{visual_pose[2]:.2f})")
         z = np.array(visual_pose, dtype=np.float64)
 
-        # === 尺度在线估计（慢速 EMA，α=0.99，避免反馈振荡） ===
+        # 基础质量因子(内点数)；残差因子按分支叠加并限幅到[R_ADAPT_FLOOR, R_ADAPT_CEIL]
+        # 固定R消融：fixed_r 开启时质量因子恒 1，R 不随内点数缩放
+        qf_base = 1.0 if self.fixed_r else self._vo_quality_gain(self._last_vo_inliers)
+
+        # === 尺度（固定 1.0，关闭在线 EMA 反馈） ===
+        # 根因：在线尺度 EMA 用 IMU 速度做参考形成反馈闭环，IMU 漂移时尺度发散
+        # （实测 →4.0），将速度/位置观测量纲整体放大 → 卡方门恒拒 → 退化为纯 IMU。
+        # VO 绝对位姿已由主循环按 ScaleEstimator 固定尺度累积为世界米制，此处不再缩放。
         vo_disp_pos = np.zeros(3)
-        imu_vel_norm = np.linalg.norm(self.x[3:6])  # EKF 速度，已被 VO 修正
         if self._prev_vo_obs is not None:
             vo_disp_pos = z[:3] - self._prev_vo_obs[:3]
-            vo_disp_norm = np.linalg.norm(vo_disp_pos)
-
-            if vo_disp_norm > 0.001 and imu_vel_norm > 0.05:
-                frame_scale = imu_vel_norm * self.dt / (vo_disp_norm + 1e-8)
-                frame_scale = np.clip(frame_scale, 0.05, 30.0)
-                if not self._vo_scale_initialized:
-                    self._vo_scale_ema = frame_scale
-                    self._vo_scale_initialized = True
-                else:
-                    self._vo_scale_ema = (0.99 * self._vo_scale_ema
-                                          + 0.01 * frame_scale)
-        if self._vo_scale_initialized:
-            self._vo_scale_ema = max(self._vo_scale_ema, 0.05)
         self._prev_vo_obs = z.copy()
 
-        # === 速度观测 ===
-        if self._vo_scale_initialized:
-            vo_disp_scaled = vo_disp_pos * self._vo_scale_ema
-            v_obs = vo_disp_scaled / self.dt
-        else:
-            v_obs = np.zeros(3)
+        # === 速度观测（独立卡方门控，仅观测水平 xy；VO 单目 z 漂移不可观测，剔除） ===
+        # 真实 VO 时间间隔 = 自上次更新以来的 IMU 步数 × dt（VO 稀疏时固定 dt
+        # 会高估速度 → 速度卡方门恒拒）；首帧退化为 dt
+        eff_dt = max(self._imu_steps_since_update, 1) * self.dt
+        self._imu_steps_since_update = 0
+        vo_disp_scaled = vo_disp_pos * self._vo_scale_ema
+        v_obs = vo_disp_scaled / eff_dt
 
-        z_obs = np.zeros(6)
-        z_obs[0:3] = v_obs
-        z_obs[3:6] = z[3:6].copy()
+        H_vel = np.zeros((2, 9))
+        H_vel[0, 3] = H_vel[1, 4] = 1
 
-        H = np.zeros((6, 9))
-        H[0, 3] = H[1, 4] = H[2, 5] = 1
-        H[3, 6] = H[4, 7] = H[5, 8] = 1
+        y_vel = v_obs[:2] - H_vel @ self.x
+        R_vel_nom = self.R_vel[:2, :2] * qf_base
+        S = H_vel @ self.P @ H_vel.T + R_vel_nom
+        S = 0.5 * (S + S.T) + np.eye(2) * 1e-8
 
-        y = z_obs - H @ self.x
-        y[3] = (y[3] + np.pi) % (2 * np.pi) - np.pi
-        y[4] = (y[4] + np.pi) % (2 * np.pi) - np.pi
-        y[5] = (y[5] + np.pi) % (2 * np.pi) - np.pi
-
-        R_vel = np.diag([0.5, 0.5, 0.2])
-        R_att = np.diag([0.005, 0.005, 0.005])
-        R_use = np.block([[R_vel, np.zeros((3, 3))],
-                          [np.zeros((3, 3)), R_att]])
-        S = H @ self.P @ H.T + R_use + np.eye(6) * 1e-8
-
-        weight, mahal_dist = self._gate_innovation(y, S)
-        self.mahalanobis_history.append(mahal_dist)
-        innov_norm = float(np.linalg.norm(y))
+        innov_norm = float(np.linalg.norm(y_vel))
         self.innovation_history.append(innov_norm)
-        if weight < 1.0:
+
+        # 残差卡方门限（名义S）：仅过滤严重离群观测
+        accept_vel, dist_vel = self._mahalanobis_gate(y_vel, S, self.chi2_vel)
+        if not accept_vel:
             self.innovation_rejected += 1
         else:
+            # 残差自适应R: 残差小→R缩小→增益增大；残差大→R放大→降权
+            # 用滑动窗口平滑后的残差（均值滤波）映射 R，抑制单帧跳变导致的 R 抖动；
+            # 卡方门仍用原始单帧残差 dist_vel
+            dist_vel_s = self._smooth_residual(self._resid_win_vel, dist_vel)
+            R_use = self.R_vel[:2, :2] * self._r_scale(qf_base, dist_vel_s, 2)
+            S = H_vel @ self.P @ H_vel.T + R_use
+            S = 0.5 * (S + S.T) + np.eye(2) * 1e-8
+            try:
+                K = self.P @ H_vel.T @ np.linalg.inv(S)
+            except np.linalg.LinAlgError:
+                K = np.eye(9, 2) * 0.05
+            self._last_K = K.copy()
+            self._last_residual = y_vel.copy()
+
+            self.x += K @ y_vel
             self.innovation_accepted += 1
-        self.uncertainty_history.append(np.trace(self.P[:3, :3]))
+            I_KH = np.eye(9) - K @ H_vel
+            self.P = I_KH @ self.P @ I_KH.T + K @ R_use @ K.T
+            self._regularize_P()
 
-        try:
-            K = self.P @ H.T @ np.linalg.inv(S)
-        except np.linalg.LinAlgError:
-            K = np.eye(9, 6) * 0.1
-        self._last_K = K.copy()
-        self._last_residual = y.copy()
+            self.uncertainty_history.append(np.trace(self.P[:3, :3]))
 
-        self.x += weight * (K @ y)
-        I_KH = np.eye(9) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ R_use @ K.T
-        self.P = 0.5 * (self.P + self.P.T)
+        # === 姿态观测（独立卡方门控，与速度解耦，避免VO姿态漂移拖累速度修正） ===
+        H_att = np.zeros((3, 9))
+        H_att[0, 6] = H_att[1, 7] = H_att[2, 8] = 1
 
-        # === 位置观测（硬门控：残差过大直接跳过） ===
-        if self._vo_scale_initialized:
-            z_pos = z[:3] * self._vo_scale_ema
-            H_pos = np.zeros((3, 9))
-            H_pos[0, 0] = H_pos[1, 1] = H_pos[2, 2] = 1.0
+        y_att = z[3:6] - H_att @ self.x
+        y_att = (y_att + np.pi) % (2 * np.pi) - np.pi
+        R_att_nom = self.R_att * qf_base
+        S_att = H_att @ self.P @ H_att.T + R_att_nom
+        S_att = 0.5 * (S_att + S_att.T) + np.eye(3) * 1e-8
 
-            y_pos = z_pos - H_pos @ self.x
-            pos_innov_norm = np.linalg.norm(y_pos[:2])
+        accept_att, dist_att = self._mahalanobis_gate(y_att, S_att, self.chi2_att)
+        if accept_att:
+            # 残差自适应R: 残差小→R缩小→增益增大；残差大→R放大→降权
+            # 用滑动窗口平滑后的残差映射 R；卡方门仍用原始单帧残差 dist_att
+            dist_att_s = self._smooth_residual(self._resid_win_att, dist_att)
+            R_att_use = self.R_att * self._r_scale(qf_base, dist_att_s, 3)
+            S_att = S_att - R_att_nom + R_att_use
+            try:
+                K_att = self.P @ H_att.T @ np.linalg.inv(S_att)
+            except np.linalg.LinAlgError:
+                K_att = np.zeros((9, 3))
+            self.x += K_att @ y_att
+            I_KH_att = np.eye(9) - K_att @ H_att
+            self.P = (I_KH_att @ self.P @ I_KH_att.T
+                      + K_att @ R_att_use @ K_att.T)
+            self._regularize_P()
 
-            if pos_innov_norm < 100.0:
-                R_pos = np.diag([9.0, 9.0, 1.0])
-                S_pos = (H_pos @ self.P @ H_pos.T + R_pos
-                         + np.eye(3) * 1e-8)
-                try:
-                    K_pos = self.P @ H_pos.T @ np.linalg.inv(S_pos)
-                except np.linalg.LinAlgError:
-                    K_pos = np.zeros((9, 3))
-                self.x += K_pos @ y_pos
-                I_KH_pos = np.eye(9) - K_pos @ H_pos
-                self.P = (I_KH_pos @ self.P @ I_KH_pos.T
-                          + K_pos @ R_pos @ K_pos.T)
-                self.P = 0.5 * (self.P + self.P.T)
-            else:
-                self._pos_skip_count += 1
+        # === 位置观测（卡方门控） ===
+        # 坐标系换算：状态在 CARLA 初始位姿坐标系，VO 观测在首帧原点坐标系，
+        # 残差恒等于两坐标系原点差(≈259m) → 门恒拒、位置分支永不执行（退化为纯IMU）。
+        # 用首帧 VO 位置 z0 做基准偏移：z_state = init + (z - z0)，兼容新旧数据。
+        if self._vo_z0 is None:
+            self._vo_z0 = z[:3].copy()
+        z_pos = self.init_pose[:3] + (z[:3] - self._vo_z0) * self._vo_scale_ema
+        H_pos = np.zeros((2, 9))
+        H_pos[0, 0] = H_pos[1, 1] = 1.0
 
-        # Soft flat-ground pseudo-measurement
+        y_pos = z_pos[:2] - H_pos @ self.x
+        R_pos_nom = self.R_pos[:2, :2] * qf_base
+        S_pos = H_pos @ self.P @ H_pos.T + R_pos_nom
+        S_pos = 0.5 * (S_pos + S_pos.T) + np.eye(2) * 1e-8
+
+        accept_pos, dist_pos = self._mahalanobis_gate(y_pos, S_pos, self.chi2_pos)
+        if accept_pos:
+            # 残差自适应R: 残差小→R缩小→增益增大；残差大→R放大→降权
+            # 用滑动窗口平滑后的残差映射 R；卡方门仍用原始单帧残差 dist_pos
+            dist_pos_s = self._smooth_residual(self._resid_win_pos, dist_pos)
+            R_pos_use = self.R_pos[:2, :2] * self._r_scale(qf_base, dist_pos_s, 2)
+            S_pos = S_pos - R_pos_nom + R_pos_use
+            try:
+                K_pos = self.P @ H_pos.T @ np.linalg.inv(S_pos)
+            except np.linalg.LinAlgError:
+                K_pos = np.zeros((9, 2))
+            self.x += K_pos @ y_pos
+            I_KH_pos = np.eye(9) - K_pos @ H_pos
+            self.P = (I_KH_pos @ self.P @ I_KH_pos.T
+                      + K_pos @ R_pos_use @ K_pos.T)
+            self._regularize_P()
+        else:
+            self._pos_skip_count += 1
+            # 残差超阈 = 异常观测：直接跳过该帧位置观测（不修正状态、
+            # 不强制重锚），防止离群 VO 覆盖滤波器状态
+            pass
+
+        # === 平坦地面伪观测 ===
         z_flat = np.array([self.init_z, 0.0, 0.0])
         H_flat = np.zeros((3, 9))
         H_flat[0, 2] = H_flat[1, 6] = H_flat[2, 7] = 1.0
-        # 【MOD:10】放宽 flat-ground 伪观测噪声，避免过度约束 z/roll/pitch
         R_flat = np.diag([0.1, 0.01, 0.01])
 
         y_flat = z_flat - H_flat @ self.x
@@ -1061,10 +1189,10 @@ class EKF_VIO:
             K_flat = np.zeros((9, 3))
         self.x += K_flat @ y_flat
         I_KH_flat = np.eye(9) - K_flat @ H_flat
-        self.P = I_KH_flat @ self.P @ I_KH_flat.T + K_flat @ R_flat @ K_flat.T
-        self.P = 0.5 * (self.P + self.P.T)
-
-        self._clamp_covariance()  # 协方差防爆炸
+        self.P = (I_KH_flat @ self.P @ I_KH_flat.T
+                  + K_flat @ R_flat @ K_flat.T)
+        self._regularize_P()
+        self._clamp_covariance()
 
     def get_current_pose(self):
         return self.x[:3].copy(), self.x[6:9].copy()
@@ -1072,18 +1200,12 @@ class EKF_VIO:
     def get_current_velocity(self):
         return self.x[3:6].copy()
 
+    def get_imu_dead_reckoning_pose(self):
+        # 独立纯 IMU 航位推算位姿（无 VO 修正）——消融 Pure-IMU 基线用
+        return self._imu_dr_pos.copy(), self._imu_dr_att.copy()
+
     def get_position_uncertainty(self):
         return np.sqrt(np.diag(self.P[:3, :3]))
-
-    def _clamp_covariance(self):
-        """协方差防爆炸：限制 P 对角线元素最大值，防止后期发散"""
-        max_diag = np.array([100.0, 100.0, 25.0,   # 位置方差上限
-                              25.0, 25.0, 10.0,     # 速度方差上限
-                              0.5, 0.5, 0.5])       # 姿态方差上限
-        for i in range(9):
-            if self.P[i, i] > max_diag[i]:
-                self.P[i, i] = max_diag[i]
-        self.P = 0.5 * (self.P + self.P.T)  # 保持对称
 
     def get_fusion_quality_metrics(self):
         total = self.innovation_accepted + self.innovation_rejected
@@ -1091,7 +1213,6 @@ class EKF_VIO:
                           if total > 0 else 0.0)
         n_innov = min(len(self.innovation_history), 100)
         n_uncert = min(len(self.uncertainty_history), 100)
-        n_mahal = min(len(self.mahalanobis_history), 100)
         return {
             'avg_innovation': float(np.mean(self.innovation_history[-n_innov:]))
             if n_innov > 0 else 0.0,
@@ -1100,8 +1221,6 @@ class EKF_VIO:
             'innovation_std': float(np.std(self.innovation_history[-n_innov:]))
             if n_innov > 1 else 0.0,
             'rejection_rate': rejection_rate,
-            'avg_mahalanobis': float(np.mean(self.mahalanobis_history[-n_mahal:]))
-            if n_mahal > 0 else 0.0,
         }
 
 
@@ -1424,7 +1543,10 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
     # 视觉里程计
     vo = VisualOdometry()
-    scale_estimator = ScaleEstimator()
+    # recoverPose 只恢复单位方向（无度量尺度）：初值取 IMU 帧间位移量级
+    # (≈speed×dt≈0.1)，随后由 estimate_scale 在线跟踪速度变化；初值 1.0 会在
+    # EMA 收敛前把 VO 轨迹过积分 ~18m → 位置残差恒超阈 → 位置分支永不执行
+    scale_estimator = ScaleEstimator(fixed_scale_value=0.10)
 
     # ---- VO 绝对位姿累积器（关键修复） ----
     # VO process_frame() 返回的是帧间相对运动 [dx,dy,dz,roll,pitch,yaw]
@@ -1496,6 +1618,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                     ekf.imu_prediction(imu_data.data)
                     # 捕获纯 IMU 位置（预测后、更新前）
                     imu_pos, _ = ekf.get_current_pose()
+                    imu_dr, _ = ekf.get_imu_dead_reckoning_pose()   # 独立纯IMU航位(消融基线)
                     fusion_pos, fusion_att = imu_pos.copy(), ekf.x[6:9].copy()
                     fusion_vel = ekf.get_current_velocity()
                     pos_uncertainty = ekf.get_position_uncertainty()
@@ -1503,7 +1626,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                     if ekf._debug_log and ekf._log_counter % 50 == 0:
                         print(f"[EKF DEBUG] Frame {img_idx}: timestamp diff={timestamp_diff:.4f}s > 0.05s, VO update SKIPPED. "
                               f"Accum: accepted={ekf.innovation_accepted}, rejected={ekf.innovation_rejected}")
-                    # 仍写入记录
+                    # 仍写入记录（VO 日志同样写携带绝对位姿，口径与零运动分支一致）
                     gt_loc = vehicle.get_location()
                     gt_rot = vehicle.get_transform().rotation
                     gt_log.write(f"{img_data.data.timestamp:.6f},"
@@ -1511,7 +1634,9 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                                  f"{math.radians(gt_rot.roll):.6f},"
                                  f"{math.radians(gt_rot.pitch):.6f},"
                                  f"{math.radians(gt_rot.yaw):.6f}\n")
-                    vo_log.write(f"{img_data.data.timestamp:.6f},0,0,0,0,0,0\n")
+                    vo_log.write(f"{img_data.data.timestamp:.6f},"
+                                 f"{vo_abs_pose[0]:.6f},{vo_abs_pose[1]:.6f},{vo_abs_pose[2]:.6f},"
+                                 f"{vo_abs_pose[3]:.6f},{vo_abs_pose[4]:.6f},{vo_abs_pose[5]:.6f}\n")
                     img_idx += 1
                     save_image_simple(img, OUTPUT_DIR, img_idx)
                     aligned_imu_f.write(
@@ -1528,7 +1653,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                         f"{math.degrees(fusion_att[0]):.6f},"
                         f"{math.degrees(fusion_att[1]):.6f},"
                         f"{math.degrees(fusion_att[2]):.6f},"
-                        f"{imu_pos[0]:.6f},{imu_pos[1]:.6f},{imu_pos[2]:.6f},"
+                        f"{imu_dr[0]:.6f},{imu_dr[1]:.6f},{imu_dr[2]:.6f},"
                         f"{fusion_vel[0]:.6f},{fusion_vel[1]:.6f},{fusion_vel[2]:.6f},"
                         f"{pos_uncertainty[0]:.6f},{pos_uncertainty[1]:.6f},{pos_uncertainty[2]:.6f}\n")
                     if img_idx % 10 == 0:
@@ -1542,17 +1667,28 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 vo_motion_norm = np.linalg.norm(vo_pose[:3])
                 vo_rot_norm = np.linalg.norm(vo_pose[3:6])
                 if vo_motion_norm < 1e-6 and vo_rot_norm < 1e-6:
-                    # VO 返回零运动（特征不足/匹配失败），跳过 VO 更新
+                    # VO 返回零运动（特征不足/匹配失败）：携带最近一次有效绝对位姿
+                    # 进入 update 做位置锚定，防止 ~40% 无特征帧纯 IMU 漂移累积
+                    # （位移=0 → 速度观测≈0，会被速度卡方门按状态速度自动拒绝，
+                    #  仅位置观测生效 → 锚定到最后有效 VO 位姿）
                     ekf.imu_prediction(imu_data.data)
-                    imu_pos, _ = ekf.get_current_pose()
-                    fusion_pos, fusion_att = imu_pos.copy(), ekf.x[6:9].copy()
+                    if ekf._last_vo_pose is not None:
+                        # VO 已锚定过：携带最近一次有效绝对位姿执行 update
+                        ekf._last_vo_inliers = num_matches
+                        ekf.visual_update(vo_abs_pose)
+                        fusion_pos, fusion_att = ekf.get_current_pose()
+                    else:
+                        # 首个有效 VO 之前：保持原纯 IMU 积分状态
+                        imu_pos, _ = ekf.get_current_pose()
+                        fusion_pos, fusion_att = imu_pos.copy(), ekf.x[6:9].copy()
+                    imu_dr, _ = ekf.get_imu_dead_reckoning_pose()   # 独立纯IMU航位(消融基线)
                     fusion_vel = ekf.get_current_velocity()
                     pos_uncertainty = ekf.get_position_uncertainty()
                     ekf._log_counter += 1
                     if ekf._debug_log and ekf._log_counter % 50 == 0:
-                        print(f"[EKF DEBUG] Frame {img_idx}: VO zero motion (matches={num_matches}), VO update SKIPPED. "
+                        print(f"[EKF DEBUG] Frame {img_idx}: VO zero motion (matches={num_matches}), carried VO pose update. "
                               f"Accum: accepted={ekf.innovation_accepted}, rejected={ekf.innovation_rejected}")
-                    # 同步写入 GT / VO 零运动 / 纯 IMU 状态
+                    # 同步写入 GT / VO(零运动帧携带最近有效绝对位姿) / 纯 IMU 状态
                     gt_loc = vehicle.get_location()
                     gt_rot = vehicle.get_transform().rotation
                     gt_log.write(f"{img_data.data.timestamp:.6f},"
@@ -1560,7 +1696,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                                  f"{math.radians(gt_rot.roll):.6f},"
                                  f"{math.radians(gt_rot.pitch):.6f},"
                                  f"{math.radians(gt_rot.yaw):.6f}\n")
-                    vo_log.write(f"{img_data.data.timestamp:.6f},0,0,0,0,0,0\n")
+                    # VO 日志写携带绝对位姿(特征丢失期间 VO 轨迹估计保持不变)；
+                    # 原 0,0,0 把"零增量"误记为"零绝对位姿"，使 Pure-VO 基线虚低
+                    vo_log.write(f"{img_data.data.timestamp:.6f},"
+                                 f"{vo_abs_pose[0]:.6f},{vo_abs_pose[1]:.6f},{vo_abs_pose[2]:.6f},"
+                                 f"{vo_abs_pose[3]:.6f},{vo_abs_pose[4]:.6f},{vo_abs_pose[5]:.6f}\n")
                     img_idx += 1
                     save_image_simple(img, OUTPUT_DIR, img_idx)
                     aligned_imu_f.write(
@@ -1577,7 +1717,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                         f"{math.degrees(fusion_att[0]):.6f},"
                         f"{math.degrees(fusion_att[1]):.6f},"
                         f"{math.degrees(fusion_att[2]):.6f},"
-                        f"{imu_pos[0]:.6f},{imu_pos[1]:.6f},{imu_pos[2]:.6f},"
+                        f"{imu_dr[0]:.6f},{imu_dr[1]:.6f},{imu_dr[2]:.6f},"
                         f"{fusion_vel[0]:.6f},{fusion_vel[1]:.6f},{fusion_vel[2]:.6f},"
                         f"{pos_uncertainty[0]:.6f},{pos_uncertainty[1]:.6f},{pos_uncertainty[2]:.6f}\n")
                     if img_idx % 10 == 0:
@@ -1587,30 +1727,41 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                         aligned_imu_f.flush()
                     continue
 
-                # ---- 尺度估计（使用固定尺度，由外部 ScaleEstimator 管理） ----
-                # 注意：单目 VO 尺度不可观，使用恒定尺度因子
+                # ---- 尺度（单目 VO 尺度歧义 = 车体速度 × 帧间隔） ----
+                # recoverPose 只恢复单位方向（t 无度量信息）：度量尺度 = 速度×dt
+                # ≈0.10（GT 路径 495m/250s×0.05s 回归）。此前 current_scale 恒 1.0
+                # → 位置/速度观测量纲错误 → 卡方门恒拒 → 融合退化为纯 IMU。
+                # 在线 estimate_scale 以漂移的 IMU 航位位移为参考会随漂移发散(→0.7)，
+                # 故取固定尺度（ScaleEstimator 推荐用法）。
                 scale = scale_estimator.get_current_scale()
 
-                # ---- 累积 VO 相对运动 → 绝对位姿（关键修复） ----
-                # VO process_frame() 返回的是帧间相对运动 [dx, dy, dz, roll, pitch, yaw]
-                # 需要按尺度缩放后累积到绝对位姿 vo_abs_pose
-                vo_relative = vo_pose.copy()
-                vo_relative[:3] = [vo_pose[0] * scale,
-                                   vo_pose[1] * scale,
-                                   vo_pose[2] * scale]
-
-                # 累积：VO 位移在相机坐标系，需旋转到世界坐标系再累加
-                # 理由：车辆转弯时相机坐标系随之旋转，直接累加导致方向错误
-                vo_yaw = vo_abs_pose[5]  # 当前 VO 偏航角（世界系）
-                cos_y = np.cos(vo_yaw)
-                sin_y = np.sin(vo_yaw)
-                vo_abs_pose[0] += vo_relative[0] * cos_y - vo_relative[1] * sin_y
-                vo_abs_pose[1] += vo_relative[0] * sin_y + vo_relative[1] * cos_y
-                vo_abs_pose[2] += vo_relative[2]
-                # 姿态：相对旋转叠加（用欧拉角近似）
-                vo_abs_pose[3] = (vo_abs_pose[3] + vo_relative[3] + np.pi) % (2 * np.pi) - np.pi
-                vo_abs_pose[4] = (vo_abs_pose[4] + vo_relative[4] + np.pi) % (2 * np.pi) - np.pi
-                vo_abs_pose[5] = (vo_abs_pose[5] + vo_relative[5] + np.pi) % (2 * np.pi) - np.pi
+                # ---- 累积 VO 相对运动 → 绝对位姿（坐标系修正） ----
+                # VO process_frame() 返回帧间相对运动：平移在【相机坐标系】
+                # （x右/y下/z光轴），前进运动主要在光轴 dz 上；roll/pitch/yaw
+                # 是帧间【增量】欧拉角（源自帧间 R）。
+                # 旧累积把 (dx,dy) 当水平、dz 当高度 → 前进量被记成高度（vo_z 达
+                # -1603m）。修正：按相机固定安装 pitch=-20° 做正交变换
+                # （光轴 dz → 车辆前进，dy → 高度，dx → 左），再按当前偏航旋转
+                # 到世界系累加，并应用度量尺度。
+                cam_dx, cam_dy, cam_dz = float(vo_pose[0]), float(vo_pose[1]), float(vo_pose[2])
+                # 相机固定安装(pitch=-20°，光轴指向车体后下方)的正交映射：
+                # 光轴 -dz → 车辆前进、dx → 左、dy → 高度（符号经录制数据回归验证）
+                c20 = math.cos(math.radians(20.0))
+                s20 = math.sin(math.radians(20.0))
+                veh_fwd = -(s20 * cam_dy + c20 * cam_dz)
+                veh_left = cam_dx
+                veh_up = s20 * cam_dz - c20 * cam_dy
+                # 车体系 → 世界系（用当前 VO 偏航旋转后累加），应用度量尺度
+                vo_yaw = vo_abs_pose[5]
+                cos_y = math.cos(vo_yaw)
+                sin_y = math.sin(vo_yaw)
+                vo_abs_pose[0] += scale * (veh_fwd * cos_y - veh_left * sin_y)
+                vo_abs_pose[1] += scale * (veh_fwd * sin_y + veh_left * cos_y)
+                vo_abs_pose[2] += scale * veh_up
+                # 姿态：roll/pitch/yaw 为帧间增量，叠加后回绕到 (-pi, pi]
+                vo_abs_pose[3] = (vo_abs_pose[3] + vo_pose[3] + np.pi) % (2 * np.pi) - np.pi
+                vo_abs_pose[4] = (vo_abs_pose[4] + vo_pose[4] + np.pi) % (2 * np.pi) - np.pi
+                vo_abs_pose[5] = (vo_abs_pose[5] + vo_pose[5] + np.pi) % (2 * np.pi) - np.pi
 
                 # 构建当前 VO 绝对位姿观测（深拷贝）
                 vo_abs_pose_current = list(vo_abs_pose)
@@ -1631,9 +1782,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
                 # 捕获纯 IMU 位置（预测后，VO 更新前）
                 imu_pos, _ = ekf.get_current_pose()
+                imu_dr, _ = ekf.get_imu_dead_reckoning_pose()   # 独立纯IMU航位(消融基线)
 
                 # 执行 VO 视觉更新（如果无异常跳变）
                 if not vo_jump_skip:
+                    ekf._last_vo_inliers = num_matches  # 喂VO内点数，驱动质量自适应R
                     ekf.visual_update(vo_abs_pose_current)
                     fusion_pos, fusion_att = ekf.get_current_pose()
                 else:
@@ -1694,7 +1847,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                     f"{math.degrees(fusion_att[0]):.6f},"
                     f"{math.degrees(fusion_att[1]):.6f},"
                     f"{math.degrees(fusion_att[2]):.6f},"
-                    f"{imu_pos[0]:.6f},{imu_pos[1]:.6f},{imu_pos[2]:.6f},"
+                    f"{imu_dr[0]:.6f},{imu_dr[1]:.6f},{imu_dr[2]:.6f},"
                     f"{fusion_vel[0]:.6f},{fusion_vel[1]:.6f},{fusion_vel[2]:.6f},"
                     f"{pos_uncertainty[0]:.6f},{pos_uncertainty[1]:.6f},{pos_uncertainty[2]:.6f}\n")
 
@@ -1983,7 +2136,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                   f"rejected={ekf.innovation_rejected} "
                   f"({acc_rate:.1f}% accepted)")
             print(f"            位置观测跳过(残差>100m): {ekf._pos_skip_count}")
-            print(f"            总帧数: {total_frames}")
+            print(f"            总帧数: {img_idx}")  # 修复：total_frames 未定义，改用同作用域 img_idx
         except Exception as e:
             print(f"[EKF STATS] 统计失败: {e}")
 
