@@ -64,7 +64,7 @@ We provide pre-processed datasets with aligned IMU-visual data:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/dream1112221/carla-pedestrians.git
+git clone https://github.com/OpenHUTB/carla-pedestrians.git
 cd carla-pedestrians
 ```
 
