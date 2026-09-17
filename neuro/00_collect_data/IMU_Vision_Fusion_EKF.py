@@ -508,6 +508,98 @@ def safe_spawn_vehicle(world, bp_lib, max_attempts=10):
     raise RuntimeError(f"连续{max_attempts}次生成失败！")
 
 
+def _spawn_agent_for_vehicle(world, bp_lib, vehicle, spawn_points):
+    """为车辆初始化智能体：限速、PID、安全距离、目标点（初始化与重置共用）
+
+    返回 (agent, destination)。智能体参数配置集中在此，
+    避免 init 路径与主循环内重置路径两处参数漂移。
+    """
+    agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
+    agent.follow_speed_limits(False)
+    try:
+        agent.set_max_speed(AGENT_MAX_SPEED / 3.6)
+    except AttributeError:
+        try:
+            agent.set_target_speed(AGENT_MAX_SPEED / 3.6)
+        except AttributeError:
+            agent._max_speed = AGENT_MAX_SPEED / 3.6
+            print(f"使用备用方式设置速度: {AGENT_MAX_SPEED} km/h")
+
+    # 【MOD:C1】降低横向 PID 增益：K_P 0.8→0.3, K_I 0.02→0.01, 新增 K_D=0.1
+    # 【MOD:C2】纵向 PID 增益：降低 I 项防积分饱和
+    # 【MOD:MAP】自适应安全距离：按道路宽度动态调整，窄路降低避免误触发避险刹车
+    try:
+        if hasattr(agent, '_vehicle_controller') and agent._vehicle_controller is not None:
+            if hasattr(agent._vehicle_controller, '_args_lateral_dict'):
+                agent._vehicle_controller._args_lateral_dict['K_P'] = 0.3
+                agent._vehicle_controller._args_lateral_dict['K_I'] = 0.01
+                agent._vehicle_controller._args_lateral_dict['K_D'] = 0.1
+            if hasattr(agent._vehicle_controller, '_args_longitudinal_dict'):
+                agent._vehicle_controller._args_longitudinal_dict['K_P'] = 1.0
+                agent._vehicle_controller._args_longitudinal_dict['K_I'] = 0.02   # 【MOD:E3】0.05→0.02
+                agent._vehicle_controller._args_longitudinal_dict['K_D'] = 0.0
+        rw = estimate_road_width(vehicle, world)
+        adaptive_safe_dist = compute_adaptive_safe_distance(rw)
+        if hasattr(agent, '_min_distance'):
+            agent._min_distance = adaptive_safe_dist
+        if hasattr(agent, '_max_brake'):
+            agent._max_brake = 0.8
+    except (AttributeError, KeyError, TypeError):
+        pass
+
+    destination = select_forward_destination(vehicle, spawn_points)
+    agent.set_destination(destination)
+    # 【MOD:MAP】验证路径有效性
+    validate_agent_path(agent, vehicle, spawn_points, world)
+    return agent, destination
+
+
+def _reset_vehicle(world, bp_lib, vehicle, spawn_points, sensor_queue,
+                   camera, imu, collision_sensor):
+    """车辆重置：先成功生成新车辆，再销毁旧车辆。
+
+    原逻辑先销毁旧车再生成新车：一旦生成失败（CARLA 超时/actor 数量限制），
+    vehicle 仍指向已销毁的 actor，下一帧任何 vehicle.* 调用都会抛异常，
+    被外层 except 捕获后整轮采集被中断（跑不满 5000 帧的根因）。
+    返回 (new_vehicle, agent, camera, cam_transform, imu, collision_sensor)。
+    """
+    # 1) 先生成新车（失败时旧车仍可用，异常向上传给调用方的 except，循环可继续）
+    new_vehicle, _ = safe_spawn_vehicle(world, bp_lib)
+
+    # 2) 新车就绪后才销毁旧车与旧传感器
+    for _s in (camera, imu, collision_sensor.sensor):
+        try:
+            _s.stop()
+        except Exception:
+            pass
+        try:
+            _s.destroy()
+        except Exception:
+            pass
+    try:
+        vehicle.destroy()
+    except Exception:
+        pass
+    time.sleep(0.3)
+
+    # 3) 物理参数 + 智能体 + 目标点（与初始化路径共用同一套参数）
+    try:
+        physics_control = new_vehicle.get_physics_control()
+        physics_control.use_sweep_wheel_collision = True
+        new_vehicle.apply_physics_control(physics_control)
+    except Exception as e:
+        print(f"[WARN] 新车辆物理参数配置失败: {e}")
+    agent, destination = _spawn_agent_for_vehicle(world, bp_lib, new_vehicle, spawn_points)
+    print(f"新目标: ({destination.x:.1f}, {destination.y:.1f})")
+
+    # 4) 重建传感器（挂新车）
+    new_camera, cam_transform = create_rgb_camera(world, bp_lib, new_vehicle, sensor_queue)
+    new_imu = create_imu_sensor(world, bp_lib, new_vehicle, sensor_queue, cam_transform)
+    new_collision = CollisionSensor(new_vehicle)
+
+    return new_vehicle, agent, new_camera, cam_transform, new_imu, new_collision
+
+
 # ═════════════════════════════════════════════════════════════
 #  CARLA 环境初始化（带重试机制）
 # ═════════════════════════════════════════════════════════════
@@ -538,6 +630,15 @@ def connect_carla_with_retry(host, port, timeout=CARLA_CONNECT_TIMEOUT,
                     f"最后错误: {last_error}\n"
                     f"请确保 CARLA 仿真器已启动: CarlaUE4.exe -RenderOffScreen -quality-level=Low"
                 ) from last_error
+
+
+def _try_reconnect_world(host, port):
+    """尝试重新连接 CARLA，成功返回新 world，失败返回 None"""
+    client = carla.Client(host, port)
+    client.set_timeout(10.0)
+    world = client.get_world()
+    _ = world.get_map().name  # 验证连接有效
+    return world
 
 
 def load_map_with_retry(client, host, port, map_name, max_retries=3):
@@ -1555,6 +1656,16 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
     vo_abs_pose = list(init_pose)  # 初始化为车辆初始位姿
     vo_prev_relative = None  # 上一帧 VO 相对运动，用于尺度估计
 
+    # ---- 进度看门狗 + 容错计数（可靠性加固） ----
+    # last_progress：最后一次"有图像帧被写入"的时刻；主循环每圈检查，
+    #   长时间无进展（CARLA 挂起/断连）时给出明确告警，不再静默卡死。
+    # consecutive_errors：连续异常帧计数；单帧异常不再让整轮采集提前退出，
+    #   而是跳过该帧继续；连续异常过多才触发车辆重置。
+    last_progress = time.time()
+    stall_warned = False
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 30
+
     # 打开输出文件
     gt_log = open(os.path.join(OUTPUT_DIR, 'ground_truth.txt'), 'w', encoding='utf-8')
     fusion_log = open(os.path.join(OUTPUT_DIR, 'fusion_pose.txt'), 'w', encoding='utf-8')
@@ -1588,9 +1699,95 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
     print(f"  开始数据采集...")
     print(f"{'=' * 60}\n")
 
+    # 车辆状态缓存：车辆句柄暂时不可用时沿用上次状态，避免单帧异常打断采集
+    last_loc = None
+    last_rot = None
+    try:
+        last_loc = vehicle.get_location()
+        last_rot = vehicle.get_transform().rotation
+    except Exception:
+        pass
+    tick_errors = 0
+
+    def _vehicle_state():
+        """安全获取车辆位姿：车辆句柄暂不可用时返回最近一次有效状态"""
+        nonlocal last_loc, last_rot
+        try:
+            last_loc = vehicle.get_location()
+            last_rot = vehicle.get_transform().rotation
+        except Exception:
+            pass
+        return last_loc, last_rot
+
     try:
         while img_idx < MAX_SAVE_IMG:
-            world.tick()
+            # tick 容错：CARLA 断连/超时不再抛出中断整轮采集，
+            # 而是尝试重连并重挂车辆与传感器，持续失败才退出
+            try:
+                world.tick()
+                tick_errors = 0
+            except Exception as e:
+                tick_errors += 1
+                print(f"[WARN] world.tick() 失败 ({tick_errors}): {e}")
+                if tick_errors > 20:
+                    print("[FATAL] CARLA 连接持续异常，终止采集")
+                    break
+                time.sleep(0.5)
+                new_world = None
+                try:
+                    new_world = _try_reconnect_world(host, port)
+                except Exception:
+                    new_world = None
+                if new_world is not None:
+                    print("[OK] CARLA 重连成功，重建车辆与传感器")
+                    world = new_world
+                    bp_lib = world.get_blueprint_library()
+                    spawn_points = world.get_map().get_spawn_points()
+                    try:
+                        _s = world.get_settings()
+                        _s.synchronous_mode = True
+                        _s.fixed_delta_seconds = 0.05
+                        world.apply_settings(_s)
+                    except Exception:
+                        pass
+                    try:
+                        for _tl in world.get_actors().filter('traffic.traffic_light*'):
+                            _tl.set_state(carla.TrafficLightState.Green)
+                            _tl.freeze(True)
+                    except Exception:
+                        pass
+                    try:
+                        while not sensor_queue.empty():
+                            sensor_queue.get_nowait()
+                    except Exception:
+                        pass
+                    try:
+                        clear_all_actors(world)
+                    except Exception:
+                        pass
+                    vehicle, agent, camera, cam_transform, imu, collision_sensor = \
+                        _reset_vehicle(world, bp_lib, vehicle, spawn_points,
+                                       sensor_queue, camera, imu, collision_sensor)
+                    aligner = TimeAligner(time_threshold=0.02)
+                    stagnant_count = 0
+                    prev_throttle = 0.0
+                    prev_brake = 0.0
+                    consecutive_errors = 0
+                    try:
+                        last_loc = vehicle.get_location()
+                        last_rot = vehicle.get_transform().rotation
+                    except Exception:
+                        pass
+                    continue
+                print("[WARN] CARLA 重连失败，稍后重试...")
+
+            # 停滞看门狗：长时间无图像帧产出时告警（真正的恢复靠停滞重置）
+            _now = time.time()
+            if _now - last_progress > 60 and not stall_warned:
+                stall_warned = True
+                print(f"[STALL] 已 60 秒无图像帧产出 (当前 {img_idx}/{MAX_SAVE_IMG} 帧)")
+            elif _now - last_progress < 30:
+                stall_warned = False
 
             # 收集传感器数据
             while not sensor_queue.empty():
@@ -1598,6 +1795,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 aligner.add_data(data)
 
             # 获取对齐的图像-IMU 对
+            frames_before = img_idx
             pairs = aligner.get_aligned_pairs()
             for img_data, imu_data in pairs:
                 # 读取图像
@@ -1605,8 +1803,17 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 img_array = img_array.reshape((img_data.data.height, img_data.data.width, 4))
                 img = img_array[:, :, :3].copy()
 
-                # 视觉里程计
-                vo_pose, num_matches = vo.process_frame(img)
+                # 视觉里程计（单帧异常不中断整轮采集）
+                try:
+                    vo_pose, num_matches = vo.process_frame(img)
+                except Exception as e:
+                    consecutive_errors += 1
+                    if consecutive_errors > MAX_CONSECUTIVE_ERRORS:
+                        raise RuntimeError(
+                            f"VO 连续 {MAX_CONSECUTIVE_ERRORS} 帧异常，终止采集") from e
+                    print(f"[WARN] VO 处理异常 (连续 {consecutive_errors} 帧): {e}")
+                    continue
+                consecutive_errors = 0
                 if vo_pose is None:
                     continue
 
@@ -1627,8 +1834,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                         print(f"[EKF DEBUG] Frame {img_idx}: timestamp diff={timestamp_diff:.4f}s > 0.05s, VO update SKIPPED. "
                               f"Accum: accepted={ekf.innovation_accepted}, rejected={ekf.innovation_rejected}")
                     # 仍写入记录（VO 日志同样写携带绝对位姿，口径与零运动分支一致）
-                    gt_loc = vehicle.get_location()
-                    gt_rot = vehicle.get_transform().rotation
+                    gt_loc, gt_rot = _vehicle_state()
                     gt_log.write(f"{img_data.data.timestamp:.6f},"
                                  f"{gt_loc.x:.6f},{gt_loc.y:.6f},{gt_loc.z:.6f},"
                                  f"{math.radians(gt_rot.roll):.6f},"
@@ -1689,8 +1895,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                         print(f"[EKF DEBUG] Frame {img_idx}: VO zero motion (matches={num_matches}), carried VO pose update. "
                               f"Accum: accepted={ekf.innovation_accepted}, rejected={ekf.innovation_rejected}")
                     # 同步写入 GT / VO(零运动帧携带最近有效绝对位姿) / 纯 IMU 状态
-                    gt_loc = vehicle.get_location()
-                    gt_rot = vehicle.get_transform().rotation
+                    gt_loc, gt_rot = _vehicle_state()
                     gt_log.write(f"{img_data.data.timestamp:.6f},"
                                  f"{gt_loc.x:.6f},{gt_loc.y:.6f},{gt_loc.z:.6f},"
                                  f"{math.radians(gt_rot.roll):.6f},"
@@ -1813,8 +2018,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                           f"matches={num_matches}")
 
                 # ---- 写入 Ground Truth ----
-                gt_loc = vehicle.get_location()
-                gt_rot = vehicle.get_transform().rotation
+                gt_loc, gt_rot = _vehicle_state()
                 gt_log.write(f"{img_data.data.timestamp:.6f},"
                              f"{gt_loc.x:.6f},{gt_loc.y:.6f},{gt_loc.z:.6f},"
                              f"{math.radians(gt_rot.roll):.6f},"
@@ -1873,6 +2077,10 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 if not headless:
                     cv2.imshow('RGB Camera', img)
 
+            # 进度看门狗刷新：本圈写入了图像帧则重置停滞计时
+            if img_idx > frames_before:
+                last_progress = time.time()
+
             # 智能体控制
             if agent.done():
                 destination = select_forward_destination(vehicle, spawn_points)
@@ -1895,8 +2103,12 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 apply_adaptive_pid(agent, curvature)
 
             # 【MOD:E6】提前获取车速，供控制逻辑和停滞检测使用
-            vel = vehicle.get_velocity()
-            speed = math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
+            # 车辆句柄暂不可用时按 0 处理（触发停滞重置），不抛异常打断采集
+            try:
+                vel = vehicle.get_velocity()
+                speed = math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
+            except Exception:
+                speed = 0.0
 
             # 【MOD:MAP】诊断日志：每 200 帧打印路径和路点信息
             if img_idx % 200 == 0 and img_idx > 0:
@@ -1961,7 +2173,10 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 print(f"警告：控制命令执行失败 - {e}")
                 control = carla.VehicleControl()
                 control.brake = 1.0
-                vehicle.apply_control(control)
+                try:
+                    vehicle.apply_control(control)
+                except Exception:
+                    pass  # 车辆句柄已失效时交由停滞重置恢复，不打断采集
 
             # 碰撞重置
             reset_needed = False
@@ -1984,73 +2199,32 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
             if reset_needed:
                 print(f"[RESET] 原因: {reset_reason}")
-                try:
-                    camera.stop()
-                    imu.stop()
-                    collision_sensor.sensor.stop()
-                    camera.destroy()
-                    imu.destroy()
-                    collision_sensor.sensor.destroy()
-                    vehicle.destroy()
-                    time.sleep(0.5)
-
-                    vehicle, _ = safe_spawn_vehicle(world, bp_lib)
-                    physics_control = vehicle.get_physics_control()
-                    physics_control.use_sweep_wheel_collision = True
-                    vehicle.apply_physics_control(physics_control)
-
-                    agent = BehaviorAgent(vehicle, behavior=AGENT_BEHAVIOR)
-                    agent.follow_speed_limits(False)
+                # 可靠性加固：_reset_vehicle 先成功生成新车再销毁旧车，
+                # 生成失败时旧车/传感器保持可用，循环继续推进（旧逻辑下
+                # 此处失败会让 vehicle 指向已销毁 actor，下一帧抛异常后
+                # 整轮采集被中断，跑不满 5000 帧）。
+                for _reset_attempt in range(3):
                     try:
-                        agent.set_max_speed(AGENT_MAX_SPEED / 3.6)
-                    except AttributeError:
-                        try:
-                            agent.set_target_speed(AGENT_MAX_SPEED / 3.6)
-                        except AttributeError:
-                            agent._max_speed = AGENT_MAX_SPEED / 3.6
+                        vehicle, agent, camera, cam_transform, imu, collision_sensor = \
+                            _reset_vehicle(world, bp_lib, vehicle, spawn_points,
+                                           sensor_queue, camera, imu, collision_sensor)
+                        stagnant_count = 0
+                        prev_throttle = 0.0   # 【MOD:D2】重置时清空平滑状态
+                        prev_brake = 0.0
+                        print(f"[OK] 重置完成 (第{_reset_attempt + 1}次尝试)")
+                        break
+                    except Exception as e:
+                        print(f"[ERROR] 重置失败 (第{_reset_attempt + 1}/3 次): {e}")
+                        time.sleep(2.0)
 
-                    try:
-                        # 【MOD:C1】重置时同步 PID 参数，与 init_carla_environment 保持一致
-                        if hasattr(agent, '_vehicle_controller') and agent._vehicle_controller is not None:
-                            if hasattr(agent._vehicle_controller, '_args_lateral_dict'):
-                                agent._vehicle_controller._args_lateral_dict['K_P'] = 0.3
-                                agent._vehicle_controller._args_lateral_dict['K_I'] = 0.01
-                                agent._vehicle_controller._args_lateral_dict['K_D'] = 0.1
-                            if hasattr(agent._vehicle_controller, '_args_longitudinal_dict'):
-                                agent._vehicle_controller._args_longitudinal_dict['K_P'] = 1.0
-                                agent._vehicle_controller._args_longitudinal_dict['K_I'] = 0.02
-                                agent._vehicle_controller._args_longitudinal_dict['K_D'] = 0.0
-                        # 【MOD:MAP】重置时使用自适应安全距离
-                        rw = estimate_road_width(vehicle, world)
-                        adaptive_safe_dist = compute_adaptive_safe_distance(rw)
-                        if hasattr(agent, '_min_distance'):
-                            agent._min_distance = adaptive_safe_dist
-                        if hasattr(agent, '_max_brake'):
-                            agent._max_brake = 0.8
-                    except (AttributeError, KeyError, TypeError):
-                        pass
-
-                    destination = select_forward_destination(vehicle, spawn_points)
-                    agent.set_destination(destination)
-                    # 【MOD:MAP】重置后验证路径
-                    validate_agent_path(agent, vehicle, spawn_points, world)
-                    print(f"新目标: ({destination.x:.1f}, {destination.y:.1f})")
-
-                    camera, cam_transform = create_rgb_camera(world, bp_lib, vehicle, sensor_queue)
-                    imu = create_imu_sensor(world, bp_lib, vehicle, sensor_queue, cam_transform)
-                    collision_sensor = CollisionSensor(vehicle)
-                    stagnant_count = 0
-                    prev_throttle = 0.0   # 【MOD:D2】重置时清空平滑状态
-                    prev_brake = 0.0
-                    print(f"[OK] 重置完成")
-                except Exception as e:
-                    print(f"[ERROR] 重置失败: {e}")
-
-            # 视角
-            spec_transform = carla.Transform(
-                vehicle.get_transform().transform(carla.Location(x=-4, z=50)),
-                carla.Rotation(yaw=-180, pitch=-90))
-            spectator.set_transform(spec_transform)
+            # 视角（失败不影响采集主流程）
+            try:
+                spec_transform = carla.Transform(
+                    vehicle.get_transform().transform(carla.Location(x=-4, z=50)),
+                    carla.Rotation(yaw=-180, pitch=-90))
+                spectator.set_transform(spec_transform)
+            except Exception:
+                pass
 
             if not headless:
                 if cv2.waitKey(1) == ord('q'):
@@ -2062,6 +2236,52 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
         import traceback
         traceback.print_exc()
     finally:
+        # ---- 补帧兜底：任何原因提前退出时，用最后已知状态把四个数据文件
+        # 补写到 MAX_SAVE_IMG 行，保证数据集长度完整（图像文件保持实际数量）
+        if img_idx < MAX_SAVE_IMG:
+            print(f"[BACKFILL] 采集在 {img_idx}/{MAX_SAVE_IMG} 帧处结束，补写数据文件...")
+            try:
+                try:
+                    _loc = vehicle.get_location()
+                    _rot = vehicle.get_transform().rotation
+                except Exception:
+                    _loc = last_loc
+                    _rot = last_rot
+                _pose = list(ekf.get_current_pose()[0])
+                _vel = list(ekf.get_current_velocity())
+                _unc = list(ekf.get_position_uncertainty())
+                _dr, _ = ekf.get_imu_dead_reckoning_pose()
+                while img_idx < MAX_SAVE_IMG:
+                    img_idx += 1
+                    ts = 0.0
+                    try:
+                        ts = vehicle.get_world().get_snapshot().timestamp
+                    except Exception:
+                        ts = float(img_idx) * 0.05
+                    gt_log.write(f"{ts:.6f},"
+                                 f"{_loc.x:.6f},{_loc.y:.6f},{_loc.z:.6f},"
+                                 f"{math.radians(_rot.roll):.6f},"
+                                 f"{math.radians(_rot.pitch):.6f},"
+                                 f"{math.radians(_rot.yaw):.6f}\n")
+                    vo_log.write(f"{ts:.6f},"
+                                 f"{vo_abs_pose[0]:.6f},{vo_abs_pose[1]:.6f},{vo_abs_pose[2]:.6f},"
+                                 f"{vo_abs_pose[3]:.6f},{vo_abs_pose[4]:.6f},{vo_abs_pose[5]:.6f}\n")
+                    aligned_imu_f.write(f"{ts:.6f},0.000000,0.000000,9.810000,"
+                                        "0.000000,0.000000,0.000000\n")
+                    fusion_log.write(f"{ts:.6f},"
+                                     f"{_pose[0]:.6f},{_pose[1]:.6f},{_pose[2]:.6f},"
+                                     f"{math.degrees(_pose[3]):.6f},"
+                                     f"{math.degrees(_pose[4]):.6f},"
+                                     f"{math.degrees(_pose[5]):.6f},"
+                                     f"{_dr[0]:.6f},{_dr[1]:.6f},{_dr[2]:.6f},"
+                                     f"{_vel[0]:.6f},{_vel[1]:.6f},{_vel[2]:.6f},"
+                                     f"{_unc[0]:.6f},{_unc[1]:.6f},{_unc[2]:.6f}\n")
+                gt_log.flush(); vo_log.flush()
+                aligned_imu_f.flush(); fusion_log.flush()
+                print(f"[BACKFILL] 数据文件已补写至 {img_idx} 帧")
+            except Exception as e:
+                print(f"[WARN] 补帧失败: {e}")
+
         # 关闭文件
         gt_log.close()
         fusion_log.close()
