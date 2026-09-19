@@ -156,20 +156,69 @@ def find_carla_exe():
     return None, None
 
 
+def _venv_python_names():
+    """当前平台 venv 解释器文件名"""
+    return ('python.exe', 'python3.exe', 'python') if sys.platform == 'win32' \
+        else ('python', 'python3')
+
+
+def _find_venv_pythons():
+    """
+    搜索项目内（脚本目录及向上 3 层）的 Python venv 解释器。
+    返回 [(label, [py_path]), ...]。
+    仓库自带的 carla venv（含 carla wheel）通常在这里。
+    """
+    found = []
+    seen = set()
+    _py_names = _venv_python_names()
+    _d = ROOT_DIR
+    for _ in range(4):
+        if os.path.isdir(_d):
+            try:
+                entries = os.listdir(_d)
+            except OSError:
+                entries = []
+            for _entry in sorted(entries):
+                _vdir = os.path.join(_d, _entry)
+                if not os.path.isfile(os.path.join(_vdir, 'pyvenv.cfg')):
+                    continue
+                _bin = os.path.join(_vdir, 'Scripts') if sys.platform == 'win32' \
+                    else os.path.join(_vdir, 'bin')
+                for _name in _py_names:
+                    _py = os.path.join(_bin, _name)
+                    if os.path.isfile(_py) and _py not in seen:
+                        seen.add(_py)
+                        found.append((f"venv:{_entry}", [_py]))
+                        break
+        _parent = os.path.dirname(_d)
+        if _parent == _d:
+            break
+        _d = _parent
+    return found
+
+
 def find_carla_python():
     """
-    找到能导入 carla 模块的 Python 解释器（跨平台）。
+    找到能导入 carla 模块（且含 carla.Client）的 Python 解释器（跨平台）。
     返回 (python_path_list, description) 或 (None, error_msg)
 
     搜索策略：
     1. 当前 Python 解释器
-    2. (Windows) py 启动器 / LOCALAPPDATA / ProgramFiles 下的 Python
-    3. (Linux/macOS) PATH 中的 python3 系列
+    2. 项目内 venv（脚本目录及向上 3 层的 pyvenv.cfg 目录）
+    3. (Windows) py 启动器 / LOCALAPPDATA / ProgramFiles 下的 Python
+    4. (Linux/macOS) PATH 中的 python3 系列
+
+    注意: 探针必须严格验证 carla.Client 存在——仅 `import carla` 成功
+    可能只是命中了同名空目录的命名空间包（如仓库根下的 carla/ venv
+    目录），此时模块内并无 Client，采集脚本运行到 carla.Client() 会崩溃。
     """
     candidates = []
 
     # 1) 当前 Python（优先）
     candidates.append(("当前Python", [sys.executable]))
+
+    # 2) 项目内 venv（仓库自带的 carla 环境，如 ./carla）
+    candidates.extend(_find_venv_pythons())
 
     if sys.platform == 'win32':
         # Windows Python Launcher
@@ -210,10 +259,11 @@ def find_carla_python():
             seen.add(key)
             unique.append((label, cmd))
 
+    _probe = 'import carla; assert hasattr(carla, "Client"), "no carla.Client"; print("ok")'
     for label, cmd in unique:
         try:
             result = subprocess.run(
-                [*cmd, '-c', 'import carla; print("ok")'],
+                [*cmd, '-c', _probe],
                 capture_output=True, timeout=15,
                 text=True,
             )
