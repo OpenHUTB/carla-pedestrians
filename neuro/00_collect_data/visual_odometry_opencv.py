@@ -129,7 +129,7 @@ class VisualOdometry:
         
         self.num_inliers = np.sum(mask)
 
-        # --- 改动2: RANSAC内点数阈值 — 外点过多则拒绝本次VO ---
+        # ---  RANSAC内点数阈值 — 外点过多则拒绝本次VO ---
         if self.num_inliers < 20:
             self.prev_frame = gray
             self.prev_kp = kp
@@ -144,7 +144,7 @@ class VisualOdometry:
         # 转换为欧拉角（ZYX顺序）
         sy = np.sqrt(R[0, 0]**2 + R[1, 0]**2)
         singular = sy < 1e-6
-        
+
         if not singular:
             roll = np.arctan2(R[2, 1], R[2, 2])
             pitch = np.arctan2(-R[2, 0], sy)
@@ -236,7 +236,8 @@ class ScaleEstimator:
         if self.use_fixed_scale:
             return self.fixed_scale_value
         
-        visual_norm = np.linalg.norm(visual_translation)
+        visual_norm = np.linalg.norm(visual_translation
+            )
         imu_norm = np.linalg.norm(imu_translation)
         
         if visual_norm < 1e-6:
