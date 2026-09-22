@@ -111,7 +111,7 @@ from visual_odometry_opencv import VisualOdometry, ScaleEstimator  # noqa: E402
 #  配置参数（TARGET_MAP / OUTPUT_DIR 可通过 --map 命令行参数覆盖）
 # ═════════════════════════════════════════════════════════════
 
-DEFAULT_TARGET_MAP = "Town05"
+DEFAULT_TARGET_MAP = "Town01"
 TARGET_MAP = DEFAULT_TARGET_MAP
 MAX_SAVE_IMG = 5000
 OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
