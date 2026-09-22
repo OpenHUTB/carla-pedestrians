@@ -111,7 +111,7 @@ from visual_odometry_opencv import VisualOdometry, ScaleEstimator  # noqa: E402
 #  配置参数（TARGET_MAP / OUTPUT_DIR 可通过 --map 命令行参数覆盖）
 # ═════════════════════════════════════════════════════════════
 
-DEFAULT_TARGET_MAP = "Town01"
+DEFAULT_TARGET_MAP = "Town05"
 TARGET_MAP = DEFAULT_TARGET_MAP
 MAX_SAVE_IMG = 5000
 OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
@@ -1025,6 +1025,10 @@ class EKF_VIO:
         self._scale_imu_win = deque(maxlen=SCALE_WIN)  # 窗口起点纯 IMU 航位位置
         self._scale_applied = 0
         self._scale_rejected = 0
+        self._scale_obs_hist = []    # [调试] s_obs 原始分布（EKF_DEBUG_SCALE 时记录）
+        self._scale_dr_vel_hist = [] # [调试] 观测时 DR 速度幅值
+        self._kin_win = deque(maxlen=200)   # 运动学速度比样本（转弯帧，尺度观测用）
+        self._scale_kin_count = 0           # 运动学尺度观测节奏计数（每 SCALE_WIN 帧一次）
         # 免陀螺零偏的航向基准（角度）：初值=初始 yaw（GT，正确）。
         # 转弯时按运动学关系 dψ/dt = a_lat/v 累积（零偏无关，符号经 CARLA 实测
         # 确认）；直道冻结（直道无运动学可观测性，避免噪声乱走）。
@@ -1077,6 +1081,7 @@ class EKF_VIO:
         self._vo_z0 = None               # 首帧 VO 位置基准（历史遗留，位置锚定已改短窗口）
         self._vo_anchor = None           # 短窗口位置锚定 (vo_pos, ekf_pos)，每 POSITION_WIN 帧重锚
         self._vo_anchor_age = 0          # 距上次重锚的 VO 帧数
+        self._vo_anchor_mag = 0.0        # 锚窗口内 VO 位移幅值（当前朝向重建用）
         self._vo_aligned = False         # VO 首帧一次性对齐标志
         self._heading_dbg = 0            # 航向观测调试计数
 
@@ -1265,6 +1270,7 @@ class EKF_VIO:
         self._prev_vo_obs = z.copy()
 
         scale = self.get_scale()
+        scale = float(os.environ.get('EKF_FORCE_SCALE', scale))  # 消融: 强制尺度
         eff_dt = max(self._imu_steps_since_update, 1) * self.dt
         self._imu_steps_since_update = 0
         yaw = self.x[8]
@@ -1408,39 +1414,55 @@ class EKF_VIO:
                       + K_att @ R_att_use @ K_att.T)
             self._regularize_P()
 
-        # === 尺度观测（独立分支：IMU 航位速度差 / VO 速度 比值，H 仅含尺度行） ===
-        # 窗口内（SCALE_WIN 帧）用独立纯 IMU 航位推算的窗口速度差与 VO 记录
-        # 速度求比值：log_s ≈ log(‖Δv_IMU_DR‖/‖Δv_VO‖)。
-        # 为何用速度差而非位移：静止时 DR 速度漂到 21 m/s（等效水平零偏
-        # 0.225 m/s² = 加速度零偏残差+陀螺漂移重力泄漏），位移误差 ∝½·bias·T²
-        # 随绝对时间二次增长 → 位移比从 3.4 漂到 46，尺度被拉到 6.65（真实 2.95）。
-        # 速度差抵消 T 项，只剩 bias·Δt（Δt=3s 窗口内，与绝对时间无关）→ 比值稳定。
-        # 静止/低窗速（VO 记录位移/速度不足）不更新。
-        self._scale_vo_win.append(z[:2].copy())
-        self._scale_imu_win.append(self._imu_dr_vel[:2].copy())
-        if len(self._scale_vo_win) == SCALE_WIN:
-            dt_win = SCALE_WIN * self.dt
-            d_vo = self._scale_vo_win[-1] - self._scale_vo_win[0]
-            d_imu = self._scale_imu_win[-1] - self._scale_imu_win[0]
-            d_vo_norm = float(np.linalg.norm(d_vo))
-            d_imu_norm = float(np.linalg.norm(d_imu))
-            if (d_vo_norm > SCALE_MIN_DISP
-                    and d_vo_norm / dt_win > SCALE_VMIN):
-                s_obs = d_imu_norm / d_vo_norm
-                y_s = math.log(max(s_obs, 1e-3)) - self.x[9]
-                S_s = float(self.P[9, 9]) + SCALE_R_BASE
-                if y_s * y_s < self.chi2_scale * S_s:
-                    K_s = (self.P[:, 9] / S_s).reshape(10, 1)
-                    self.x += (K_s * y_s).ravel()
-                    H_s = np.zeros((1, 10))
-                    H_s[0, 9] = 1.0
-                    I_KH_s = np.eye(10) - K_s @ H_s
-                    self.P = (I_KH_s @ self.P @ I_KH_s.T
-                              + K_s @ (SCALE_R_BASE * np.ones((1, 1))) @ K_s.T)
-                    self._regularize_P()
-                    self._scale_applied += 1
-                else:
-                    self._scale_rejected += 1
+        # === 尺度观测（独立分支：转弯运动学速度 / VO 记录速度，H 仅含尺度行） ===
+        # s_obs = median(v_kin / v_VO)，v_kin = |a_lat|/|ω|（转弯运动学速度：
+        # 横向比力÷横摆角速度，均为原始 IMU 读数——无积分、无尺度依赖、
+        # 无零偏累积；离线 vs GT 速度 p50 误差 0%、p90 2%）。
+        # 为何弃用 IMU 航位(DR)速度差/VO 速度差法：Town02 加速度零偏残差使
+        # in-EKF DR 速度 p50≈28 m/s（真实车速 ~2.4 m/s），一切航位累积量
+        # 均被污染——Δv/Δp 在匀速段退化为 0/噪声(p50≈1383)，Δv/Δv p50≈6.32，
+        # 位移比漂移更大。运动学比值是唯一可用的纯度量速度源，但只在转弯
+        # 帧可观测（直道 ω→0 病态）→ 样本入窗、每 5 帧检查一次取窗中值
+        # 更新（中值抗单帧离群），直道段尺度冻结不变。
+        # 收敛速度实测关键：转弯帧率仅 ~5.6%，若要求 20 样本+每 60 帧才检查，
+        # 首次更新拖到 ~500 帧——前 25s 尺度=1.0 的漂移把累计 ATE 从 ~25 钉到
+        # 93（消融）。降到 5 样本+每 5 帧 → 首次更新在 ~10-30 帧内完成。
+        v_vo_rec = float(np.linalg.norm(vo_disp_pos[:2])) / eff_dt
+        if (self._last_accel_raw is not None and self._last_gyro_raw is not None
+                and v_vo_rec > 0.3):
+            a_lat_k = float((self._last_accel_raw - self._accel_bias)[1])
+            w_k = float((self._last_gyro_raw - self._gyro_bias)[2])
+            # 门控消融实测（离线同帧三量对比）：a_lat>1.0 会把稳态转弯帧剔掉、
+            # 只剩瞬时高 g 帧 → v_kin 系统性偏高 1.39×（s_obs p50=5.03，ATE 87）；
+            # 放宽到 a_lat>0.3 + |w|>0.10 → v_kin/v_true=1.10、s_obs p50=3.88
+            # 落进最优尺度带(强制 s=3.48→25.38 / s=4.0→24.37)且分段稳定。
+            if abs(w_k) > 0.10 and abs(a_lat_k) > 0.3:
+                self._kin_win.append(
+                    abs(a_lat_k) / (abs(w_k) * v_vo_rec))
+        self._scale_kin_count += 1
+        if (self._scale_kin_count >= 5
+                and len(self._kin_win) >= 5):
+            s_obs = float(np.median(np.asarray(self._kin_win)))
+            self._scale_kin_count = 0
+            if os.environ.get('EKF_DEBUG_SCALE'):
+                self._scale_obs_hist.append(s_obs)
+                self._scale_dr_vel_hist.append(v_vo_rec)
+            y_s = math.log(max(s_obs, 1e-3)) - self.x[9]
+            S_s = float(self.P[9, 9]) + SCALE_R_BASE
+            if y_s * y_s < self.chi2_scale * S_s:
+                K_s = (self.P[:, 9] / S_s).reshape(10, 1)
+                self.x += (K_s * y_s).ravel()
+                H_s = np.zeros((1, 10))
+                H_s[0, 9] = 1.0
+                I_KH_s = np.eye(10) - K_s @ H_s
+                # 修复: 原代码误用速度分支泄漏的 I_KH.T（早期速度门恒拒时
+                # 未绑定 → UnboundLocalError；且数学上应为 I_KH_s 转置）
+                self.P = (I_KH_s @ self.P @ I_KH_s.T
+                          + K_s @ (SCALE_R_BASE * np.ones((1, 1))) @ K_s.T)
+                self._regularize_P()
+                self._scale_applied += 1
+            else:
+                self._scale_rejected += 1
 
         # === 位置观测（短窗口相对锚 + 当前尺度；卡方门控） ===
         # 关键：VO 绝对位置带 ±80~150° 全程航向漂移——绝对锚定（首帧锚到
@@ -1454,8 +1476,15 @@ class EKF_VIO:
         if self._vo_anchor is None or self._vo_anchor_age >= POSITION_WIN:
             self._vo_anchor = (z[:2].copy(), self.x[:2].copy())
             self._vo_anchor_age = 0
+            self._vo_anchor_mag = 0.0
         vo_anchor, pos_anchor = self._vo_anchor
-        z_pos = pos_anchor + scale * (z[:2] - vo_anchor)
+        # 窗口内 VO 位移幅值（锚定时刻残差=0，之后单调累积）
+        self._vo_anchor_mag = float(np.linalg.norm(z[:2] - vo_anchor))
+        # 方向用 EKF 陀螺积分航向（vs GT max≈0.1°），VO 幅值 × 状态尺度；
+        # 禁用 VO 保存航向（相对起始帧坐标系，非世界系 → 绝对方向错 ~90°，
+        # 上限重建 ATE 208 vs 陀螺航向 27.9）
+        z_pos = pos_anchor + scale * self._vo_anchor_mag * np.array(
+            [math.cos(yaw), math.sin(yaw)])
         H_pos = np.zeros((2, 10))
         H_pos[0, 0] = 1.0
         H_pos[1, 1] = 1.0
