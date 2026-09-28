@@ -51,9 +51,6 @@ As visualized in Fig.~\ref{fig:system_overview}, the end-to-end data pipeline co
 
 The sensory processing module extracts self-motion cues from visual and inertial modalities, then fuses them via complementary filtering.
 
-% 閸掔娀鏁撻弬銈嗗perception_fusion�?- 缂佸棝鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告緝閺嬪墎娅㈤幏宄版禈闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮�?
-% 
-
 \textbf{Visual Front-End.} The visual front-end implements a biologically-plausible processing pipeline inspired by the hierarchical architecture of the primate visual cortex, transforming raw RGB images into compact scene descriptors suitable for place recognition and motion estimation.
 
 \textbf{Hierarchical Feature Extraction.} Given an RGB image $I_t\in\mathbb{R}^{H\times W\times 3}$, we define a sequence of operators that mimic processing stages from retina through inferotemporal cortex.
@@ -169,6 +166,7 @@ The weighted least-squares solution with robust weights $w_i$ is:
 The final visual odometry velocity incorporates a scale factor $\kappa_t$:
 \begin{equation}
     \mathbf{v}^\mathrm{vis}_t=\kappa_t\,\bar{\mathbf{v}}^\mathrm{vis}_t
+    \label{eq:vis_scale}
 \end{equation}
 where $\lambda_i$ is inverse depth of feature point $i$, matrix $\mathbf{A}_i$ is geometric projection matrix, $\bar{\mathbf{v}}_t^\mathrm{vis}$ is raw translational velocity solved from optical flow, and $\kappa_t$ is online scale correction factor for visual odometry.
 
@@ -186,8 +184,7 @@ This corresponds to the horizontal semicircular canal cue, adequate for our comp
     v^\mathrm{imu}_{trans}(t) & \approx \max\big(0, (\lVert\mathbf{a}_t\rVert - g)\,\Delta t\,k_t\big), \\
     v^\mathrm{imu}_{z}(t)     & \approx (a_{t,z} - g)\,\Delta t\,k_z,
 \end{align}
-where $g=9.81\,\mathrm{m/s^2}$ is gravitational acceleration, $k_t, k_z$ are constant scaling gains, and $\Delta t$ denotes frame sampling interval.
-with small gains $k_t, k_z$ matching our implementation constants. This avoids explicit bias/gravity-vector estimation while providing high-frequency motion cues that are subsequently combined with visual odometry via complementary fusion.
+where $g=9.81\,\mathrm{m/s^2}$ is gravitational acceleration, $k_t, k_z$ are constant scaling gains matching our implementation constants, and $\Delta t$ denotes the frame sampling interval. This avoids explicit bias/gravity-vector estimation while providing high-frequency motion cues that are subsequently combined with visual odometry via complementary fusion.
 
 \textbf{Bias Estimation.} The baseline implementation does not perform online bias or gravity-vector estimation. More advanced bias/gravity compensation can be integrated as future work, but is not required for the complementary-fusion results reported here.
 
@@ -237,13 +234,11 @@ With $\tau = 0.1$s, the cutoff frequency is $\omega_c = 10$ rad/s ($\approx 1.6$
 \end{equation}
 where $\sigma_t^\mathrm{vis}$ and $\sigma_t^\mathrm{imu}$ are real-time uncertainty estimations of visual and inertial measurements, and $\eta_t$ is time-varying fusion weight.
 
-Additionally, the visual odometry scale factor $\kappa_t$ in Eq.~(202) can be adapted to maintain consistency between visual and inertial velocity magnitudes:
+Additionally, the visual odometry scale factor $\kappa_t$ in Eq.~\eqref{eq:vis_scale} can be adapted to maintain consistency between visual and inertial velocity magnitudes:
 \begin{equation}
     \kappa_{t+1} = \kappa_t \cdot \left(1 + \beta \frac{\lVert\mathbf{v}^\mathrm{imu}_t\rVert - \lVert\kappa_t \bar{\mathbf{v}}^\mathrm{vis}_t\rVert}{\lVert\kappa_t \bar{\mathbf{v}}^\mathrm{vis}_t\rVert}\right)
 \end{equation}
-where $\beta$ is small constant gain for online visual odometry scale correction.
-
-with small adaptation gain $\beta \ll 1$ (e.g., $\beta=0.01$). This online scale adaptation compensates for systematic errors in the assumed ground plane depth or camera calibration inaccuracies.
+where $\beta \ll 1$ is a small adaptation gain for online visual odometry scale correction (e.g., $\beta=0.01$). This online scale adaptation compensates for systematic errors in the assumed ground plane depth or camera calibration inaccuracies.
 
 \subsection{Neural Spatial Representation}
 
@@ -257,7 +252,8 @@ The network's topology implements periodic boundary conditions with toroidal wra
 
 \begin{figure*}[!t]
     \centering
-    \includegraphics[width=\textwidth]{fig/3D_grid_cell_fcc_lattice.pdf}
+    % [V2] 3D_→3d_：与磁盘实际文件名一致（大小写敏感）
+    \includegraphics[width=\textwidth]{fig/3d_grid_cell_fcc_lattice.pdf}
     \caption{3D Grid Cell Network with FCC lattice structure. (a) 3D activity packet representing position $(x,y,z)$ through distributed population code. (b) FCC lattice structure showing hexagonal grid pattern with three height layers for dense 3D packing. (c) 4-DoF encoding scheme combining position and heading representations.}
     \label{fig:3D_grid_cell_fcc}
 \end{figure*}
