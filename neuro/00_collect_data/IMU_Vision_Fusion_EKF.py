@@ -168,6 +168,29 @@ SCALE_WIN = 60               # 尺度观测滑动窗口（帧，3 秒 @20Hz）
 SCALE_R_BASE = 0.02          # 尺度比值观测噪声（log 域，~2%）
 SCALE_MIN_DISP = 0.5         # 窗口内最小 VO 记录位移（记录尺度 0.10 单位）
 SCALE_VMIN = 0.2             # 窗口内最小窗口平均速度（记录单位 m/0.1s≈2 m/s 真实）
+# Town10HD 融合失效修复（2026-09-27, 四图 5000 帧 replay 回归验证）:
+# 失效机制: 首个重尾样本窗(高速转弯 r~7)在 P[9,9] 初值大时 K≈0.99 一步跳变
+# (10HD: 1.0→7.3, 真值水平 3.05), P 塌缩后好观测被 χ² 门冻结 → 全程过尺度
+# 2.4×, 位置/速度观测量纲污染 → Fusion ATE≈PureVO。
+# 最终修复(A 最小稳健修复, 用户选定): 步限钳位 + 协方差下限 两项, 四图
+# ATE 合计 391→320, 10HD 169→91(2× 胜 VO), 05 84→81, 01≈持平, 02 35→43。
+SCALE_MAX_STEP = 0.25        # 单次更新 log 域创新量上限(~±28%), 防单步跳变
+SCALE_P_CLAMP = 0.25         # 钳位更新后 log 尺度协方差下限(未解释残差→保留可修正性)
+SCALE_P_FLOOR = 0.01         # 常规更新后 log 尺度协方差下限, 防 P 塌缩冻结
+# 速度域门控/截尾: 默认关(四图回归证伪其默认适用性)——四图最优尺度水平
+# 不同(02≈3.6 / 01≈3.2 / 10HD≈3.9 / 05≈5-6), 单刻度状态只能停在一个水平,
+# 门控/截尾把水平压低 → 高速路径占比高的 Town05 回退(84→117)。保留为 env
+# 实验开关(EKF_KIN_VMIN/VMAX/SCALE_TRIM_FRAC), 低水平地图单跑可用。
+SCALE_KIN_VMIN, SCALE_KIN_VMAX = 0.0, float('inf')  # 运动学样本速度域门控(默认关)
+SCALE_TRIM_FRAC = 0.0        # 窗中值前截尾 top 10% 上尾(默认关; 设 0.10 启用)
+# 固定速度形状(实验分支, 默认关): s(v)=exp(VO_SHAPE_A+VO_SHAPE_B·v),
+# 4 图 pooled 纯运动学样本(n=699, v_kin∈[2,12], r∈[0.3,30]) OLS 标定;
+# 默认关闭理由(2026-09-27 四图回归): 真尺度曲线对 v 凸(2→6m/s log 斜率
+# 0.30, 6→12m/s 0.11), 线性指数形状两端都高估(c(2) +52%, c(12) +59%),
+# 低速帧占多数 → 四图 ATE 全回退。EKF_VSHAPE_ENABLE=1 启用。
+VO_SHAPE_A = -0.1094
+VO_SHAPE_B = 0.1884
+VO_SHAPE_VREF = 6.0          # 参考速度: 形状启用时尺度状态语义 = s(v_ref) 水平
 R_Z_PRIOR = 25.0             # z 高度先验噪声 (m²)
 # 位置观测短窗口相对锚（防 VO 全程航向漂移灌入融合位置，见 visual_update 注释）
 POSITION_WIN = 30            # 位置锚定窗口（帧，1.5 秒 @20Hz）
@@ -914,11 +937,91 @@ class TimeAligner:
 
 # ═════════════════════════════════════════════════════════════
 #  EKF 融合
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+
+def vo_shape_c(v):
+    """固定速度形状修正因子 c(v)=s(v)/s(v_ref)，参考速度处=1。
+
+    s(v)=exp(VO_SHAPE_A+VO_SHAPE_B·v)（pooled 标定，见常量注释），v 钳位到
+    样本有效域 [SCALE_KIN_VMIN, SCALE_KIN_VMAX]。EKF_VSHAPE_ENABLE=0 时
+    整条速度形状链路关闭，调用方不进入本函数。
+    """
+    v = min(max(float(v), SCALE_KIN_VMIN), SCALE_KIN_VMAX)
+    return math.exp(VO_SHAPE_B * (v - VO_SHAPE_VREF))
+
+
+class VelocityScaleModel:
+    """单目 VO 局部尺度速度形状在线模型: s(v) = exp(a + b·v)。
+
+    单目 VO 帧间位移的局部尺度（真实位移/记录位移）随车辆速度系统性变化：
+    低速特征噪声抬高表观位移、高速运动模糊压低，Town05 实测 <3 m/s 局部
+    尺度≈0.9、7-9 m/s≈3.7、9-12 m/s≈5.5（直线/转弯帧一致，非转弯伪影），
+    单一刻度状态对此结构性有偏。
+
+    观测: 转弯稳态帧的纯运动学样本 (v_kin, r)——v_kin=|a_lat|/|ω| 为真实
+    m/s（纯 IMU，无尺度/VO 依赖），r=v_kin/v_VO_rec 即该速度下的真实局部
+    尺度（稳态圆周运动 a_lat=|ω|·v）。对 log r ~ v_kin 做带遗忘因子 RLS，
+    样本域 [V_LO, V_HI] 外钳位、超出合理 r 范围剔除。
+
+    用途: 应用侧 c(v)=s(v)/s(v_ref) 修正速度/位置观测的尺度；观测侧
+    s_obs=r/c(v_kin) 把样本归一到参考速度 v_ref，使 EKF 尺度状态只跟踪
+    水平。样本不足（n<n_min）时 ready()=False、c(v)≡1，退化为原单刻度行为。
+
+    状态: 【实验分支，默认关闭】(EKF_VSCALE_ENABLE=1 启用)。
+    Town05 5000 帧 replay 验证为负收益: ATE 83.71(基线) → 206.46(启用)，
+    尾部 f2000 后发散。根因: ① 低速端外推错——57% 帧 <3 m/s，模型给
+    s(2)=1.83 而逐档真值≈0.89，放大了占多数的低速位移 ~2×；② 运动学
+    样本仅在中高速转弯帧存在（直道 ω→0 病态），低速段无在线观测可拟合；
+    ③ oracle 测试(逐帧真速度×逐档真尺度)显示逐速度尺度对 raw VO 本身有益
+    (440.7→264.3)，但该形状无法从现有 IMU/VO 信号在线捕获（高速样本被
+    侧滑污染、真值曲线非单调）。对 EKF 而言坏形状远不如准常数，故关闭。
+    """
+
+    V_LO, V_HI = 2.0, 12.0   # 样本有效速度域（m/s），应用侧外推钳位
+    R_LO, R_HI = 0.3, 30.0   # r 合理范围（超出=滑移/异常样本）
+    R_NOISE = 0.02           # log 域观测噪声（与 SCALE_R_BASE 一致）
+
+    def __init__(self, v_ref=6.0, lam=0.999, n_min=15):
+        self.v_ref = v_ref
+        self.lam = lam
+        self.n_min = n_min
+        self.a = math.log(3.0)   # 初值 s(v_ref)≈3.0（量级先验，RLS 收敛覆盖）
+        self.b = 0.0
+        self.P = np.eye(2) * 10.0
+        self.n = 0
+
+    def add(self, v_kin, r):
+        """喂入一个 (v_kin, r) 运动学样本，递推更新 (a, b)。"""
+        if not (self.V_LO <= v_kin <= self.V_HI and self.R_LO <= r <= self.R_HI):
+            return
+        phi = np.array([1.0, v_kin])
+        theta = np.array([self.a, self.b])
+        y = math.log(r)
+        Pphi = self.P @ phi
+        S = float(phi @ Pphi) + self.R_NOISE
+        K = Pphi / S
+        theta += K * (y - float(phi @ theta))
+        self.P = (self.P - np.outer(K, phi @ self.P)) / self.lam
+        self.a, self.b = float(theta[0]), float(theta[1])
+        self.n += 1
+
+    def ready(self):
+        return self.n >= self.n_min
+
+    def s(self, v):
+        v = min(max(float(v), self.V_LO), self.V_HI)
+        return math.exp(self.a + self.b * v)
+
+    def c(self, v):
+        """速度修正因子 c(v)=s(v)/s(v_ref)，参考速度处=1。"""
+        return self.s(v) / self.s(self.v_ref)
+
 
 class EKF_VIO:
-    # 状态向量 10 维: [x, y, z, vx, vy, vz, roll, pitch, yaw, log(VO尺度)]
-    # 第 10 维为 VO 度量尺度的 log，在线收敛由 IMU 加速度动力学提供可观测性
+    # 状态向量 10 维: [x, y, z, vx, vy, vz, roll, pitch, yaw, log(VO尺度水平)]
+    # 第 10 维为 VO 度量尺度在参考速度 v_ref 处的 log 水平；速度形状 s(v)
+    # 由 VelocityScaleModel 用纯运动学样本在线拟合，状态只跟踪水平，
+    # 应用总尺度 = 水平 × c(v)（见 visual_update）。
     def __init__(self, init_pose, init_vel, dt=0.05):
         self.x = np.array([
             init_pose[0], init_pose[1], init_pose[2],
@@ -975,8 +1078,9 @@ class EKF_VIO:
         self._scale_rejected = 0
         self._scale_obs_hist = []    # [调试] s_obs 原始分布（EKF_DEBUG_SCALE 时记录）
         self._scale_dr_vel_hist = [] # [调试] 观测时 DR 速度幅值
-        self._kin_win = deque(maxlen=200)   # 运动学速度比样本（转弯帧，尺度观测用）
-        self._scale_kin_count = 0           # 运动学尺度观测节奏计数（每 SCALE_WIN 帧一次）
+        self._kin_win = deque(maxlen=200)   # 运动学样本 (v_kin, r)（转弯帧，尺度用）
+        self._scale_kin_count = 0           # 尺度观测节奏计数（每 5 帧取窗中值一次）
+        self._vs_model = VelocityScaleModel()  # 速度形状模型 s(v)=exp(a+b·v)
         # 免陀螺零偏的航向基准（角度）：初值=初始 yaw，转弯时按 dψ/dt = a_lat/v 累积，
         # 直道冻结；visual_update 用它做角度级航向观测修正 EKF yaw。
         self._heading_base = float(init_pose[5])
@@ -1201,10 +1305,23 @@ class EKF_VIO:
             vo_disp_pos = z[:3] - self._prev_vo_obs[:3]
         self._prev_vo_obs = z.copy()
 
-        scale = self.get_scale()
-        scale = float(os.environ.get('EKF_FORCE_SCALE', scale))  # 消融: 强制尺度
         eff_dt = max(self._imu_steps_since_update, 1) * self.dt
         self._imu_steps_since_update = 0
+        v_vo_rec = float(np.linalg.norm(vo_disp_pos[:2])) / eff_dt  # 记录单位速度
+        scale = self.get_scale()
+        force_scale = os.environ.get('EKF_FORCE_SCALE')
+        if force_scale is not None:
+            scale = float(force_scale)  # 消融: 强制总尺度（绕过速度形状）
+        elif os.environ.get('EKF_VSHAPE_ENABLE', '0') == '1':
+            # 固定速度形状(pooled 标定, 实验分支默认关): 总尺度 = 水平状态
+            # × c(v)，v 取 EKF 速度状态幅值（真实 m/s，无尺度自依赖）。
+            # 四图回归证伪(2026-09-27): 真尺度曲线对 v 凸(2→6m/s log斜率
+            # 0.30, 6→12m/s 0.11), 线性指数形状两端都高估(c(2) +52%,
+            # c(12) +59%), 低速帧占多数 → 四图 ATE 全回退。
+            scale *= vo_shape_c(float(np.linalg.norm(self.x[3:6])))
+        elif os.environ.get('EKF_VSCALE_ENABLE', '0') == '1' and self._vs_model.ready():
+            # 在线 RLS 形状(实验分支, 默认关; Town05 证伪见 VelocityScaleModel)
+            scale *= self._vs_model.c(float(np.linalg.norm(self.x[3:6])))
         yaw = self.x[8]
         cw, sw = math.cos(yaw), math.sin(yaw)
 
@@ -1322,22 +1439,67 @@ class EKF_VIO:
                       + K_att @ R_att_use @ K_att.T)
             self._regularize_P()
 
-        # === 尺度观测（独立分支：转弯运动学速度 / VO 记录速度，H 仅含尺度行） ===
-        # s_obs = median(v_kin / v_VO)，v_kin = |a_lat|/|ω|（原始 IMU 读数，
-        # 无积分、无尺度依赖、无零偏累积）。只在转弯帧可观测（直道 ω→0 病态）：
-        # 样本入窗，每 5 帧取窗中值更新，直道段尺度冻结。
-        v_vo_rec = float(np.linalg.norm(vo_disp_pos[:2])) / eff_dt
+        # === 尺度观测（独立分支：转弯运动学样本，H 仅含尺度行） ===
+        # 样本 (v_kin, r)：v_kin=|a_lat|/|ω|（真实 m/s，纯 IMU、无尺度依赖），
+        # r=v_kin/v_vo_rec=该速度下真实局部尺度（稳态圆周运动 a_lat=|ω|·v）。
+        # 两个消费者：① 速度形状模型 RLS 拟合 s(v)=exp(a+b·v)；
+        # ② 每 5 帧取 r/c(v_kin) 窗中值（归一到参考速度水平）更新尺度状态——
+        # 状态只跟踪 s(v_ref) 水平，速度形状由模型在应用侧承担。
+        # 只在转弯帧可观测（直道 ω→0 病态），直道段尺度冻结。
         if (self._last_accel_raw is not None and self._last_gyro_raw is not None
                 and v_vo_rec > 0.3):
             a_lat_k = float((self._last_accel_raw - self._accel_bias)[1])
             w_k = float((self._last_gyro_raw - self._gyro_bias)[2])
             if abs(w_k) > 0.10 and abs(a_lat_k) > 0.3:
-                self._kin_win.append(
-                    abs(a_lat_k) / (abs(w_k) * v_vo_rec))
+                v_kin = abs(a_lat_k) / abs(w_k)
+                _kmin = float(os.environ.get('EKF_KIN_VMIN', SCALE_KIN_VMIN))
+                _kmax = float(os.environ.get('EKF_KIN_VMAX', SCALE_KIN_VMAX))
+                if _kmin <= v_kin <= _kmax:
+                    # 域外=高速滑移/转弯瞬态, r 系统性偏高(10HD: v_kin>12 档
+                    # r 中位 9.1 vs 该速度真尺度≈7), 剔除防尺度上尾污染。
+                    # 样本第三分量=该帧 VO 记录速度(∝记录位移/路径贡献),
+                    # 供尺度窗加权中值用(见下方注释)。
+                    r_kin = v_kin / v_vo_rec
+                    self._kin_win.append((v_kin, r_kin, v_vo_rec))
+                    self._vs_model.add(v_kin, r_kin)
         self._scale_kin_count += 1
         if (self._scale_kin_count >= 5
                 and len(self._kin_win) >= 5):
-            s_obs = float(np.median(np.asarray(self._kin_win)))
+            vshape_on = (os.environ.get('EKF_VSHAPE_ENABLE', '0') == '1')
+            model_on = (not vshape_on
+                        and os.environ.get('EKF_VSCALE_ENABLE', '0') == '1'
+                        and self._vs_model.ready())
+            if model_on:
+                norms = [(r / self._vs_model.c(v), w)
+                         for v, r, w in self._kin_win]
+            elif vshape_on:
+                # 固定形状归一: 样本除以 c(v_kin) → 窗中值= s(v_ref) 水平
+                norms = [(r / vo_shape_c(v), w)
+                         for v, r, w in self._kin_win]
+            else:
+                norms = [(r, w) for _, r, w in self._kin_win]
+            # 截尾加权中值: top 10% 上尾(滑移/瞬态残留), n<10 不截。
+            # 权重=样本帧 VO 记录位移(∝路径贡献): 按样本数取中值会按
+            # 转弯样本数而非路径长度加权——高速段路径占主导的地图
+            # (Town05: 9-12m/s 段 956/3442 转移, 真尺度≈7)其样本中低速
+            # 转弯帧占多数, 等权中值把尺度水平压低(05 终值 3.07, ATE
+            # 最优常数≈4.5); 位移加权让观测与尺度作用的总路径对齐。
+            norms.sort(key=lambda t: t[0])
+            _trim = float(os.environ.get('EKF_SCALE_TRIM_FRAC', SCALE_TRIM_FRAC))
+            if len(norms) >= 10 and _trim > 0.0:
+                keep = max(int(math.ceil((1.0 - _trim) * len(norms))), 1)
+                norms = norms[:keep]
+            wsum = sum(w for _, w in norms)
+            if wsum <= 0.0:
+                s_obs = float(np.median([t[0] for t in norms]))
+            else:
+                cum = 0.0
+                s_obs = float(norms[-1][0])
+                for val, w in norms:
+                    cum += w
+                    if cum >= 0.5 * wsum:
+                        s_obs = float(val)
+                        break
             self._scale_kin_count = 0
             if os.environ.get('EKF_DEBUG_SCALE'):
                 self._scale_obs_hist.append(s_obs)
@@ -1345,13 +1507,24 @@ class EKF_VIO:
             y_s = math.log(max(s_obs, 1e-3)) - self.x[9]
             S_s = float(self.P[9, 9]) + SCALE_R_BASE
             if y_s * y_s < self.chi2_scale * S_s:
+                # 步限钳位: 单步 ≤±SCALE_MAX_STEP(log 域 ~28%)。P 初值大时首个
+                # 观测窗会把状态一步拉到观测处(10HD: 1.0→7.3), 钳位后渐近
+                # 收敛; 钳位=未解释残差仍在, 保留较大 P 维持可修正性, 否则
+                # P 塌缩后后续好观测被 χ² 冻结(10HD 7.3 永久冻结机制)。
+                _mstep = float(os.environ.get('EKF_SCALE_MAX_STEP', SCALE_MAX_STEP))
+                y_s_u = max(-_mstep, min(_mstep, y_s)) if _mstep > 0.0 else y_s
+                clamped = _mstep > 0.0 and abs(y_s) > _mstep
                 K_s = (self.P[:, 9] / S_s).reshape(10, 1)
-                self.x += (K_s * y_s).ravel()
+                self.x += (K_s * y_s_u).ravel()
                 H_s = np.zeros((1, 10))
                 H_s[0, 9] = 1.0
                 I_KH_s = np.eye(10) - K_s @ H_s
                 self.P = (I_KH_s @ self.P @ I_KH_s.T
                           + K_s @ (SCALE_R_BASE * np.ones((1, 1))) @ K_s.T)
+                if clamped:
+                    self.P[9, 9] = max(self.P[9, 9], SCALE_P_CLAMP)
+                else:
+                    self.P[9, 9] = max(self.P[9, 9], SCALE_P_FLOOR)
                 self._regularize_P()
                 self._scale_applied += 1
             else:
@@ -2451,7 +2624,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             total = ekf.innovation_accepted + ekf.innovation_rejected
             acc_rate = (ekf.innovation_accepted / total * 100) if total > 0 else 0
             print(f"\n[EKF STATS] 尺度初始化: {ekf._vo_scale_initialized}")
-            print(f"            尺度状态(叠加在0.10之上): {ekf.get_scale():.4f}")
+            print(f"            尺度水平状态 s(v_ref) (叠加在0.10之上): "
+                  f"{ekf.get_scale():.4f}")
+            _vm = ekf._vs_model
+            print(f"            速度形状模型: n={_vm.n} b={_vm.b:.4f} "
+                  f"s(2)={_vm.s(2):.2f} s(6)={_vm.s(6):.2f} s(12)={_vm.s(12):.2f}")
             print(f"            visual_update 调用: {ekf._update_call_count}")
             print(f"            速度/姿态更新: accepted={ekf.innovation_accepted}, "
                   f"rejected={ekf.innovation_rejected} "
@@ -2604,8 +2781,12 @@ def replay(data_dir):
         print(f"{name:<14}{_ate(gt_xy, xy):<12.2f}{_rpe(gt_xy, xy):<12.4f}"
               f"{_drift(xy, gt_xy):<10.2f}{ekf.get_scale() if name == 'EKF Fusion' else float('nan'):<12.4f}")
     print("─" * 62)
-    print(f"[REPLAY] 尺度轨迹: 初值 {VO_SCALE_PRIOR} → 终值 {ekf.get_scale():.4f} "
+    _vm = ekf._vs_model
+    print(f"[REPLAY] 尺度水平轨迹(状态= s(v_ref={_vm.v_ref})): "
+          f"初值 {VO_SCALE_PRIOR} → 终值 {ekf.get_scale():.4f} "
           f"(每250帧: {[(f, round(s, 3)) for f, s in scale_hist[-4:]]})")
+    print(f"[REPLAY] 速度形状模型: n={_vm.n} a={_vm.a:.3f} b={_vm.b:.4f} "
+          f"s(2)={_vm.s(2):.2f} s(6)={_vm.s(6):.2f} s(12)={_vm.s(12):.2f}")
     print(f"[REPLAY] 航向观测: applied={ekf._heading_applied}, "
           f"rejected={ekf._heading_rejected}, 转弯帧≈{ekf._turn_count}")
     print(f"[REPLAY] 位置观测跳过: {ekf._pos_skip_count}")

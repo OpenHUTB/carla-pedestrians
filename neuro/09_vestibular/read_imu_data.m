@@ -21,7 +21,20 @@ function [imu_data] = read_imu_data(data_path)
     
     % 读取CSV格式数据 (timestamp,ax,ay,az,gx,gy,gz)
     try
-        raw_data = dlmread(imu_file, ',');
+        % 首行可能是表头(新采集数据)也可能是数据(旧数据), 列数两者相同
+        fid = fopen(imu_file, 'r');
+        first_line = fgetl(fid);
+        fclose(fid);
+        has_header = ~isempty(first_line) && contains(first_line, 'timestamp');
+        ncols = numel(split(strtrim(first_line), ','));
+        fmt = strjoin(repmat({'%f'}, 1, ncols), ' ');
+        fid = fopen(imu_file, 'r');
+        if has_header
+            fgetl(fid);  % 跳过表头行
+        end
+        cols = textscan(fid, fmt, 'Delimiter', ',');
+        fclose(fid);
+        raw_data = [cols{:}];
         
         % 解析数据
         imu_data.timestamp = raw_data(:, 1);

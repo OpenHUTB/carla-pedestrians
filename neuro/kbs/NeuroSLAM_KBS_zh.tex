@@ -1,0 +1,136 @@
+%%
+%% 中文版 —— 仅供内部审阅
+%% 原文: Knowledge-Based Systems - NeuroSLAM Paper
+%%
+
+\documentclass[twocolumn,journal]{IEEEtran}
+
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{array}
+\usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
+\usepackage{url}
+\usepackage{graphicx}
+\graphicspath{{fig/}}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{threeparttable}
+\usepackage{microtype}
+\usepackage{xspace}
+
+\definecolor{darkgreen}{rgb}{0,0.6,0}
+
+\tolerance=300
+\emergencystretch=1em
+\hyphenpenalty=200
+\exhyphenpenalty=200
+
+\DeclareMathOperator*{\argmin}{\arg\!\min}
+
+% Abbreviation macros
+\makeatletter
+\DeclareRobustCommand\onedot{\futurelet\@let@token\@onedot}
+\def\@onedot{\ifx\@let@token.\else.\null\fi\xspace}
+
+\def\eg{\emph{例如}\onedot} \def\Eg{\emph{例如}\onedot}
+\def\ie{\emph{即}\onedot} \def\Ie{\emph{即}\onedot}
+\def\cf{\emph{参见}\onedot} \def\Cf{\emph{参见}\onedot}
+\def\etc{\emph{等等}\onedot} \def\vs{\emph{对比}\onedot}
+\def\wrt{关于\onedot} \def\dof{自由度\onedot}
+\def\etal{\emph{等}\onedot}
+\makeatother
+
+
+% 标题
+\title{受脑启发的4自由度定位-建图：前庭-视觉互补融合与空间细胞}
+
+% 作者区块
+\author{
+\IEEEauthorblockN{Haidong Wang (王海冬), Caixia Ning (宁彩霞)}
+\IEEEauthorblockA{湖南工商大学\\
+中国长沙, 400210\\
+Email: xxx@hutb.edu.cn}
+}
+
+\begin{document}
+\maketitle
+
+% 摘要
+\begin{abstract}
+    \sloppy
+    受脑启发的空间认知为自主定位提供了可解释的替代方案，用以替代不透明的学习方法。然而，现有的受脑启发框架仍局限于2D环境或简化的视觉处理，在困难条件下缺乏鲁棒的3D空间表征。为克服这些局限，本文提出 NeuroLocMap——一个将定位-建图框架扩展到3D空间内4自由度状态估计的受脑启发框架，融合了前庭-视觉互补融合与海马-内嗅空间表征。该框架由四个核心模块组成：双流视觉处理（腹侧通路负责识别、背侧通路负责运动）、前庭IMU建模、用于位置编码的面心立方（FCC）晶格3D网格细胞，以及用于闭环检测的经验式认知建图。与数据驱动方法不同，本受脑启发设计在CPU上实现实时性能（约31 FPS），并具备零样本部署能力。在CARLA（Town 01 / 02 / 10）上的实验表明，相对EKF基线平均RMSE改善38.1\%，验证了该框架在多种环境下用于自主定位与运动的实效性。\color{red}[V2 待重算：38.1\% 基于旧版EKF基线。EKF已升级到最终实现（10状态EKF，含在线VO尺度估计、转弯运动学尺度观测、短窗口相对位置锚定、分支级卡方门控、残差自适应R、Joseph形式协方差正则化），且采集速度由20 km/h改为12 km/h；三个CARLA场景均须重新采集并重新评估。]\color{black}
+\end{abstract}
+
+% 关键词
+\IEEEkeywords
+受脑启发的定位-建图，前庭-视觉融合，海马空间细胞，视觉地点识别，认知建图
+
+%% ==================== 引言 ====================
+\section{引言}
+\label{sec:intro}
+
+在复杂3D环境中的空间定位与建图是自动驾驶、移动机器人与智能交通系统的基石~\cite{cadena2016past}。作为自主设备的核心感知模块，SLAM直接支撑所有自主运动规划与执行。现代实用方案通常组合相机、IMU，有时还加入GNSS，以实现鲁棒的位姿估计~\cite{saputra2018visual}。传统SLAM方案大多采用优化或滤波框架求解位姿，但在模型可解释性与计算资源消耗上通常存在明显缺陷。
+
+有趣的是，蝙蝠等生物通过融合视觉与前庭信号以及海马空间细胞完成3D导航~\cite{jeffery2013navigating,hafting2005microstructure,taube1990head,finkelstein2016three,solstad2008representation}。这些神经机制使受脑启发的定位框架在可解释性与计算效率上优于传统SLAM。
+
+然而，将这些生物学原理转化为实用的机器人系统面临若干挑战。第一，现有仿生框架大多在2D中运行，而实际部署需要鲁棒的3D空间表征。第二，经典视觉模板匹配对光照与视角变化敏感，限制了困难环境下的地点识别性能。第三，一种将视觉里程计与惯性测量相结合、且不依赖EKF等计算昂贵滤波器的简单而有效的融合策略，在受脑启发定位框架中仍未被充分探索。
+
+为应对这些挑战，本文提出 NeuroLocMap——一个扩展到3D空间内4自由度位姿估计（位姿 $x$、$y$、$z$、$\psi$）的受脑启发定位-建图框架，集成了双流视觉前端（腹侧通路用于场景识别、背侧通路用于运动提取）与前庭前端（用于IMU处理），并以互补滤波实现多感官融合。该框架采用3D网格细胞与多层头部方向细胞进行空间表征，并采用作为类海马情景记忆的多层经验地图用于地点识别与漂移校正。对于在相对平坦地形（如城市道路、室内地面）上运行的地面车辆，姿态由偏航角 $\psi$ 主导，俯仰与横摆变化通常受车辆动力学约束（$<5^\circ$）。我们的4自由度表征为这类场景提供了高效的定位-建图~\cite{milford2004ratslam,milford2010persistent}。
+
+本文的贡献总结如下：
+\begin{itemize}
+    \item 我们提出一种统一的受脑启发架构，将双流视觉处理与前庭建模、海马-内嗅空间表征耦合，用于4自由度定位与建图。
+    \item 我们开发了受皮层启发的视觉处理，采用显式算子构建视觉模板，将模板数从5（RatSLAM典型值）提升到195（提升39倍），从而在困难光照与视角变化下实现更细粒度的地点判别。
+    \item 我们设计了一种用于前庭-视觉集成的轻量互补融合策略，无需计算昂贵的滤波器，在无训练数据要求下实现实时性能（CPU上约31 FPS）。
+    \item 我们在六个多样化场景（CARLA Town01 / 02 / 10，EuRoC MH\_01 / 03，KITTI~07）上验证了该框架，在所有测试环境下相对EKF基线取得平均38.1\%的RMSE改善。\color{red}[V2 待重算：同摘要。]\color{black}
+\end{itemize}
+
+%% ==================== 相关工作 ====================
+\input{sec_related_work_zh.tex}
+
+
+%% ==================== 方法 ====================
+\input{sec_method_expanded_zh.tex}
+
+
+%% ==================== 实验 ====================
+\input{experiment_section_zh.tex}
+
+
+\section{结论}
+\label{sec:conclusion}
+
+随着资源受限环境下对鲁棒、可解释定位系统需求的增加，实现生物学合理的空间表征已成为自主导航与移动机器人不可或缺的一环。本研究提出 NeuroLocMap——一个受脑启发的4自由度定位-建图框架，将3D网格细胞与多层头部方向细胞的计算模型同双流视觉处理、互补前庭-视觉融合相结合。我们描述了受脑启发的空间细胞架构、受腹侧/背侧通路启发的双流视觉处理策略，以及用于多感官集成的轻量互补融合机制。在六个多样化场景（CARLA Town 01 / 02 / 10，KITTI~07，EuRoC MH\_01 / 03）上的实验结果表明，NeuroLocMap 在保持约31~FPS实时性能的同时，相对EKF基线取得平均38.1\%的RMSE改善。\color{red}[V2 待重算：同摘要；31 FPS 不受影响，予以保留。]\color{black} 该框架将视觉模板数从约5个（RatSLAM典型值）提升到195个（提升39倍），使更细粒度的地点判别成为可能，支撑鲁棒的闭环检测。未来工作将把该框架扩展到完整的6自由度位姿表征，集成基于学习的地点识别模块，并部署到神经形态硬件上，逐步实现无训练、可解释、能在嵌入式平台上实时运行的定位系统。
+
+\vspace{2em}
+
+\noindent \textbf{致谢}
+\vspace{1em}
+
+作者衷心感谢以下资助：湖南省自然科学基金（编号2024JJ6190）、湖南省教育厅科学研究项目（编号22B0646）、基于超大规模真实神经系统的新代类脑智能计算框架研究（24XJJCYJ01001）、湘江实验室开放基金项目（编号23XJ03009）、基于多模态AI大模型的全息媒体创意关键技术研究与应用（编号24XJ01001）、湖南工商大学数字智能+ 交叉学科研究项目（编号2023SZJ19）。
+
+\vspace{1em}
+\noindent \textbf{代码可用性}
+\vspace{0.5em}
+
+NeuroLocMap 代码可在以下地址获取：\url{https://github.com/OpenHUTB/carla-pedestrians}
+
+\vspace{1em}
+\noindent \textbf{利益冲突声明}
+\vspace{0.5em}
+
+作者声明不存在任何已知的可能影响本文所报告工作的竞争性经济利益或个人关系。
+
+\vspace{1em}
+\noindent \textbf{作者贡献}
+\vspace{0.5em}
+
+\textbf{Haidong Wang}：概念化、方法论、软件、论文初稿撰写。 \textbf{Caixia Ning}：数据整理、验证、论文审阅与编辑。
+
+%% 参考文献
+\bibliographystyle{IEEEtran}
+\bibliography{NeuroSLAM_KBS_all}
+
+\end{document}

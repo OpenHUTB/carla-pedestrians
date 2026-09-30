@@ -17,8 +17,10 @@ function [rmse, final_error, drift_rate, traj_aligned] = compute_metrics_with_al
     traj = traj(1:min_len, :);
     gt = gt(1:min_len, :);
     
-    % 使用前100帧进行对齐（避免受后期误差影响）
-    align_frames = min(100, min_len);
+    % 全轨迹Procrustes对齐（标准ATE/c2a做法）
+    % 旧实现仅用前100帧: 若起始段估计位移极小(Town01 exp=0.2m/GT=12.6m),
+    % scale因子爆炸(47.7/233.7倍)污染整条轨迹。全轨迹对齐避免该失效。
+    align_frames = min_len;
     
     % Procrustes对齐（7-DoF: 旋转+平移+缩放）
     [~, traj_aligned, transform] = procrustes(gt(1:align_frames,:), traj(1:align_frames,:), 'Scaling', true);

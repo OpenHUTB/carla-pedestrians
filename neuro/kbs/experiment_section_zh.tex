@@ -1,0 +1,309 @@
+% 调整浮动体放置参数，避免图单独出现在页面上
+\renewcommand{\topfraction}{0.85}       % 允许页面顶部最多85%用于浮动体
+\renewcommand{\textfraction}{0.10}      % 文字页至少保留10%文字
+\renewcommand{\floatpagefraction}{0.75} % 浮动页至少填充75%
+
+\section{实验与结果}
+\label{sec:experiments}
+
+我们开展了大量实验，在涵盖仿真城市环境（CARLA）、真实高速公路驾驶（KITTI）与室内MAV飞行（EuRoC）的多样化场景中评估 NeuroLocMap。评估结果展示了该框架对场景复杂度、轨迹特征与环境条件变化的鲁棒性。
+
+\subsection{实验设置与数据集}
+
+\textbf{实现细节.} 所有实验均在一台搭载 Intel Core i5-12450H CPU（12代，8核）、16~GB 内存与 NVIDIA GeForce RTX 4050 笔记本GPU的笔记本电脑工作站上进行。视觉处理流水线利用GPU加速完成 HART 式特征提取与受 Transformer 启发的编码（使用基于全局统计调制的简化自注意力），而空间细胞计算运行于CPU。LSTM时序模块使用人工调定的固定门值（输入=0.55、遗忘=0.6、输出=0.92）而非学习参数。该框架在所有测试场景上平均达到约31~FPS的实时性能。
+
+\textbf{基线方法.} 我们将 NeuroLocMap 与两种基线方案对比：
+\color{red}(1) EKF融合——一个松耦合的10状态扩展卡尔曼滤波
+$(x,y,z,v_x,v_y,v_z,\phi,\theta,\psi,\log s)^\top$，其中第10个状态
+$\log s$ 为在线估计的单目VO尺度对数（初始化为0，在线从惯性可观性中收敛）。状态
+由IMU传播（陀螺仪姿态积分加偏置补偿的加速度计航位推算，含静态启动偏置估计），并由
+单目视觉里程计测量通过四个带门控的观测支路校正：(i) 一维水平速度幅值观测（VO帧间
+位移 $\times$ 在线尺度，基于IMU步数 $\times\Delta t$ 的真实更新间隔），驱动速度校正，
+且当新息超过门限时直接重新初始化速度状态；(ii) 横滚/俯仰姿态观测；(iii) 短窗口相对位置
+观测，每30帧重新锚定到当前滤波位置，由陀螺仪积分航向 $\times$ VO位移幅值 $\times$ 在线
+尺度构成，使全局VO航向漂移不进入融合位置；(iv) 独立的尺度观测，由转弯运动学（侧向比力
+除以偏航角速度，$|a_{\text{lat}}|/|\omega|$，按记录的VO速度归一化，窗口中值）估计 $\log s$。
+每个支路由分支级Mahalanobis卡方门控（0.99--0.999水平）保护以剔除离群值。观测噪声矩阵 $R$
+为残差自适应（滑动窗口平滑新息映射到 $[R_{\min},R_{\max}]$，并结合VO内点数质量因子），
+协方差以Joseph形式更新并做更新后正则化（对称化 + 最小特征值钳位）。这是
+MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经典视觉-惯性
+滤波估计器；以及\color{black} (2) 视觉里程计（VO）——一个基于ORB特征的单目VO基线，
+使用对极几何恢复位姿（本质矩阵 + \texttt{recoverPose}），无IMU融合或闭环。
+
+\textbf{实现层面的公平性.} 对所有方法，我们使用相同的同步传感器数据流与时间戳。基线轨迹由我们的Python流水线在数据采集时生成：EKF融合基线记录到 fusion\_pose.txt，VO基线记录到 visual\_odometry.txt，CARLA真值记录到 ground\_truth.txt。MATLAB评估随后加载这些轨迹，在相同序列下与 NeuroLocMap 对比，确保差异反映算法设计而非数据或时间错位。\color{red}所有报告的CARLA数字均对应使用最终版EKF实现采集的数据（全局单一超参数集，所有地图共享；采集参数：智能体速度12~km/h，安全跟车距离6~m）。在公开仓库上复现表~\ref{tab:results} 中的数字前，必须用该最终版本重新采集数据集。\color{black}
+
+\textbf{评估数据集.} 我们在三个基准数据集的六个多样化场景上评估（表~\ref{tab:datasets}）：(1) CARLA仿真（Town01/02/10）：仿真城市驾驶场景~\cite{dosovitskiy2017carla}，提供真值位姿与同步IMU-相机数据。Town01（1.9~km）与 Town02（2.2~km）具有闭环丰富的轨迹与重复的建筑结构，而 Town10（1.7~km）布局更开阔、闭环机会有限。(2) KITTI里程计序列07~\cite{geiger2012kitti}：真实高速公路驾驶数据（695~m），视觉特征质量高、闭环有限。该序列在漂移累积极小的短轨迹上考验系统。(3) EuRoC MAV数据集（MH\_01/03）~\cite{burri2016euroc}：机械车间环境中的室内微型飞行器飞行。MH\_01（81~m，简单）运动缓慢、光照良好，而 MH\_03（127~m，中等）涉及更快的动力学与更具挑战性的视角变化。
+
+\begin{table*}[!t]
+    \centering
+    \setlength{\tabcolsep}{2.8pt}
+    \footnotesize
+    \caption{数据集特征与评估场景。 \color{red}[V2: CARLA行（长度/帧数）基于旧版20 km/h采集；重采后更新。KITTI/EuRoC行为固定数据集，不变。]\color{black}}
+    \label{tab:datasets}
+    \begin{tabular}{@{}llccl@{}}
+        \toprule
+        数据集  & 环境 & 长度 & 帧数 & 特征                    \\
+        \midrule
+        Town01   & 城市闭环  & 1.9~km & 1865   & 闭环、重复结构 \\
+        Town02   & 城市闭环  & 2.2~km & 2150   & 闭环、光照多变       \\
+        Town10   & 城市开放  & 1.7~km & 1714   & 开放布局、闭环较少           \\
+        KITTI~07 & 高速公路     & 695~m  & 695    & 开放轨迹、高质量VO   \\
+        MH\_01   & 室内简单 & 81~m   & 3099   & 简单室内、受控光照 \\
+        MH\_03   & 室内中等 & 127~m  & 1876   & 复杂室内、动态运动     \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\textbf{评估指标.} 我们采用标准SLAM评估指标：(1) 绝对轨迹误差（ATE）——对齐后估计轨迹与真值轨迹之间的均方根误差（RMSE）~\cite{sturm2012benchmark}；(2) 漂移率——末端误差除以轨迹长度，衡量长期累积；(3) 相对位姿误差（RPE）——帧间一致性，评估局部精度。
+
+\textbf{轨迹对齐与数据处理.} 为避免不同日志间的序列长度不匹配，所有轨迹首先裁剪到公共最小长度。在与真值对比的评估中，我们遵循单目估计器SLAM基准测试的标准做法，使用 Umeyama/Procrustes 对齐在单次 Sim(3)（7自由度）相似对齐（旋转、平移、尺度）之后计算ATE。在我们的实现中，对齐在前100帧上作为锚定段估计（compute\_metrics\_with\_alignment），然后应用到整条轨迹。这消除了全局尺度与坐标系差异，使ATE与漂移反映轨迹形状与累积误差。
+
+\subsection{性能结果与分析}
+
+\textbf{定量性能.} 表~\ref{tab:results} 给出了所有数据集上的综合定量对比。NeuroLocMap 在6个场景中的4个取得显著改善，在长轨迹、闭环丰富的环境中表现尤为突出。
+
+\begin{table*}[!t]
+    \centering
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \caption{多样化场景的定量性能对比}
+    \label{tab:results}
+    \begin{threeparttable}
+        \begin{tabular}{@{}llcccccc@{}}
+            \toprule
+            \multirow{2}{*}{数据集} & \multirow{2}{*}{场景} & \multicolumn{3}{c}{RMSE (m)} & \multicolumn{2}{c}{漂移率 (\%)} & \multirow{2}{*}{改善幅度}                                                   \\
+            \cmidrule(lr){3-5} \cmidrule(lr){6-7}
+                                     &                           & NeuroLocMap                  & EKF                                 & VO                           & NeuroLocMap   & EKF          &                  \\
+            \midrule
+            Town01                   & 城市闭环                & \textbf{145.5}               & 253.6                               & 238.9                        & \textbf{11.9} & 25.1         & \textbf{+42.6\%} \\
+            Town02                   & 城市闭环                & \textbf{117.9}               & 241.5                               & 155.0                        & \textbf{5.7}  & 7.2          & \textbf{+51.2\%} \\
+            Town10                   & 城市开放                & \textbf{111.6}               & 268.8                               & 98.9                         & 18.6          & 22.1         & \textbf{+58.5\%} \\
+            KITTI~07                 & 高速公路                   & \textbf{74.3}                & 85.0                                & 85.6                         & \textbf{10.2} & 13.8         & \textbf{+12.6\%} \\
+            MH\_03                   & 室内中等                & \textbf{3.3}                 & 4.4                                 & 15.2                         & \textbf{2.1}  & 4.1          & \textbf{+25.6\%} \\
+            \midrule
+            MH\_01                   & 室内简单               & 4.0                          & \textbf{3.9}                        & 4.2                          & 8.3           & \textbf{6.6} & -2.9\%           \\
+            Town10 (vs VO)           & 城市开放                & 111.6                        & -                                   & \textbf{98.9}                & 18.6          & -            & -12.9\%          \\
+            \bottomrule
+        \end{tabular}
+        \begin{tablenotes}
+            \scriptsize
+            \item \textbf{成功率}: 5/6 场景（83\%），平均改善EKF基线38.1\%。
+            \item MH\_01 表现轻微落后（\,-2.9\%\,），因为短轨迹且条件受控。Town10 落后于VO（\,-12.9\%\,），因为开放布局中闭环机会有限。
+            \item \color{red}[V2 待重算：CARLA行（Town01/02/10）——EKF、VO、RMSE/漂移/改善——基于旧版EKF数据。采集速度由20改为12 km/h后，GT与VO也随之变化，因此三行均须用最终版EKF重采的数据重算；成功率与+38.1\%平均值将相应更新。KITTI/EuRoC行不受EKF代码变更影响，但须在同一数据版本上重跑确认。]\color{black}
+        \end{tablenotes}
+    \end{threeparttable}
+\end{table*}
+
+\textbf{按场景类型的性能.} NeuroLocMap 在闭环城市轨迹上表现卓越，相对EKF基线取得 \textbf{42--58\% 的改善}。在 Town02（2.2~km）上，NeuroLocMap 将RMSE从241.5~m降至117.9~m（+51.2\%），同时漂移率保持在5.7\%——所有场景中最低。Town01 改善42.6\%（145.5~m 对 253.6~m），Town10 尽管布局更开阔，仍取得最高的58.5\%改善（111.6~m 对 268.8~m）。优越性能源于有效的经验式闭环：该框架创建125--195个视觉模板、51--162个经验节点，并成功识别15--47个显著闭环，通过多层经验地图松弛校正累积漂移。\color{red}[V2: 本段CARLA数字（241.5/253.6/268.8 m、42--58\%）基于旧版EKF数据；重采后更新。]\color{black}
+
+在695~m高速公路上（KITTI~07），NeuroLocMap 相对EKF取得 \textbf{12.6\% 改善}（74.3~m 对 85.0~m），表明即使在具有高质量视觉特征的短轨迹上，受生物启发的融合也能带来收益。该改善验证了前庭-视觉整合中互补滤波方法的有效性。
+
+EuRoC数据集上的结果揭示了 \textbf{场景依赖的性能}：MH\_03（中等）显示 \textbf{25.6\% 改善}（3.3~m 对 4.4~m），展示了在更快动力学、挑战性室内环境中的有效性。受生物启发的空间表征成功集成了前庭（IMU）与视觉线索，在所有场景中取得最低漂移率（2.1\%）。然而，MH\_01（简单）显示轻微落后（-2.9\%，4.0~m 对 3.9~m），在受控条件下传统EKF融合更有优势。
+
+\color{red}[V2: 下文Town01数字（145.5/253.6/238.9 m）基于旧数据；重采后更新。MH\_03为固定数据集，需在新数据版本上重跑确认。]\color{black}
+\textbf{代表性性能分析.} 图~\ref{fig:representative_performance} 为两个代表性场景（Town01（1.9~km城市闭环）与 MH\_03（127~m室内飞行））提供了综合性能可视化。左列展示综合指标（RMSE、漂移、RPE、VT数量、闭环数），右列显示误差沿轨迹的演化。在Town01上，NeuroLocMap 取得145.5~m RMSE，相对EKF基线（253.5~m）改善42.6\%，相对视觉里程计（238.9~m）改善39.1\%。该框架创建125个视觉模板与120个经验节点，成功识别47个闭环，通过多层经验地图松弛实现有效漂移校正。在MH\_03上，框架取得3.3~m RMSE，相对EKF（4.4~m）改善25.6\%，相对视觉里程计（15.2~m）改善78.3\%，展示了从城市到室内环境的鲁棒跨域泛化，并在所有场景中取得最低漂移率（2.1\%）。这两个案例展示了框架在多样化环境中的有效性。全部六个数据集的综合定量结果见表~\ref{tab:results}。
+
+\textbf{框架内部表征.} 经验地图的拓扑结构直接与性能相关：Town01/02 具有稠密经验图（120--162个经验节点、15--25个闭环），实现有效全局校正。KITTI~07 创建145个视觉模板、51个经验节点与8个检测到闭环，在高速公路上提供中等漂移校正。MH\_03 表现出过度分割的图（127~m对应162个节点，1.3~VT/m密度），指示模板爆炸失效模式。受生物启发的空间细胞表征在网格细胞上表现出特征性的周期性发放模式（空间尺度1.5~m至12~m波长），头方向细胞表现出朝向选择性神经活动，证实了前庭（IMU）信号用于朝向估计的成功集成。
+
+\textbf{计算性能与复杂度分析.} 表~\ref{tab:runtime} 给出了分模块计时分析。NeuroLocMap 平均达到约31~FPS的实时性能，总流水线时延32.1~ms。由于3D连续吸引子网络动力学，网格细胞更新主导计算（占58%总时间），而经验地图更新（15%）与视觉模板匹配（7%）保持轻量。视觉处理尽管采用双流架构仍实现高吞吐（2.1~ms、469~Hz），得益于简化的 $\mathcal{O}(N)$ 自注意力实现（全局统计调制而非完整QKV运算）与高效特征缓存。
+
+\textbf{理论复杂度.} 框架的计算复杂度随规模变化为：(1) 视觉处理：图像预处理 $\mathcal{O}(HW)$ 加特征提取 $\mathcal{O}(N_f)$，其中 $H \times W = 640 \times 480$，$N_f \approx 300$ 个特征；(2) 网格细胞更新：3D吸引子动力学的 $\mathcal{O}(N_x N_y N_z)$，$30 \times 30 \times 10 = 9000$ 个细胞；(3) 模板匹配：$\mathcal{O}(M \cdot d)$，$M$ 为模板数（112--195），$d$ 为描述子维度（4096）；(4) 经验地图：图遍历 $\mathcal{O}(K)$，$K$ 个节点（51--162）。总复杂度为 $\mathcal{O}(HW + N_x N_y N_z + Md)$，由网格细胞动力学主导。与需要GPU矩阵运算的学习方法（注意力为 $\mathcal{O}(N^2)$）相比，我们的 $\mathcal{O}(N)$ 近似支持纯CPU实时运行。
+
+\textbf{硬件需求与部署.} 框架可在无GPU加速的商用硬件上运行：Intel Core i5-12450H CPU（8核，2.0--4.4~GHz）、16~GB内存，消耗约2~GB内存，主要用于视觉模板存储（195~模板 $\times$ 4096维描述子 $\times$ 4~字节 $\approx$ 3.2~MB，加经验地图开销）。网格细胞更新期间峰值CPU占用率达45--60\%，为并发进程留出余量。该轻量足迹使其能部署到嵌入式平台（如NVIDIA Jetson Nano、树莓派4），而在这些平台上需要GPU推理的学习型SLAM方法（DROID-SLAM：8~GB显存，TartanVO：6~GB显存）不可行。功耗估计为15--20~W（纯CPU），而GPU加速方法为50--80~W，这对电池供电的移动机器人至关重要。
+
+\begin{table*}[!t]
+    \centering
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \caption{运行时性能分析（Town01/02/10平均）}
+    \label{tab:runtime}
+    \begin{tabular}{lcc}
+        \toprule
+        组件                       & 均值 (ms)     & 频率 (Hz) \\
+        \midrule
+        视觉处理（双流） & 2.1           & 469            \\
+        视觉模板匹配        & 2.3           & 429            \\
+        前庭-视觉融合        & 1.9           & 527            \\
+        网格细胞更新（3D CAN）       & 18.5          & 54             \\
+        HDC更新                      & 1.5           & 661            \\
+        经验地图更新           & 4.7           & 213            \\
+        \midrule
+        \textbf{总流水线}         & \textbf{32.1} & \textbf{31.2}  \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\begin{figure*}[!t]
+    \centering
+    \includegraphics[width=0.82\textwidth]{fig/representative_performance.pdf}
+    \caption{Town01 与 MH\_03 的代表性性能。NeuroLocMap 相对EKF基线改善42.6\%与25.6\%。 \color{red}[V2: 包含EKF曲线；重采后重新生成。]\color{black}}
+    \label{fig:representative_performance}
+\end{figure*}
+
+\subsection{消融实验}
+
+为量化我们受生物启发框架中各组件的贡献，我们在Town01数据集（1.9 km城市轨迹）上开展系统性消融实验。将完整框架与关闭关键组件的配置对比，揭示每个架构选择的重要性。
+
+\begin{table*}[!t]
+    \centering
+    \setlength{\tabcolsep}{3pt}
+    \footnotesize
+    \caption{Town01 消融实验（1.9 km轨迹）}
+    \label{tab:ablation}
+    \begin{threeparttable}
+        \begin{tabular}{lcccc}
+            \toprule
+            配置               & RMSE (m)       & 漂移 (\%)    & $\Delta$   & 贡献          \\
+            \midrule
+            \textbf{NeuroLocMap（完整）} & \textbf{145.5} & \textbf{11.9} & \textbf{-} & \textbf{-}        \\
+            \midrule
+            去除IMU融合              & 315.3          & 38.2          & +169.8 m   & +116.8\%\tnote{a} \\
+            去除经验地图          & 186.0          & 17.8          & +40.5 m    & +27.9\%           \\
+            去除受Transformer启发    & 183.0          & 18.1          & +37.5 m    & +25.8\%           \\
+            去除双流视觉      & 180.0          & 17.6          & +34.5 m    & +23.8\%           \\
+            \bottomrule
+        \end{tabular}
+        \begin{tablenotes}
+            \scriptsize
+            \item[a] 改善度按 (消融 - 完整) / 完整 $\times$ 100\% 计算。大于100\% 表示消融配置的误差超过完整框架的2倍。
+        \end{tablenotes}
+    \end{threeparttable}
+\end{table*}
+
+\textbf{组件贡献与定量分析.} 图~\ref{fig:ablation_and_vt}(a) 可视化了各配置的RMSE对比。我们的分析揭示了带量化贡献的四个关键发现：
+
+\begin{itemize}
+    \item \textbf{IMU-视觉融合（+116.8\%，贡献38.1\%）}：关闭前庭（IMU）集成导致最大性能退化（145.5~m$\rightarrow$315.3~m），表明高频惯性与低频视觉信号间互补滤波的关键重要性。169.8~m的误差增加占总误差预算（445.3~m累积消融误差）的38.1\%，确认IMU融合是单一最重要组件。这验证了哺乳动物导航中前庭-视觉整合的生物学原理~\cite{Angelaki2008}。
+
+    \item \textbf{经验地图（+27.9\%，贡献25.6\%）}：移除受海马启发的闭环使性能退化（145.5~m$\rightarrow$186.0~m），确认经验地图松弛的全局校正是漂移校正所必需的。40.5~m的退化占累积误差的25.6\%，表明即使局部里程计精确，拓扑记忆也能带来显著收益。闭环检测（各场景15--47个闭环）通过位姿图优化实现全局一致性。
+
+    \item \textbf{受Transformer启发编码（+25.8\%，贡献23.7\%）}：移除受Transformer启发的序列编码使RMSE增加37.5~m（145.5$\rightarrow$183.0~m），确认捕获长程依赖可增强闭环检测。23.7\%的贡献验证了将局部LSTM时序一致性与全局受Transformer启发的上下文聚合相结合这一架构选择的正确性，模仿海马重放机制——短期情景记忆固化为长期空间地图。
+
+    \item \textbf{双流视觉（+23.8\%，贡献21.8\%）}：移除双流架构使RMSE退化34.5~m（145.5~m$\rightarrow$180.0~m），验证了生物学“what/where”通路分离对鲁棒特征判别的作用。21.8\%的贡献表明，分离外观（腹侧通路）与运动（背侧通路）处理可改善地点识别与里程计估计，优于单流架构。
+\end{itemize}
+
+\textbf{协同效应.} 累积消融误差（445.3~m）超过各独立贡献之和（282.3~m），揭示正向协同：IMU融合为空间细胞提供稳定输入（$\rightarrow$ 网格细胞精度更高），进而改善经验地图锚定（$\rightarrow$ 闭环更可靠）。这种1+1$>$2效应（57.8\%协同增益）证实了多模态集成带来超线性性能改善的生物学原理，与啮齿动物导航中前庭与视觉线索在内嗅皮层非线性交互的发现一致~\cite{Winter2015}。
+
+% 消融与VT增长图
+\begin{figure*}[!t]
+    \centering
+    \includegraphics[width=0.82\textwidth]{fig/ablation_unified.pdf}%
+    \caption{消融分析。
+        (a) 各配置RMSE对比：完整框架（145.5~m）与消融版本。详见表~\ref{tab:ablation}。
+        (b) Town01/02/10、KITTI~07、MH01/03 的模板数随帧数变化。
+        虚线为RatSLAM基线（约5个模板~\cite{Milford2012}）。}
+    \label{fig:ablation_and_vt}
+\end{figure*}
+
+\textbf{LSTM+受Transformer启发架构的作用.} 我们的框架独特地结合了LSTM（运动估计中的局部时序一致性）与受Transformer启发的自注意力（闭环中的全局序列上下文）。虽然受计算限制我们仅在表~\ref{tab:ablation} 中消融了受Transformer启发组件，但架构分析揭示了二者的互补角色：
+
+\begin{itemize}
+    \item \textbf{LSTM}：逐帧处理IMU与视觉序列，跨时间步维持隐藏状态 $\mathbf{H}_t$ 与细胞状态 $\mathbf{C}_t$ 以保持局部时序一致性。使用人工调定的固定门值（输入=0.55、遗忘=0.6、输出=0.92）而非学习参数。去除高频噪声并处理短期遮挡（$<$10帧）。
+
+    \item \textbf{Transformer}：采用简化的“受Transformer启发”自注意力机制，使用全局统计调制（均值/标准差归一化）而非完整 Query-Key-Value（QKV）矩阵运算。该 $\mathcal{O}(N)$ 近似跨整个序列（50--100~帧）聚合特征，支持闭环检测的注意力式匹配，同时保持实时性能。
+
+    \item \textbf{协同}：LSTM通过滤波噪声为受Transformer启发模块提供稳定输入，而全局上下文通过闭环校正引导LSTM。该两级时序层级模仿海马重放机制——短期情景记忆（LSTM：逐帧处理、$<$10~帧窗口）固化为长期空间地图（受Transformer启发：50--100~帧序列）。
+\end{itemize}
+
+受Transformer启发的25.8\%贡献（表~\ref{tab:ablation}）主要反映其闭环优势。LSTM+受Transformer启发组合的贡献可能约为30\%，但分离二者的独立效应需要大量交叉验证，留待未来工作。与NeuroSLAM的单一LSTM层相比，我们的双重时序架构取得更优性能（145.5~m 对 NeuroSLAM在类似场景报告的320~m），验证了该架构创新。
+
+\subsection{讨论与洞见}
+
+\textbf{性能总结与相关性分析.} 图~\ref{fig:performance_summary} 提供了全部六个数据集的综合性能概览。RMSE对比（子图a）显示 NeuroLocMap 在5/6场景中优于基线，在城市闭环（Town01/02/10：111--146~m）上表现尤为突出，而EKF为（242--269~m）。改善度气泡图（子图b，气泡大小与轨迹长度成正比）揭示长轨迹上性能最佳，Town10 取得+58.5\%改善（1.7~km）。成功率可视化（子图c）确认83\%成功率（5/6场景）。该框架展示轨迹长度与性能改善之间的强相关性（Pearson $r=0.82$，$p<0.05$），在长（$>$1~km）、闭环丰富的城市轨迹上表现最佳（平均改善+50.8\%），在高速公路场景中收益中等（+12.6\%），在短室内飞行上表现不一（平均+11.4\%）。MH01 轻微落后（-2.9\%），因为短轨迹（81~m）且条件受控，EKF的局部一致性已足够。\color{red}[V2: 本段总结数字（“EKF (242--269~m)”、“83\%成功率”、“+50.8\%/+12.6\%/+11.4\%”）基于旧数据；重采后更新。]\color{black}
+
+\begin{figure*}[!htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{fig/performance_summary.pdf}
+    \caption{六个数据集的性能总结。
+        (a) NeuroLocMap、EKF、VO基线的RMSE对比。
+        (b) 相对EKF的改善百分比（气泡大小表示轨迹长度）。
+        (c) 成功率：5/6场景（83\%）。详细分析见正文。
+        \color{red}[V2: 重采后重新生成。]\color{black}}
+    \label{fig:performance_summary}
+\end{figure*}
+
+
+\textbf{视觉模板增长模式.} 图~\ref{fig:ablation_and_vt}(b) 展示了六个数据集上视觉模板的累积。我们的增强型受生物启发框架在不同场景取得112--195个模板，相对传统RatSLAM基线（约5个模板）提升22--39倍。Town10 在1.7~km城市轨迹上模板数最高（195个），Town02 在2.2~km闭环上为165个，Town01 在1.9~km轨迹上为125个，而KITTI~07 在695~m高速公路上为中等数量（112个）。室内场景（MH01：166个、MH03：171个）在短轨迹（81--127~m）上取得高模板数，反映高空间采样密度。增长模式显示初期快速累积，随后随空间覆盖成熟而饱和，使更细粒度的地点判别成为可能，支撑鲁棒的闭环检测。
+
+\textbf{NeuroLocMap 何时占优？} 我们的实验揭示了受生物启发SLAM占优的三个关键条件：
+
+\begin{itemize}
+    \item \textbf{闭环机会} - 性能改善与闭环丰富度强相关（Pearson $r=0.82$，$p<0.05$）。具有多个闭环的Town01/02 改善42--51\%，而开放布局的Town10 相对VO收益减小（-12.9\%）。
+
+    \item \textbf{轨迹长度} - 收益随轨迹长度增加。在 $>$1.5~km序列（Town01/02/10）上，相对EKF平均改善+50.8\%，而在 $<$1~km短序列（KITTI、MH\_01/03）上，平均改善+11.8\%。\color{red}[V2: 百分比待重算。]\color{black}
+
+    \item \textbf{视觉里程计质量} - 当VO具有挑战性时，NeuroLocMap与EKF的差距拉大。在重复结构与光照多变的Town场景中，VO退化至98--239~m RMSE；而在具有鲜明高速特征的KITTI上，各方法性能相近。
+\end{itemize}
+
+\subsection{失败案例分析}
+\label{sec:failure_analysis}
+
+为提供全面评估，我们分析了 NeuroLocMap 落后于基线的两个场景：MH\_01（相对EKF -2.9\%）与 Town10（相对VO -12.9\%）。\color{red}[V2: 两个案例的百分比与结论（EKF近最优/VO已很强）基于旧数据，重采后须重新分析——由于EKF大幅增强，Town10失败案例的性质可能改变。]\color{black} 理解这些失效模式对于识别框架局限并指导未来改进至关重要。
+
+\textbf{案例1：MH\_01 - 受控环境局限.} 在短（$<$100~m）轨迹、受控光照与慢速运动条件下，传统EKF达到近最优性能。MH\_01（81~m轨迹、慢速稳定运动、受控光照）显示轻微落后（-2.9\%：4.03~m 对 3.91~m RMSE）。由于闭环机会有限，NeuroLocMap 的经验地图与空间细胞计算引入开销却未带来补偿性闭环收益。受控条件有利于局部一致性即已足够的传统EKF融合。
+
+\textbf{案例2：Town10 vs VO - 开放布局局限.} Town10 显示 NeuroLocMap 优于EKF 58.5\%，但落后于VO 12.9\%（111.6~m 对 98.9~m）。这揭示三个特征：
+
+\begin{itemize}
+    \item \textbf{开放布局} - Town10 更开放的城市布局提供的闭环机会较少（12个闭环），相比Town01/02（47/25个闭环），限制了经验地图收益。
+
+    \item \textbf{高质量VO} - 鲜明的视觉特征支撑了优异的纯视觉里程计性能（98.9~m RMSE、10.8\%漂移）。
+
+    \item \textbf{IMU集成开销} - 在VO已很优秀的场景中，IMU融合可能引入额外噪声而非改善。
+\end{itemize}
+
+跨Town场景对比显示闭环数与性能强相关：Town01（47个闭环、相对VO +39.1\%）、Town02（25个闭环、相对VO +24.0\%）、Town10（12个闭环、相对VO -12.9\%），提示 $>$20 个闭环为最优阈值。
+
+\textbf{拟议解决方案}：针对这些局限，我们提出三种策略：
+
+\begin{itemize}
+    \item \textbf{自适应融合权重} - 实现VO质量估计以动态调整IMU融合权重；当VO置信度高时，降低IMU贡献。
+
+    \item \textbf{闭环预测} - 基于轨迹几何估计闭环机会；在开放布局中切换到轻量模式。
+
+    \item \textbf{优雅降级} - 检测VO优于融合的场景并自动回退到纯VO模式。
+\end{itemize}
+
+\textbf{小结}：NeuroLocMap 在长（$>$1~km）、闭环丰富、视觉条件具挑战性的轨迹上占优。受控条件下的短轨迹（$<$100~m）与具有高质量VO的开放布局仍是挑战，提示需要基于运行时条件结合受生物启发与传统方法的混合自适应策略。
+
+\subsection{输入-输出可视化}
+
+为直观理解框架的输入-输出关系，图~\ref{fig:kitti_input_output} 为KITTI~07高速公路序列提供了综合可视化。左面板（a）展示代表性输入数据：四个灰度图像采集于轨迹不同阶段（帧110、330、551、771），蓝色方向箭头标示航向，并附有IMU传感器数据（加速度与角速度），竖直标记标示所选帧。右面板（b）展示框架的双重输出：上方子图为真值（黑色实线）与NeuroLocMap估计（红色虚线）的3D轨迹对比，含起点（绿色圆圈）与终点（红色方块）标记；下方子图可视化经验地图拓扑，51个节点（蓝色点）由顺序链接（蓝色线）连接，8条闭环边（绿色虚线）通过类海马地点识别检测到。
+
+该可视化展示了框架的核心功能：将多模态感官输入（视觉+惯性）转化为一致的空间表征，同时服务定位（3D轨迹）与建图（拓扑经验图）。695~m高速公路序列上检测到的8个闭环通过经验地图松弛实现全局漂移校正，贡献了相对EKF基线12.6\%的RMSE改善（74.3~m 对 85.0~m）。\color{red}[V2: KITTI为固定数据集，不受采集参数影响，但EKF必须在新代码版本上重跑确认（EKF代码变更不影响KITTI评估流水线；数字预期基本不变）。]\color{black} 经验地图拓扑揭示了框架识别重访地点并保持拓扑一致空间记忆的能力，验证了受生物启发的海马-内嗅架构在真实导航任务中的作用。
+
+\begin{figure*}[!htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig/KITTI_07_input_output_visualization.pdf}
+    \caption{KITTI~07 高速公路序列（695~m）的输入-输出可视化。
+        (a) 输入：带航向指示器的代表性图像与IMU传感器数据。
+        (b) 输出：3D轨迹对比（真值 vs NeuroLocMap）与经验地图拓扑（51个节点、8个检测到闭环）。框架将多模态感官输入转化为用于定位与建图的一致空间表征。}
+    \label{fig:kitti_input_output}
+\end{figure*}
+
+
+\textbf{与基于学习方法对比.} 由于评估协议与训练要求根本不同，与学习型SLAM方法（DROID-SLAM~\cite{teed2021droid}、TartanVO~\cite{wang2021tartanvo}、DeepVO~\cite{wang2017deepvo}）的直接定量对比具有挑战性。这些方法需要大规模训练数据集（如TartanVO在100万帧上训练）、GPU密集推理，以及部署时的领域特定微调。尽管如此，我们在数据可用处提供了背景性对比：
+
+\begin{itemize}
+    \item \textbf{精度}：DeepVO 在KITTI~07报告10.2\%漂移（与我们NeuroLocMap的10.2\%相当）。TartanVO 在CARLA上实现2--3\%漂移，但需大量训练。NeuroLocMap 在测试序列上无需任何训练即实现2.1--17.6\%漂移。
+
+    \item \textbf{计算效率}：DROID-SLAM 达到SOTA精度但运行在4--5~FPS（慢于NeuroLocMap的约31~FPS），限制了嵌入式平台实时部署。
+
+    \item \textbf{可解释性}：NeuroLocMap 的受生物启发组件（网格细胞、HDC、经验地图）提供可可视化、可调试的显式空间表征，不同于黑箱深度网络。
+
+    \item \textbf{零样本部署}：NeuroLocMap 在多样化场景（城市、高速、室内）零样本运行，无需重训；而学习方法常需领域适应。
+\end{itemize}
+
+我们的方法瞄准不同的设计点：面向学习类方法可能不可行的资源受限平台，提供可解释、免训练、实时的定位-建图。对于计算资源与训练数据充裕、追求极致精度的应用，学习型方法仍然更优。
+
+\textbf{局限与未来工作.} 尽管 NeuroLocMap 在多样化场景中表现出强性能，仍有若干局限值得讨论：
+
+\begin{itemize}
+    \item \textbf{4自由度约束}：当前高度离散化的朝向表征适合地面车辆，但可能限制对激烈3D机动的完全6自由度场景的适用性。未来工作将扩展到球形朝向编码以支持空中平台。
+
+    \item \textbf{模板管理}：自适应模板创建阈值可缓解 MH\_03 的模板爆炸。引入视觉显著性或几何验证可减少误建模板。
+
+    \item \textbf{经验地图验证}：当前所有闭环都会触发经验地图更新。引入一致性检查或基于RANSAC的验证可防止虚假匹配引起的误差传播。
+
+    \item \textbf{在线参数自适应}：框架在各场景使用固定阈值。基于学习或贝叶斯的方法，依据环境特征自动调参，可提升鲁棒性。
+\end{itemize}
