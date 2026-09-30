@@ -7,7 +7,7 @@ script_dir = fileparts(mfilename('fullpath'));
 addpath(fullfile(script_dir, '..', 'core'));
 
 global DATASET_NAME;
-DATASET_NAME = 'Town10Data_IMU_Fusion';
+DATASET_NAME = 'Town10HDData_IMU_Fusion';
 
 % Visual Template 
 global VT_MATCH_THRESHOLD_OVERRIDE;
@@ -45,4 +45,4 @@ fprintf('╚══════════════════════�
 test_imu_visual_fusion_slam;
 
 fprintf('\n✅ Town10 SLAM测试完成！\n');
-fprintf('📁 结果保存在: data/01_NeuroSLAM_Datasets/Town10Data_IMU_Fusion/slam_results/\n\n');
+fprintf('📁 结果保存在: data/01_NeuroSLAM_Datasets/Town10HDData_IMU_Fusion/slam_results/\n\n');

@@ -1,11 +1,13 @@
-function [transV, yawRotV, heightV] = imu_aided_visual_odometry(rawImg, imu_data, frame_idx)
+function [transV, yawRotV, heightV] = imu_aided_visual_odometry(rawImg, imu_data, frame_idx, pure_visual_results)
 %IMU_AIDED_VISUAL_ODOMETRY IMU辅助的视觉里程计
 %   使用IMU数据增强视觉里程计的精度
-%   
+%
 %   输入:
 %       rawImg - 原始图像
 %       imu_data - IMU数据结构体(可选,如果为空则退化为纯视觉)
 %       frame_idx - 当前帧索引
+%       pure_visual_results - [可选] 已算好的纯视觉结果 [transV, yawRotV, heightV],
+%                             传入后复用, 避免重复计算 visual_odometry
 %   输出:
 %       transV - 平移速度
 %       yawRotV - 偏航旋转速度 (degrees)
@@ -27,8 +29,14 @@ function [transV, yawRotV, heightV] = imu_aided_visual_odometry(rawImg, imu_data
         imu_height_vel = 0;
     end
     
-    % 首先调用原始视觉里程计
-    [visual_transV, visual_yawRotV, visual_heightV] = visual_odometry(rawImg);
+    % 首先调用原始视觉里程计(若调用方已算好则直接复用)
+    if nargin >= 4 && ~isempty(pure_visual_results)
+        visual_transV  = pure_visual_results(1);
+        visual_yawRotV = pure_visual_results(2);
+        visual_heightV = pure_visual_results(3);
+    else
+        [visual_transV, visual_yawRotV, visual_heightV] = visual_odometry(rawImg);
+    end
     
     % 如果没有IMU数据,直接返回视觉里程计结果
     if isempty(imu_data) || frame_idx > length(imu_data.timestamp)

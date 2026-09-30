@@ -126,78 +126,73 @@ FSTOP = "4.0"
 ISO = "250"
 GAMMA = "2.2"
 AGENT_BEHAVIOR = "cautious"
-AGENT_MAX_SPEED = 12                # 【MOD:A1】20→12 km/h，Town02 密集城市需降速避免撞车
-AGENT_SAFE_DISTANCE = 6.0           # 【MOD:E1】8.0→6.0 米，空旷道路避免误触发避险刹车
+AGENT_MAX_SPEED = 12                # km/h，Town02 密集城市需降速避免撞车
+AGENT_SAFE_DISTANCE = 6.0           # 米，空旷道路避免误触发避险刹车
 COLLISION_RESET_THRESHOLD = 3       # 碰撞次数阈值
 
-# 消融开关：True = R 恒取基准值（关闭内点数/残差自适应缩放），
-# 用于隔离验证噪声模型本身对融合性能的影响。
-# 默认 False = 启用残差自适应 R（含滑动窗口平滑，见 RESID_SMOOTH_*）。
+# 消融开关：True = R 恒取基准值（关闭自适应缩放），用于隔离验证噪声模型影响
 FIXED_R = False
 
-# 残差滑动窗口平滑（自适应 R 用）：单帧 VO 突发跳变会使残差瞬时跳变 →
-# 自适应 R 剧烈跳动 → 轨迹抖动。对最近 N 帧马氏距离做均值滤波后再映射 R。
-# 卡方离群门仍用原始单帧残差（不受平滑影响），窗口 N 为可配置常量。
-# ENABLE_RESIDUAL_SMOOTH: True=窗口平滑；False=窗口长度退化为1，等价原始
-# 单帧残差行为，用于消融对比（全局唯一开关，禁止按地图分支定制）。
+# 残差滑动窗口平滑（自适应 R 用）：对最近 N 帧马氏距离做均值滤波后再映射 R，
+# 抑制单帧 VO 跳变导致的 R 剧烈跳动；卡方离群门仍用原始单帧残差。
+# ENABLE_RESIDUAL_SMOOTH=False 时窗口退化为 1，等价单帧残差（消融对比用）
 ENABLE_RESIDUAL_SMOOTH = True
 RESID_SMOOTH_WINDOW = 10        # 速度/位置分支（2 自由度）窗口长度（帧）
 RESID_SMOOTH_WINDOW_ATT = 10    # 姿态分支（3 自由度）窗口长度（帧）
-# 残差‑R 映射灵敏度（仅 ENABLE_RESIDUAL_SMOOTH=True 时生效）：
-# 窗口均值滤波会抬高输入残差，二次映射 (d/dof)² 被推离 R_min，K 持续偏小 →
-# 可靠 VO 修正不足。乘以灵敏度后保证残差较小时 R 仍能下探到 R_min；
-# R_min/R_max 全局固定不变，所有地图共用同一系数。
+# 残差‑R 映射灵敏度（仅 ENABLE_RESIDUAL_SMOOTH=True 时生效）
 RESID_MAP_SENSITIVITY = 5.0
-# [改动1] 残差→R 映射曲线形态（微调，R_min/R_max 不变，全局一套、无地图分支）：
-#   resid = RESID_MAP_BASE + (eff/dof)**RESID_MAP_POWER,  eff = dist/SENS（平滑开时）
-#   BASE：残差很小时把 R 抬离下限 → K<1，IMU 与观测合理分配，而非 K→1 直接抄 VO；
-#   POWER：大残差时 R 的增长速率（保持稳健降权）。仅 ENABLE_RESIDUAL_SMOOTH=True 时生效；
-#   平滑关闭时回退原始纯二次 (dist/dof)²（BASE=0/POWER=2/无灵敏度），保留消融基线。
+# 残差→R 映射曲线：resid = RESID_MAP_BASE + (eff/dof)**RESID_MAP_POWER, eff = dist/SENS
+#   BASE：小残差时把 R 抬离下限 → K<1，IMU 与观测合理分配，而非 K→1 直接抄 VO
+#   POWER：大残差时 R 的增长速率（保持稳健降权）
 RESID_MAP_BASE = 0.05
 RESID_MAP_POWER = 1.5
 
 # ─── 融合增强（尺度状态化 + 航向观测，全部基于 IMU/VO，不依赖 GT）───
 # 1) VO 度量尺度升为 EKF 第 10 个状态（log 参数化）：
-#    旧版固定 scale=0.10 比真实小约 3.5 倍 → 速度/位置观测量纲错误 →
-#    位置分支只能"抄 VO 绝对位置"（把 VO 尺度失真+航向漂移直接灌进融合位置，
-#    融合≈纯VO）。尺度在线收敛由 IMU 加速度动力学提供可观测性：
 #    位置=scale×VO轨迹，IMU 二阶积分提供独立度量参考，两者矛盾处给出修正方向。
-#    注意：主循环 vo_abs 已按固定 0.10 累积，故本状态是叠加在 0.10 之上的
-#    修正因子，初值 1.0（=当前固定行为），应收敛到 ≈3.5（真实尺度 0.35/0.10）。
-VO_SCALE_PRIOR = 1.0         # 尺度修正因子初值（1.0 = 不额外修正，=旧固定尺度行为）
-VO_SCALE_SIGMA0 = 0.80       # 初值标准差（log 域，覆盖 1.0→3.5 的收敛空间；
-                             # 过小会让首帧尺度观测被卡方门恒拒（门限死锁））
+#    主循环 vo_abs 按固定 0.10 累积，本状态是叠加其上的修正因子，初值 1.0，
+#    应收敛到 ≈3.5（真实尺度 0.35/0.10）。
+VO_SCALE_PRIOR = 1.0         # 尺度修正因子初值（1.0 = 不额外修正）
+VO_SCALE_SIGMA0 = 0.80       # 初值标准差（log 域，覆盖 1.0→3.5 的收敛空间）
 VO_SCALE_Q = 2.0e-5          # log 尺度过程噪声 rad²/s（~0.05%/s 随机游走）
 VO_SCALE_P_MAX = 1.00        # log 尺度协方差上限
 # 2) 转弯航向观测门限（转弯时横向加速度/横向速度比值给出绝对航向率，
 #    与陀螺零偏无关，是打破 VO 航向漂移闭环的关键观测）
-#    当前禁用（HEADING_OBS_ENABLED=False）：分支消融实测——本数据陀螺积分航向
-#    已 <1°（纯积分 vs GT p50<1°/250s），且位置分支已改短窗口锚、速度分支已改
-#    1D 幅值（均免疫 VO 航向漂移）→ VO 航向不再进入状态，航向分支失去正当
-#    功能；其运动学基准（a_lat/v 积分，与真实航向率相关仅 +0.53）p50 误差 94°，
-#    应用 175 次把陀螺航向拖偏 23.6°（ATE 45.27→79.63）。保留代码：若将来
-#    陀螺零偏大的传感器上 VO 航向重新成为主要漂移源，置 True 重新启用。
 HEADING_OBS_ENABLED = False
 TURN_GATE_AVG_SPEED = 3.0    # 转弯门限：滑动窗口平均车体速度 (m/s)
 TURN_GATE_MIN_ALAT = 0.3     # 转弯门限：横向加速度幅值 (m/s²)
 TURN_GATE_MAX_GYRZ = 1.2     # 转弯门限：|yaw rate| 上限 (rad/s)，防急转/异常
-HEADING_MAX_STEP = 0.26      # 航向观测硬门限：|残差|>15° 直接拒（分支定位为陀螺
-                             # 零偏微调器；残差大说明运动学基准本身是噪声，不允许
-                             # 单帧把陀螺积分航向拉走——实测基准 vs GT p50=94°）
+HEADING_MAX_STEP = 0.26      # 航向观测硬门限：|残差|>15° 直接拒（仅允许陀螺零偏量级微调）
 TURN_SPEED_WIN = 30          # 转弯判定的速度滑动窗口（帧）
-# 3) 尺度观测（独立分支）：短窗口内 IMU 航位推算速度差 / VO 记录速度 的比值
-#    直接观测 log 尺度（H 仅含尺度行），IMU 用独立纯航位推算断开反馈环。
-#    用速度差而非位移：位移误差 ∝ ½·bias·T²（随绝对时间二次增长，比值随时间
-#    从 3.4 漂到 46 → 尺度过收敛 6.65/真实2.95）；速度差抵消了 T 项，只剩
-#    bias·Δt（与绝对时间无关）→ 比值全片稳定。
 SCALE_WIN = 60               # 尺度观测滑动窗口（帧，3 秒 @20Hz）
 SCALE_R_BASE = 0.02          # 尺度比值观测噪声（log 域，~2%）
 SCALE_MIN_DISP = 0.5         # 窗口内最小 VO 记录位移（记录尺度 0.10 单位）
 SCALE_VMIN = 0.2             # 窗口内最小窗口平均速度（记录单位 m/0.1s≈2 m/s 真实）
-# 4) 弱高度先验（替代旧"平坦地面伪观测"——后者把 z/roll/pitch/yaw 都锁死，
-#    每帧把 yaw 拉回 0，会抵消航向修正；新先验只弱约束 z + roll/pitch）
+# Town10HD 融合失效修复（2026-09-27, 四图 5000 帧 replay 回归验证）:
+# 失效机制: 首个重尾样本窗(高速转弯 r~7)在 P[9,9] 初值大时 K≈0.99 一步跳变
+# (10HD: 1.0→7.3, 真值水平 3.05), P 塌缩后好观测被 χ² 门冻结 → 全程过尺度
+# 2.4×, 位置/速度观测量纲污染 → Fusion ATE≈PureVO。
+# 最终修复(A 最小稳健修复, 用户选定): 步限钳位 + 协方差下限 两项, 四图
+# ATE 合计 391→320, 10HD 169→91(2× 胜 VO), 05 84→81, 01≈持平, 02 35→43。
+SCALE_MAX_STEP = 0.25        # 单次更新 log 域创新量上限(~±28%), 防单步跳变
+SCALE_P_CLAMP = 0.25         # 钳位更新后 log 尺度协方差下限(未解释残差→保留可修正性)
+SCALE_P_FLOOR = 0.01         # 常规更新后 log 尺度协方差下限, 防 P 塌缩冻结
+# 速度域门控/截尾: 默认关(四图回归证伪其默认适用性)——四图最优尺度水平
+# 不同(02≈3.6 / 01≈3.2 / 10HD≈3.9 / 05≈5-6), 单刻度状态只能停在一个水平,
+# 门控/截尾把水平压低 → 高速路径占比高的 Town05 回退(84→117)。保留为 env
+# 实验开关(EKF_KIN_VMIN/VMAX/SCALE_TRIM_FRAC), 低水平地图单跑可用。
+SCALE_KIN_VMIN, SCALE_KIN_VMAX = 0.0, float('inf')  # 运动学样本速度域门控(默认关)
+SCALE_TRIM_FRAC = 0.0        # 窗中值前截尾 top 10% 上尾(默认关; 设 0.10 启用)
+# 固定速度形状(实验分支, 默认关): s(v)=exp(VO_SHAPE_A+VO_SHAPE_B·v),
+# 4 图 pooled 纯运动学样本(n=699, v_kin∈[2,12], r∈[0.3,30]) OLS 标定;
+# 默认关闭理由(2026-09-27 四图回归): 真尺度曲线对 v 凸(2→6m/s log 斜率
+# 0.30, 6→12m/s 0.11), 线性指数形状两端都高估(c(2) +52%, c(12) +59%),
+# 低速帧占多数 → 四图 ATE 全回退。EKF_VSHAPE_ENABLE=1 启用。
+VO_SHAPE_A = -0.1094
+VO_SHAPE_B = 0.1884
+VO_SHAPE_VREF = 6.0          # 参考速度: 形状启用时尺度状态语义 = s(v_ref) 水平
 R_Z_PRIOR = 25.0             # z 高度先验噪声 (m²)
-# 5) 位置观测短窗口相对锚（防 VO 全程航向漂移灌入融合位置，见 visual_update 注释）
+# 位置观测短窗口相对锚（防 VO 全程航向漂移灌入融合位置，见 visual_update 注释）
 POSITION_WIN = 30            # 位置锚定窗口（帧，1.5 秒 @20Hz）
 
 # CARLA 连接参数（可通过命令行覆盖）
@@ -570,9 +565,8 @@ def _spawn_agent_for_vehicle(world, bp_lib, vehicle, spawn_points):
             agent._max_speed = AGENT_MAX_SPEED / 3.6
             print(f"使用备用方式设置速度: {AGENT_MAX_SPEED} km/h")
 
-    # 【MOD:C1】降低横向 PID 增益：K_P 0.8→0.3, K_I 0.02→0.01, 新增 K_D=0.1
-    # 【MOD:C2】纵向 PID 增益：降低 I 项防积分饱和
-    # 【MOD:MAP】自适应安全距离：按道路宽度动态调整，窄路降低避免误触发避险刹车
+    # 降低横向 PID 增益防转向过猛；纵向降低 I 项防积分饱和
+    # 自适应安全距离：按道路宽度动态调整，窄路降低避免误触发避险刹车
     try:
         if hasattr(agent, '_vehicle_controller') and agent._vehicle_controller is not None:
             if hasattr(agent._vehicle_controller, '_args_lateral_dict'):
@@ -581,7 +575,7 @@ def _spawn_agent_for_vehicle(world, bp_lib, vehicle, spawn_points):
                 agent._vehicle_controller._args_lateral_dict['K_D'] = 0.1
             if hasattr(agent._vehicle_controller, '_args_longitudinal_dict'):
                 agent._vehicle_controller._args_longitudinal_dict['K_P'] = 1.0
-                agent._vehicle_controller._args_longitudinal_dict['K_I'] = 0.02   # 【MOD:E3】0.05→0.02
+                agent._vehicle_controller._args_longitudinal_dict['K_I'] = 0.02
                 agent._vehicle_controller._args_longitudinal_dict['K_D'] = 0.0
         rw = estimate_road_width(vehicle, world)
         adaptive_safe_dist = compute_adaptive_safe_distance(rw)
@@ -594,24 +588,17 @@ def _spawn_agent_for_vehicle(world, bp_lib, vehicle, spawn_points):
 
     destination = select_forward_destination(vehicle, spawn_points)
     agent.set_destination(destination)
-    # 【MOD:MAP】验证路径有效性
     validate_agent_path(agent, vehicle, spawn_points, world)
     return agent, destination
 
 
 def _reset_vehicle(world, bp_lib, vehicle, spawn_points, sensor_queue,
                    camera, imu, collision_sensor):
-    """车辆重置：先成功生成新车辆，再销毁旧车辆。
-
-    原逻辑先销毁旧车再生成新车：一旦生成失败（CARLA 超时/actor 数量限制），
-    vehicle 仍指向已销毁的 actor，下一帧任何 vehicle.* 调用都会抛异常，
-    被外层 except 捕获后整轮采集被中断（跑不满 5000 帧的根因）。
-    返回 (new_vehicle, agent, camera, cam_transform, imu, collision_sensor)。
-    """
-    # 1) 先生成新车（失败时旧车仍可用，异常向上传给调用方的 except，循环可继续）
+    """车辆重置：先成功生成新车辆，再销毁旧车辆（生成失败时旧车保持可用，
+    循环可继续）。返回 (new_vehicle, agent, camera, cam_transform, imu, collision_sensor)。"""
     new_vehicle, _ = safe_spawn_vehicle(world, bp_lib)
 
-    # 2) 新车就绪后才销毁旧车与旧传感器
+    # 新车就绪后才销毁旧车与旧传感器
     for _s in (camera, imu, collision_sensor.sensor):
         try:
             _s.stop()
@@ -627,7 +614,7 @@ def _reset_vehicle(world, bp_lib, vehicle, spawn_points, sensor_queue,
         pass
     time.sleep(0.3)
 
-    # 3) 物理参数 + 智能体 + 目标点（与初始化路径共用同一套参数）
+    # 物理参数 + 智能体 + 目标点（与初始化路径共用同一套参数）
     try:
         physics_control = new_vehicle.get_physics_control()
         physics_control.use_sweep_wheel_collision = True
@@ -637,7 +624,7 @@ def _reset_vehicle(world, bp_lib, vehicle, spawn_points, sensor_queue,
     agent, destination = _spawn_agent_for_vehicle(world, bp_lib, new_vehicle, spawn_points)
     print(f"新目标: ({destination.x:.1f}, {destination.y:.1f})")
 
-    # 4) 重建传感器（挂新车）
+    # 重建传感器（挂新车）
     new_camera, cam_transform = create_rgb_camera(world, bp_lib, new_vehicle, sensor_queue)
     new_imu = create_imu_sensor(world, bp_lib, new_vehicle, sensor_queue, cam_transform)
     new_collision = CollisionSensor(new_vehicle)
@@ -803,24 +790,21 @@ def init_carla_environment(host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             agent._max_speed = AGENT_MAX_SPEED / 3.6
             print(f"使用备用方式设置速度: {AGENT_MAX_SPEED} km/h")
 
-    # 增强避障参数
-    # 【MOD:MAP】自适应安全距离：根据道路宽度动态调整，窄路降低避免误触发避险刹车
+    # 增强避障参数：自适应安全距离（窄路降低避免误触发避险刹车）
     road_width = estimate_road_width(vehicle, world)
     adaptive_safe_dist = compute_adaptive_safe_distance(road_width)
     print(f"[MAP] 道路宽度: {road_width:.1f}m, 自适应安全距离: {adaptive_safe_dist:.1f}m")
 
     try:
-        # 【MOD:C1】降低横向 PID 增益：K_P 0.8→0.3, K_I 0.02→0.01, 新增 K_D=0.1
-        # 理由：原 K_P=0.8 导致转向过猛，Town02 窄路频繁甩头撞墙
+        # 降低横向 PID 增益防转向过猛；纵向降低 I 项防积分饱和
         if hasattr(agent, '_vehicle_controller') and agent._vehicle_controller is not None:
             if hasattr(agent._vehicle_controller, '_args_lateral_dict'):
                 agent._vehicle_controller._args_lateral_dict['K_P'] = 0.3
                 agent._vehicle_controller._args_lateral_dict['K_I'] = 0.01
                 agent._vehicle_controller._args_lateral_dict['K_D'] = 0.1
-            # 【MOD:C2】纵向 PID 增益：降低 I 项防积分饱和
             if hasattr(agent._vehicle_controller, '_args_longitudinal_dict'):
                 agent._vehicle_controller._args_longitudinal_dict['K_P'] = 1.0
-                agent._vehicle_controller._args_longitudinal_dict['K_I'] = 0.02   # 【MOD:E3】0.05→0.02
+                agent._vehicle_controller._args_longitudinal_dict['K_I'] = 0.02
                 agent._vehicle_controller._args_longitudinal_dict['K_D'] = 0.0
         if hasattr(agent, '_min_distance'):
             agent._min_distance = adaptive_safe_dist
@@ -832,7 +816,6 @@ def init_carla_environment(host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
     # 9) 选择目标点 + 路径验证
     destination = select_forward_destination(vehicle, spawn_points)
     agent.set_destination(destination)
-    # 【MOD:MAP】验证路径有效性，失败则重试
     validate_agent_path(agent, vehicle, spawn_points, world)
     print(f"避障智能体初始化完成（最大速度: {AGENT_MAX_SPEED} km/h，"
           f"安全距离: {adaptive_safe_dist:.1f}m）")
@@ -906,10 +889,8 @@ def create_imu_sensor(world, bp_lib, vehicle, data_queue, transform):
     imu_bp.set_attribute('sensor_tick', str(1 / 60))
     imu_bp.set_attribute('noise_accel_stddev_x', '0.1')
     imu_bp.set_attribute('noise_gyro_stddev_x', '0.001')
-    # EKF 约定 IMU 系 == 车体系（imu_prediction 用陀螺直接积姿态、静止重力方向 [0,0,g]）。
-    # 传入的 transform 是相机变换（pitch=-20）：若沿用，静止重力补偿存在 ~9.81*sin20°≈3.36m/s²
-    # 恒值误差 → IMU 航位推算漂到几十 km → 位置卡方门恒拒 → 硬重锚抄 VO → 融合退化为 VO。
-    # 故此处清零旋转、对齐车体系挂载（仅保留位置偏移）。
+    # EKF 约定 IMU 系 == 车体系；传入的 transform 是相机变换（pitch=-20），
+    # 若沿用会导致静止重力补偿存在恒值误差，故清零旋转、对齐车体系挂载
     imu_transform = carla.Transform(transform.location, carla.Rotation(0.0, 0.0, 0.0))
     imu = world.spawn_actor(imu_bp, imu_transform, attach_to=vehicle)
     imu.listen(lambda data: data_queue.put(SensorData('imu', data.timestamp, data)))
@@ -956,13 +937,91 @@ class TimeAligner:
 
 # ═════════════════════════════════════════════════════════════
 #  EKF 融合
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+
+def vo_shape_c(v):
+    """固定速度形状修正因子 c(v)=s(v)/s(v_ref)，参考速度处=1。
+
+    s(v)=exp(VO_SHAPE_A+VO_SHAPE_B·v)（pooled 标定，见常量注释），v 钳位到
+    样本有效域 [SCALE_KIN_VMIN, SCALE_KIN_VMAX]。EKF_VSHAPE_ENABLE=0 时
+    整条速度形状链路关闭，调用方不进入本函数。
+    """
+    v = min(max(float(v), SCALE_KIN_VMIN), SCALE_KIN_VMAX)
+    return math.exp(VO_SHAPE_B * (v - VO_SHAPE_VREF))
+
+
+class VelocityScaleModel:
+    """单目 VO 局部尺度速度形状在线模型: s(v) = exp(a + b·v)。
+
+    单目 VO 帧间位移的局部尺度（真实位移/记录位移）随车辆速度系统性变化：
+    低速特征噪声抬高表观位移、高速运动模糊压低，Town05 实测 <3 m/s 局部
+    尺度≈0.9、7-9 m/s≈3.7、9-12 m/s≈5.5（直线/转弯帧一致，非转弯伪影），
+    单一刻度状态对此结构性有偏。
+
+    观测: 转弯稳态帧的纯运动学样本 (v_kin, r)——v_kin=|a_lat|/|ω| 为真实
+    m/s（纯 IMU，无尺度/VO 依赖），r=v_kin/v_VO_rec 即该速度下的真实局部
+    尺度（稳态圆周运动 a_lat=|ω|·v）。对 log r ~ v_kin 做带遗忘因子 RLS，
+    样本域 [V_LO, V_HI] 外钳位、超出合理 r 范围剔除。
+
+    用途: 应用侧 c(v)=s(v)/s(v_ref) 修正速度/位置观测的尺度；观测侧
+    s_obs=r/c(v_kin) 把样本归一到参考速度 v_ref，使 EKF 尺度状态只跟踪
+    水平。样本不足（n<n_min）时 ready()=False、c(v)≡1，退化为原单刻度行为。
+
+    状态: 【实验分支，默认关闭】(EKF_VSCALE_ENABLE=1 启用)。
+    Town05 5000 帧 replay 验证为负收益: ATE 83.71(基线) → 206.46(启用)，
+    尾部 f2000 后发散。根因: ① 低速端外推错——57% 帧 <3 m/s，模型给
+    s(2)=1.83 而逐档真值≈0.89，放大了占多数的低速位移 ~2×；② 运动学
+    样本仅在中高速转弯帧存在（直道 ω→0 病态），低速段无在线观测可拟合；
+    ③ oracle 测试(逐帧真速度×逐档真尺度)显示逐速度尺度对 raw VO 本身有益
+    (440.7→264.3)，但该形状无法从现有 IMU/VO 信号在线捕获（高速样本被
+    侧滑污染、真值曲线非单调）。对 EKF 而言坏形状远不如准常数，故关闭。
+    """
+
+    V_LO, V_HI = 2.0, 12.0   # 样本有效速度域（m/s），应用侧外推钳位
+    R_LO, R_HI = 0.3, 30.0   # r 合理范围（超出=滑移/异常样本）
+    R_NOISE = 0.02           # log 域观测噪声（与 SCALE_R_BASE 一致）
+
+    def __init__(self, v_ref=6.0, lam=0.999, n_min=15):
+        self.v_ref = v_ref
+        self.lam = lam
+        self.n_min = n_min
+        self.a = math.log(3.0)   # 初值 s(v_ref)≈3.0（量级先验，RLS 收敛覆盖）
+        self.b = 0.0
+        self.P = np.eye(2) * 10.0
+        self.n = 0
+
+    def add(self, v_kin, r):
+        """喂入一个 (v_kin, r) 运动学样本，递推更新 (a, b)。"""
+        if not (self.V_LO <= v_kin <= self.V_HI and self.R_LO <= r <= self.R_HI):
+            return
+        phi = np.array([1.0, v_kin])
+        theta = np.array([self.a, self.b])
+        y = math.log(r)
+        Pphi = self.P @ phi
+        S = float(phi @ Pphi) + self.R_NOISE
+        K = Pphi / S
+        theta += K * (y - float(phi @ theta))
+        self.P = (self.P - np.outer(K, phi @ self.P)) / self.lam
+        self.a, self.b = float(theta[0]), float(theta[1])
+        self.n += 1
+
+    def ready(self):
+        return self.n >= self.n_min
+
+    def s(self, v):
+        v = min(max(float(v), self.V_LO), self.V_HI)
+        return math.exp(self.a + self.b * v)
+
+    def c(self, v):
+        """速度修正因子 c(v)=s(v)/s(v_ref)，参考速度处=1。"""
+        return self.s(v) / self.s(self.v_ref)
+
 
 class EKF_VIO:
-    # 状态向量 10 维: [x, y, z, vx, vy, vz, roll, pitch, yaw, log(VO尺度)]
-    # 第 10 维为 VO 度量尺度的 log（旧版固定 scale=0.10 比真实小 ~3.5×，
-    # 速度/位置观测量纲错误 → 位置分支退化为抄 VO 绝对位置 → 融合≈纯VO。
-    # 尺度在线收敛由 IMU 加速度动力学提供可观测性，初值 0.10 与旧固定尺度一致）
+    # 状态向量 10 维: [x, y, z, vx, vy, vz, roll, pitch, yaw, log(VO尺度水平)]
+    # 第 10 维为 VO 度量尺度在参考速度 v_ref 处的 log 水平；速度形状 s(v)
+    # 由 VelocityScaleModel 用纯运动学样本在线拟合，状态只跟踪水平，
+    # 应用总尺度 = 水平 × c(v)（见 visual_update）。
     def __init__(self, init_pose, init_vel, dt=0.05):
         self.x = np.array([
             init_pose[0], init_pose[1], init_pose[2],
@@ -979,41 +1038,33 @@ class EKF_VIO:
                           0.05, 0.05, 0.05, VO_SCALE_SIGMA0 ** 2])
 
         # 过程噪声 Q（连续时间，离散化 Q_d = Q_cont * dt）
-        # 区分平移(位置/速度)与旋转(姿态)：平移噪声明显更大，
-        # 保证 P 不过度收缩、卡尔曼增益 K 具备合理量级，视觉观测能修正状态
-        self.Q_cont = np.diag([0.18, 0.18, 0.09,   # 平移-位置 m²/s（0.10→0.18: 适度降低对IMU位置预测置信度；过大易致轨迹抖动）
-                                0.72, 0.72, 0.36,   # 平移-速度 (m/s)²/s（0.40→0.72: 微调降IMU速度置信度，配合低R下限让VO速度观测主导修正）
-                                0.0072, 0.0072, 0.018,  # 旋转-姿态 rad²/s（0.004/0.010→0.0072/0.018: 微调，VO姿态观测参与修正且不引入抖动）
+        # 平移噪声大于旋转噪声，保证 P 不过度收缩、K 具备合理量级
+        self.Q_cont = np.diag([0.18, 0.18, 0.09,   # 平移-位置 m²/s
+                                0.72, 0.72, 0.36,   # 平移-速度 (m/s)²/s
+                                0.0072, 0.0072, 0.018,  # 旋转-姿态 rad²/s
                                 VO_SCALE_Q])        # log尺度 rad²/s（~0.02%/s 随机游走）
 
-        # 观测噪声 R：区分速度/姿态/航向/位置四个独立矩阵
-        # R 不宜过大，否则 S≈R 主导，K=P H'(H P H'+R)^-1→0，观测无法修正状态
-        # R 基准值（Town01 低质量VO场景调优）；visual_update 上再乘质量自适应因子 qf：
-        # 高质量VO地图(Town02)自动缩小R→增益增大充分信任VO；低质量地图放大R→降权防抖
+        # 观测噪声 R：速度/姿态/航向/位置四个独立矩阵，visual_update 再乘质量自适应因子 qf
+        # （高质量VO地图缩小R→增益增大；低质量地图放大R→降权防抖）
         # 车体系水平速度观测幅值（1D 幅值观测，方向由 EKF 航向提供）
         self.R_vel = 0.20                       # (m/s)² 基准（VO 幅值，含 VO 噪声）
         self.R_att = np.diag([0.05, 0.50])          # 姿态观测 rad² 基准（roll/pitch；yaw 由航向观测单独修正）
-        self.R_heading = 0.05                       # 转弯航向率观测 rad²（运动学 a/v 噪声 σ≈0.25rad/s≈14°，放宽防恒拒）
+        self.R_heading = 0.05                       # 转弯航向率观测 rad²
         self.R_pos = np.diag([0.06, 0.06])          # 位置观测 m² 基准（scale×VO增量锚定）
         self._vo_match_ref = 60.0   # VO内点数参考: inliers≥ref→qf=1满信任; inliers=ref/3→qf=3降权
-        # 残差自适应R上下限（乘性因子，等效R的max/min）：下限再降 0.01→0.008，
-        # 小残差时R更充分收缩→增益增大，VO修正力度增强；
-        # 上限保持10不变，抵御异常观测；限幅防R无界
+        # 残差自适应R上下限（乘性因子，等效R的max/min），限幅防R无界
         self.R_ADAPT_FLOOR = 0.008
         self.R_ADAPT_CEIL = 10.0
         self.fixed_r = FIXED_R      # 固定R消融：True = R 恒为基准值
 
-        # 卡方门限：速度/姿态 0.99 严格（零帧创新大，防离群放行）；位置 0.999
-        # 减少误拒有效锚定观测（位置误拒只跳过该帧，不扰动协方差）
+        # 卡方门限：速度/姿态 0.99 严格，位置 0.999（减少误拒有效锚定观测）
         self.chi2_vel = 9.21        # χ²(2,0.99)
         self.chi2_att = 9.21        # χ²(2,0.99)（roll/pitch 二维）
         self.chi2_pos = 13.82       # χ²(2,0.999)
         self.chi2_heading = float(_scipy_stats.chi2.ppf(0.95, 1))  # χ²(1,0.95)=3.84
 
         # ── 转弯航向观测（绝对航向率，与陀螺零偏无关）──
-        # 转弯时车体做近似匀速圆周运动：dψ/dt = a_lat / v_fwd。
-        # VO 航向是 ±90~150° 累积漂移的主源（记忆结论），速度观测又依赖融合
-        # 航向 → 航向错→位置跟着错。航向观测直接修正 yaw，打破该闭环。
+        # 转弯近似匀速圆周运动：dψ/dt = a_lat / v_fwd，直接修正 yaw。
         # 门控条件（防直道噪声/急转异常）：窗口平均速度>TURN_GATE_AVG_SPEED、
         # |a_lat|>TURN_GATE_MIN_ALAT、|gyro_z|<TURN_GATE_MAX_GYRZ。
         self._turn_speed_win = deque(maxlen=TURN_SPEED_WIN)
@@ -1027,12 +1078,11 @@ class EKF_VIO:
         self._scale_rejected = 0
         self._scale_obs_hist = []    # [调试] s_obs 原始分布（EKF_DEBUG_SCALE 时记录）
         self._scale_dr_vel_hist = [] # [调试] 观测时 DR 速度幅值
-        self._kin_win = deque(maxlen=200)   # 运动学速度比样本（转弯帧，尺度观测用）
-        self._scale_kin_count = 0           # 运动学尺度观测节奏计数（每 SCALE_WIN 帧一次）
-        # 免陀螺零偏的航向基准（角度）：初值=初始 yaw（GT，正确）。
-        # 转弯时按运动学关系 dψ/dt = a_lat/v 累积（零偏无关，符号经 CARLA 实测
-        # 确认）；直道冻结（直道无运动学可观测性，避免噪声乱走）。
-        # visual_update 用它做角度级航向观测（不是角速度！）修正 EKF yaw。
+        self._kin_win = deque(maxlen=200)   # 运动学样本 (v_kin, r)（转弯帧，尺度用）
+        self._scale_kin_count = 0           # 尺度观测节奏计数（每 5 帧取窗中值一次）
+        self._vs_model = VelocityScaleModel()  # 速度形状模型 s(v)=exp(a+b·v)
+        # 免陀螺零偏的航向基准（角度）：初值=初始 yaw，转弯时按 dψ/dt = a_lat/v 累积，
+        # 直道冻结；visual_update 用它做角度级航向观测修正 EKF yaw。
         self._heading_base = float(init_pose[5])
 
         self._gyro_bias = np.zeros(3)
@@ -1049,10 +1099,8 @@ class EKF_VIO:
         self.innovation_rejected = 0
         self._vel_reinit = 0               # 速度重初始化次数（1D 幅值观测失配时）
 
-        # 残差滑动窗口（自适应 R 用）：仅缓存最近 N 帧马氏距离，
-        # 均值滤波后作为 _r_scale 的输入，抑制单帧 VO 跳变导致的 R 剧烈跳动。
-        # 卡方门仍用原始单帧残差，离群剔除逻辑不变。
-        # ENABLE_RESIDUAL_SMOOTH=False 时窗口长度退化为 1（等价原始单帧残差）
+        # 残差滑动窗口（自适应 R 用）：缓存最近 N 帧马氏距离做均值滤波，
+        # 抑制单帧 VO 跳变导致的 R 剧烈跳动；卡方门仍用原始单帧残差
         _win = RESID_SMOOTH_WINDOW if ENABLE_RESIDUAL_SMOOTH else 1
         _win_att = RESID_SMOOTH_WINDOW_ATT if ENABLE_RESIDUAL_SMOOTH else 1
         self._resid_win_vel = deque(maxlen=_win)
@@ -1064,10 +1112,8 @@ class EKF_VIO:
         self._last_vo_pose = None
         self._last_vo_inliers = int(self._vo_match_ref)  # 当前帧VO内点数（主循环喂入，驱动质量自适应R）
 
-        # VO 尺度已升为状态 x[9]=log(scale)：主循环累积 vo_abs_pose 仍用
-        # ScaleEstimator 的固定初值（与状态初值 VO_SCALE_PRIOR 一致），
-        # EKF 内部一律用当前状态尺度做观测/位置换算。
-        # _vo_scale_ema 保留为兼容接口：恒返回 exp(x[9])。
+        # VO 尺度为状态 x[9]=log(scale)；EKF 内部用当前状态尺度做观测/位置换算
+        # _vo_scale_ema 为兼容接口：恒返回 exp(x[9])
         self._vo_scale_ema = VO_SCALE_PRIOR
         self._vo_scale_initialized = True  # 立即启用（状态尺度从初值在线收敛）
 
@@ -1085,9 +1131,7 @@ class EKF_VIO:
         self._vo_aligned = False         # VO 首帧一次性对齐标志
         self._heading_dbg = 0            # 航向观测调试计数
 
-        # 独立纯 IMU 航位推算状态（仅 IMU 积分，无 VO 修正，自带陀螺姿态）
-        # 用于消融 Pure-IMU 基线：原来 imu_pos 取的是已被 VO 修正的 EKF 状态，
-        # 导致 Pure-IMU 列与 Fusion 列几乎完全一致，掩盖融合实际增益。
+        # 独立纯 IMU 航位推算状态（仅 IMU 积分，无 VO 修正），消融 Pure-IMU 基线用
         self._imu_dr_pos = np.array(init_pose[:3], dtype=np.float64)
         self._imu_dr_vel = np.array(init_vel, dtype=np.float64)
         self._imu_dr_att = np.array(init_pose[3:6], dtype=np.float64)
@@ -1108,10 +1152,8 @@ class EKF_VIO:
         return float(np.clip(f, 1.0 / 3.0, 3.0))
 
     def _adaptive_r_factor(self, base_qf, dist, dof):
-        """残差自适应R因子。[改动2] 仅微调映射曲线形态，R_min/R_max（clip 边界）不变。
-        平滑开启: resid = RESID_MAP_BASE + (eff/dof)**RESID_MAP_POWER, eff = dist/SENS。
-          BASE 使小残差时 R 抬离下限 → K<1，IMU/观测合理分配；POWER 控制大残差增长速率。
-        平滑关闭: 回退原始纯二次 (dist/dof)²，等价原始版本（保留消融基线）。
+        """残差自适应R因子。平滑开启: resid = RESID_MAP_BASE + (eff/dof)**POWER,
+        eff = dist/SENS；平滑关闭: 回退纯二次 (dist/dof)²。
         卡方离群门仍用原始单帧残差，此处不参与异常剔除。"""
         if ENABLE_RESIDUAL_SMOOTH:
             eff = max(float(dist), 1e-6) / float(RESID_MAP_SENSITIVITY)
@@ -1203,8 +1245,7 @@ class EKF_VIO:
         accel_world = R_body2world @ accel
         accel_world[2] -= 9.81  # 补偿重力：IMU 测量包含重力，世界系减去
 
-        # 独立纯 IMU 航位推算（供消融 Pure-IMU 基线）：用自己的陀螺姿态积分，
-        # 不接收任何 VO 修正，反映真实 IMU 漂移（≈16878m vs 融合 470m）
+        # 独立纯 IMU 航位推算（供消融 Pure-IMU 基线）：不接收任何 VO 修正
         R_dr = R.from_euler('xyz', self._imu_dr_att).as_matrix()
         aw_dr = R_dr @ accel
         aw_dr[2] -= 9.81
@@ -1251,47 +1292,47 @@ class EKF_VIO:
 
     def visual_update(self, visual_pose):
         self._update_call_count += 1
-        # 调试：打印 update 实际执行次数，确认视觉观测真正进入 update
         print(f"[EKF UPDATE] visual_update count={self._update_call_count}, "
               f"ts_pose=({visual_pose[0]:.2f},{visual_pose[1]:.2f},{visual_pose[2]:.2f})")
         z = np.array(visual_pose, dtype=np.float64)
 
-        # 基础质量因子(内点数)；残差因子按分支叠加并限幅到[R_ADAPT_FLOOR, R_ADAPT_CEIL]
-        # 固定R消融：fixed_r 开启时质量因子恒 1，R 不随内点数缩放
+        # 基础质量因子(内点数)；固定R消融时恒 1
         qf_base = 1.0 if self.fixed_r else self._vo_quality_gain(self._last_vo_inliers)
 
-        # === VO 帧间位移（主循环按 ScaleEstimator 固定尺度 0.10 累积） ===
-        # 主循环 vo_abs_pose 用固定初值尺度累积（VO_SCALE_PRIOR）；本类统一用
-        # 当前状态尺度 s=exp(x[9]) 做观测换算（尺度已升为第 10 维状态，
-        # 由 IMU 加速度动力学可观测，从 0.10 在线收敛到真实尺度）。
+        # === VO 帧间位移（主循环按固定尺度 0.10 累积） ===
         vo_disp_pos = np.zeros(3)
         if self._prev_vo_obs is not None:
             vo_disp_pos = z[:3] - self._prev_vo_obs[:3]
         self._prev_vo_obs = z.copy()
 
-        scale = self.get_scale()
-        scale = float(os.environ.get('EKF_FORCE_SCALE', scale))  # 消融: 强制尺度
         eff_dt = max(self._imu_steps_since_update, 1) * self.dt
         self._imu_steps_since_update = 0
+        v_vo_rec = float(np.linalg.norm(vo_disp_pos[:2])) / eff_dt  # 记录单位速度
+        scale = self.get_scale()
+        force_scale = os.environ.get('EKF_FORCE_SCALE')
+        if force_scale is not None:
+            scale = float(force_scale)  # 消融: 强制总尺度（绕过速度形状）
+        elif os.environ.get('EKF_VSHAPE_ENABLE', '0') == '1':
+            # 固定速度形状(pooled 标定, 实验分支默认关): 总尺度 = 水平状态
+            # × c(v)，v 取 EKF 速度状态幅值（真实 m/s，无尺度自依赖）。
+            # 四图回归证伪(2026-09-27): 真尺度曲线对 v 凸(2→6m/s log斜率
+            # 0.30, 6→12m/s 0.11), 线性指数形状两端都高估(c(2) +52%,
+            # c(12) +59%), 低速帧占多数 → 四图 ATE 全回退。
+            scale *= vo_shape_c(float(np.linalg.norm(self.x[3:6])))
+        elif os.environ.get('EKF_VSCALE_ENABLE', '0') == '1' and self._vs_model.ready():
+            # 在线 RLS 形状(实验分支, 默认关; Town05 证伪见 VelocityScaleModel)
+            scale *= self._vs_model.c(float(np.linalg.norm(self.x[3:6])))
         yaw = self.x[8]
         cw, sw = math.cos(yaw), math.sin(yaw)
 
         # === 航向观测（角度级，免陀螺零偏）===
-        # _heading_base 初值=初始 yaw（GT 正确），转弯时按 dψ/dt=a_lat/v 在车体
-        # 系积分（比力水平分量=向心加速度，指向转向内侧，符号经 CARLA 实测确认），
-        # 直道冻结（直道无运动学可观测性）。VO 航向漂移(±90-150°)是 ATE 主因，
-        # 速度观测又依赖融合航向 → 航向错→位置跟着错的闭环；此观测以角度级
-        # 修正 EKF yaw，打破闭环。
-        # 门控：窗口平均车速度>TURN_GATE_AVG_SPEED、|a_lat|>TURN_GATE_MIN_ALAT、
-        # |gyro_z|<TURN_GATE_MAX_GYRZ（排除直道噪声与急转/异常）。
+        # _heading_base 初值=初始 yaw，转弯时按 dψ/dt=a_lat/v 积分，直道冻结
         if (HEADING_OBS_ENABLED
                 and self._last_accel_raw is not None and self._last_gyro_raw is not None
                 and len(self._turn_speed_win) >= 5
                 and float(np.mean(self._turn_speed_win)) > TURN_GATE_AVG_SPEED):
-            # 关键：a_lat 取原始车体系横向分量（不依赖 EKF 姿态，避免反馈），
-            # v_mag 取速度幅值（旋转不变，对航向误差不敏感）。两者都与当前
-            # 航向估计无关 → 航向率观测真正独立于航向误差不形成反馈闭环。
-            # （原始加速度计本就在车体系；roll≈pitch≈0 时重力不耦合进车体系横向）
+            # a_lat 取原始车体系横向分量、v_mag 取速度幅值：均不依赖当前
+            # 航向估计，航向率观测与航向误差无反馈闭环
             a_lat = float((self._last_accel_raw - self._accel_bias)[1])
             v_mag = float(np.linalg.norm(self.x[3:6]))
             if (abs(a_lat) > TURN_GATE_MIN_ALAT and v_mag > 2.0
@@ -1302,9 +1343,7 @@ class EKF_VIO:
                                        + np.pi) % (2 * np.pi) - np.pi
                 y_h = self._heading_base - self.x[8]
                 y_h = (y_h + np.pi) % (2 * np.pi) - np.pi
-                # 硬门限：残差大 = 运动学基准噪声（基准本身 vs GT p50≈94°），
-                # 不允许单帧大幅拖动陀螺积分航向；只有小残差（陀螺零偏量级）
-                # 才允许微调
+                # 硬门限：残差大 = 运动学基准噪声，不允许单帧拖动陀螺积分航向
                 if abs(y_h) > HEADING_MAX_STEP:
                     self._heading_rejected += 1
                     self._turn_count += 1
@@ -1325,22 +1364,12 @@ class EKF_VIO:
                         self._turn_count += 1
 
         # === 速度观测（1D 速度幅值；失配时直接重初始化速度） ===
-        # 速度状态由 imu_prediction 在【世界系】积分（R_body2world @ accel）。
-        # 历史教训（分支消融实测）：
-        #   2D 车体系速度观测 [幅值, 0] 的横向行在速度发散时残差巨大，
-        #   EKF 为消残差把 yaw 拖偏 ~100°（禁速度分支后 yaw_err 100.8°→6.9°）。
-        #   静止段 IMU 加速度零偏积分使 |v| 冲到 9.5 m/s，此时标准 χ² 门恒拒 →
-        #   速度永远拉不回来（标准 VIO 的速度失配问题）。
-        # 现改 1D 幅值观测：v_obs = ‖VO帧间位移‖×s/Δt，预测 = [0,0,0,cw,sw,0..]·x
-        # （世界系速度投到 EKF 航向前向；陀螺积分航向 vs GT <1°，方向可信）。
-        # 无横向行、无 yaw 雅可比 → 速度分支彻底不碰 yaw。
-        # 失配处理（|y| 超 χ² 门）：不做卡方丢弃，直接重初始化——
-        #   vx,vy = [cw,sw]×v_obs（把速度状态对齐到 VO 量级+EKF 方向），
-        #   速度协方差膨胀（承认这次对齐不确定）。单帧 VO 幅值噪声远小于
-        #   静止 9.5 m/s 的零偏漂移，重初始化收敛快且单调。
-        # 尺度不进 H（由独立尺度分支观测，避免观测值×s 的杠杆反馈）。
-        # 真实 VO 时间间隔 = 自上次更新以来的 IMU 步数 × dt（VO 稀疏时固定 dt
-        # 会高估速度）；首帧退化为 dt
+        # 速度状态在【世界系】积分。1D 幅值观测 v_obs = ‖VO帧间位移‖×s/Δt，
+        # 预测 = 世界系速度投到 EKF 航向前向；无横向行、无 yaw 雅可比 →
+        # 速度分支不碰 yaw。尺度不进 H（由独立尺度分支观测）。
+        # 失配（|y| 超 χ² 门）：直接重初始化 vx,vy = [cw,sw]×v_obs，
+        # 速度协方差膨胀（承认对齐不确定）。
+        # 真实 VO 时间间隔 = 自上次更新以来的 IMU 步数 × dt；首帧退化为 dt
         speed_obs = float(np.linalg.norm(vo_disp_pos)) * scale / eff_dt
 
         H_vel = np.zeros((1, 10))
@@ -1358,8 +1387,7 @@ class EKF_VIO:
         accept_vel, dist_vel = self._mahalanobis_gate(y_vel, np.array([[S]]), self.chi2_vel)
         if not accept_vel:
             self.innovation_rejected += 1
-            # 速度重初始化：幅度对齐 VO、方向取 EKF 航向（陀螺积分，可信），
-            # 速度协方差膨胀到至少覆盖 v_obs 量级（防单帧 VO 离群）
+            # 速度重初始化：幅度对齐 VO、方向取 EKF 航向，协方差膨胀防单帧离群
             self.x[3] = cw * speed_obs
             self.x[4] = sw * speed_obs
             vmin = max(speed_obs * 0.5, math.sqrt(float(self.R_vel)) * 2.0)
@@ -1369,9 +1397,7 @@ class EKF_VIO:
             self.P = 0.5 * (self.P + self.P.T)
             self._vel_reinit += 1
         else:
-            # 残差自适应R: 残差小→R缩小→增益增大；残差大→R放大→降权
-            # 用滑动窗口平滑后的残差（均值滤波）映射 R，抑制单帧跳变导致的 R 抖动；
-            # 卡方门仍用原始单帧残差 dist_vel
+            # 残差自适应R（滑动窗口平滑残差映射 R；卡方门用原始单帧残差）
             dist_vel_s = self._smooth_residual(self._resid_win_vel, dist_vel)
             R_use = float(self.R_vel) * self._r_scale(qf_base, dist_vel_s, 1)
             S = float((H_vel @ self.P @ H_vel.T)[0, 0]) + R_use + 1e-8
@@ -1399,8 +1425,7 @@ class EKF_VIO:
 
         accept_att, dist_att = self._mahalanobis_gate(y_att, S_att, self.chi2_att)
         if accept_att:
-            # 残差自适应R: 残差小→R缩小→增益增大；残差大→R放大→降权
-            # 用滑动窗口平滑后的残差映射 R；卡方门仍用原始单帧残差 dist_att
+            # 残差自适应R（滑动窗口平滑残差映射 R；卡方门用原始单帧残差）
             dist_att_s = self._smooth_residual(self._resid_win_att, dist_att)
             R_att_use = self.R_att * self._r_scale(qf_base, dist_att_s, 2)
             S_att = S_att - R_att_nom + R_att_use
@@ -1414,35 +1439,67 @@ class EKF_VIO:
                       + K_att @ R_att_use @ K_att.T)
             self._regularize_P()
 
-        # === 尺度观测（独立分支：转弯运动学速度 / VO 记录速度，H 仅含尺度行） ===
-        # s_obs = median(v_kin / v_VO)，v_kin = |a_lat|/|ω|（转弯运动学速度：
-        # 横向比力÷横摆角速度，均为原始 IMU 读数——无积分、无尺度依赖、
-        # 无零偏累积；离线 vs GT 速度 p50 误差 0%、p90 2%）。
-        # 为何弃用 IMU 航位(DR)速度差/VO 速度差法：Town02 加速度零偏残差使
-        # in-EKF DR 速度 p50≈28 m/s（真实车速 ~2.4 m/s），一切航位累积量
-        # 均被污染——Δv/Δp 在匀速段退化为 0/噪声(p50≈1383)，Δv/Δv p50≈6.32，
-        # 位移比漂移更大。运动学比值是唯一可用的纯度量速度源，但只在转弯
-        # 帧可观测（直道 ω→0 病态）→ 样本入窗、每 5 帧检查一次取窗中值
-        # 更新（中值抗单帧离群），直道段尺度冻结不变。
-        # 收敛速度实测关键：转弯帧率仅 ~5.6%，若要求 20 样本+每 60 帧才检查，
-        # 首次更新拖到 ~500 帧——前 25s 尺度=1.0 的漂移把累计 ATE 从 ~25 钉到
-        # 93（消融）。降到 5 样本+每 5 帧 → 首次更新在 ~10-30 帧内完成。
-        v_vo_rec = float(np.linalg.norm(vo_disp_pos[:2])) / eff_dt
+        # === 尺度观测（独立分支：转弯运动学样本，H 仅含尺度行） ===
+        # 样本 (v_kin, r)：v_kin=|a_lat|/|ω|（真实 m/s，纯 IMU、无尺度依赖），
+        # r=v_kin/v_vo_rec=该速度下真实局部尺度（稳态圆周运动 a_lat=|ω|·v）。
+        # 两个消费者：① 速度形状模型 RLS 拟合 s(v)=exp(a+b·v)；
+        # ② 每 5 帧取 r/c(v_kin) 窗中值（归一到参考速度水平）更新尺度状态——
+        # 状态只跟踪 s(v_ref) 水平，速度形状由模型在应用侧承担。
+        # 只在转弯帧可观测（直道 ω→0 病态），直道段尺度冻结。
         if (self._last_accel_raw is not None and self._last_gyro_raw is not None
                 and v_vo_rec > 0.3):
             a_lat_k = float((self._last_accel_raw - self._accel_bias)[1])
             w_k = float((self._last_gyro_raw - self._gyro_bias)[2])
-            # 门控消融实测（离线同帧三量对比）：a_lat>1.0 会把稳态转弯帧剔掉、
-            # 只剩瞬时高 g 帧 → v_kin 系统性偏高 1.39×（s_obs p50=5.03，ATE 87）；
-            # 放宽到 a_lat>0.3 + |w|>0.10 → v_kin/v_true=1.10、s_obs p50=3.88
-            # 落进最优尺度带(强制 s=3.48→25.38 / s=4.0→24.37)且分段稳定。
             if abs(w_k) > 0.10 and abs(a_lat_k) > 0.3:
-                self._kin_win.append(
-                    abs(a_lat_k) / (abs(w_k) * v_vo_rec))
+                v_kin = abs(a_lat_k) / abs(w_k)
+                _kmin = float(os.environ.get('EKF_KIN_VMIN', SCALE_KIN_VMIN))
+                _kmax = float(os.environ.get('EKF_KIN_VMAX', SCALE_KIN_VMAX))
+                if _kmin <= v_kin <= _kmax:
+                    # 域外=高速滑移/转弯瞬态, r 系统性偏高(10HD: v_kin>12 档
+                    # r 中位 9.1 vs 该速度真尺度≈7), 剔除防尺度上尾污染。
+                    # 样本第三分量=该帧 VO 记录速度(∝记录位移/路径贡献),
+                    # 供尺度窗加权中值用(见下方注释)。
+                    r_kin = v_kin / v_vo_rec
+                    self._kin_win.append((v_kin, r_kin, v_vo_rec))
+                    self._vs_model.add(v_kin, r_kin)
         self._scale_kin_count += 1
         if (self._scale_kin_count >= 5
                 and len(self._kin_win) >= 5):
-            s_obs = float(np.median(np.asarray(self._kin_win)))
+            vshape_on = (os.environ.get('EKF_VSHAPE_ENABLE', '0') == '1')
+            model_on = (not vshape_on
+                        and os.environ.get('EKF_VSCALE_ENABLE', '0') == '1'
+                        and self._vs_model.ready())
+            if model_on:
+                norms = [(r / self._vs_model.c(v), w)
+                         for v, r, w in self._kin_win]
+            elif vshape_on:
+                # 固定形状归一: 样本除以 c(v_kin) → 窗中值= s(v_ref) 水平
+                norms = [(r / vo_shape_c(v), w)
+                         for v, r, w in self._kin_win]
+            else:
+                norms = [(r, w) for _, r, w in self._kin_win]
+            # 截尾加权中值: top 10% 上尾(滑移/瞬态残留), n<10 不截。
+            # 权重=样本帧 VO 记录位移(∝路径贡献): 按样本数取中值会按
+            # 转弯样本数而非路径长度加权——高速段路径占主导的地图
+            # (Town05: 9-12m/s 段 956/3442 转移, 真尺度≈7)其样本中低速
+            # 转弯帧占多数, 等权中值把尺度水平压低(05 终值 3.07, ATE
+            # 最优常数≈4.5); 位移加权让观测与尺度作用的总路径对齐。
+            norms.sort(key=lambda t: t[0])
+            _trim = float(os.environ.get('EKF_SCALE_TRIM_FRAC', SCALE_TRIM_FRAC))
+            if len(norms) >= 10 and _trim > 0.0:
+                keep = max(int(math.ceil((1.0 - _trim) * len(norms))), 1)
+                norms = norms[:keep]
+            wsum = sum(w for _, w in norms)
+            if wsum <= 0.0:
+                s_obs = float(np.median([t[0] for t in norms]))
+            else:
+                cum = 0.0
+                s_obs = float(norms[-1][0])
+                for val, w in norms:
+                    cum += w
+                    if cum >= 0.5 * wsum:
+                        s_obs = float(val)
+                        break
             self._scale_kin_count = 0
             if os.environ.get('EKF_DEBUG_SCALE'):
                 self._scale_obs_hist.append(s_obs)
@@ -1450,28 +1507,33 @@ class EKF_VIO:
             y_s = math.log(max(s_obs, 1e-3)) - self.x[9]
             S_s = float(self.P[9, 9]) + SCALE_R_BASE
             if y_s * y_s < self.chi2_scale * S_s:
+                # 步限钳位: 单步 ≤±SCALE_MAX_STEP(log 域 ~28%)。P 初值大时首个
+                # 观测窗会把状态一步拉到观测处(10HD: 1.0→7.3), 钳位后渐近
+                # 收敛; 钳位=未解释残差仍在, 保留较大 P 维持可修正性, 否则
+                # P 塌缩后后续好观测被 χ² 冻结(10HD 7.3 永久冻结机制)。
+                _mstep = float(os.environ.get('EKF_SCALE_MAX_STEP', SCALE_MAX_STEP))
+                y_s_u = max(-_mstep, min(_mstep, y_s)) if _mstep > 0.0 else y_s
+                clamped = _mstep > 0.0 and abs(y_s) > _mstep
                 K_s = (self.P[:, 9] / S_s).reshape(10, 1)
-                self.x += (K_s * y_s).ravel()
+                self.x += (K_s * y_s_u).ravel()
                 H_s = np.zeros((1, 10))
                 H_s[0, 9] = 1.0
                 I_KH_s = np.eye(10) - K_s @ H_s
-                # 修复: 原代码误用速度分支泄漏的 I_KH.T（早期速度门恒拒时
-                # 未绑定 → UnboundLocalError；且数学上应为 I_KH_s 转置）
                 self.P = (I_KH_s @ self.P @ I_KH_s.T
                           + K_s @ (SCALE_R_BASE * np.ones((1, 1))) @ K_s.T)
+                if clamped:
+                    self.P[9, 9] = max(self.P[9, 9], SCALE_P_CLAMP)
+                else:
+                    self.P[9, 9] = max(self.P[9, 9], SCALE_P_FLOOR)
                 self._regularize_P()
                 self._scale_applied += 1
             else:
                 self._scale_rejected += 1
 
         # === 位置观测（短窗口相对锚 + 当前尺度；卡方门控） ===
-        # 关键：VO 绝对位置带 ±80~150° 全程航向漂移——绝对锚定（首帧锚到
-        # init）会把融合位置每帧拉向漂移后的 VO 位置（消融实测：VO位置×真尺度
-        # ATE=96.3m，比不锚更差；理论下限 VO幅值+陀螺航向积分 仅 2.89m）。
-        # 改短窗口相对锚：每 POSITION_WIN 帧用【EKF 当前位置】重锚
-        # z_obs = anchor_pos + s·(z - anchor_vo)。窗口内 VO 航向漂移
-        # (80°/250s≈0.32°/s) 仅 ~0.5° → 相对几何可信；锚定时刻残差为 0
-        # → 无跳变；全程 80° 漂移被挡在窗外。尺度不进 H（独立分支观测）。
+        # VO 绝对位置带全程航向漂移，故用短窗口相对锚：每 POSITION_WIN 帧
+        # 用 EKF 当前位置重锚，z_obs = anchor_pos + s·(z - anchor_vo)。
+        # 窗口内 VO 航向漂移可忽略；尺度不进 H（独立分支观测）。
         self._vo_anchor_age += 1
         if self._vo_anchor is None or self._vo_anchor_age >= POSITION_WIN:
             self._vo_anchor = (z[:2].copy(), self.x[:2].copy())
@@ -1480,9 +1542,7 @@ class EKF_VIO:
         vo_anchor, pos_anchor = self._vo_anchor
         # 窗口内 VO 位移幅值（锚定时刻残差=0，之后单调累积）
         self._vo_anchor_mag = float(np.linalg.norm(z[:2] - vo_anchor))
-        # 方向用 EKF 陀螺积分航向（vs GT max≈0.1°），VO 幅值 × 状态尺度；
-        # 禁用 VO 保存航向（相对起始帧坐标系，非世界系 → 绝对方向错 ~90°，
-        # 上限重建 ATE 208 vs 陀螺航向 27.9）
+        # 方向用 EKF 陀螺积分航向（VO 保存航向是相对起始帧坐标系，绝对方向错 ~90°）
         z_pos = pos_anchor + scale * self._vo_anchor_mag * np.array(
             [math.cos(yaw), math.sin(yaw)])
         H_pos = np.zeros((2, 10))
@@ -1496,8 +1556,7 @@ class EKF_VIO:
 
         accept_pos, dist_pos = self._mahalanobis_gate(y_pos, S_pos, self.chi2_pos)
         if accept_pos:
-            # 残差自适应R: 残差小→R缩小→增益增大；残差大→R放大→降权
-            # 用滑动窗口平滑后的残差映射 R；卡方门仍用原始单帧残差 dist_pos
+            # 残差自适应R（滑动窗口平滑残差映射 R；卡方门用原始单帧残差）
             dist_pos_s = self._smooth_residual(self._resid_win_pos, dist_pos)
             R_pos_use = self.R_pos * self._r_scale(qf_base, dist_pos_s, 2)
             S_pos = S_pos - R_pos_nom + R_pos_use
@@ -1512,13 +1571,10 @@ class EKF_VIO:
             self._regularize_P()
         else:
             self._pos_skip_count += 1
-            # 残差超阈 = 异常观测：直接跳过该帧位置观测（不修正状态、
-            # 不强制重锚），防止离群 VO 覆盖滤波器状态
+            # 残差超阈 = 异常观测：跳过该帧位置观测（不修正状态、不重锚）
             pass
 
-        # === 弱高度先验（替代旧"平坦地面伪观测"） ===
-        # 旧版每帧同时锁 z/roll/pitch/yaw：yaw 恒被拉回 0，会抵消航向修正。
-        # 新版只约束 z（弱，R=25）与 roll/pitch（CARLA 道路近水平，先验仍成立）。
+        # === 弱高度先验：只约束 z（弱）与 roll/pitch（CARLA 道路近水平） ===
         H_z = np.zeros((3, 10))
         H_z[0, 2] = H_z[1, 6] = H_z[2, 7] = 1.0
         R_zp = np.diag([R_Z_PRIOR, 0.01, 0.01])
@@ -1537,7 +1593,7 @@ class EKF_VIO:
         self._regularize_P()
         self._clamp_covariance()
 
-        # 兼容接口：_vo_scale_ema 恒为当前状态尺度（调试打印/主循环引用）
+        # 兼容接口：_vo_scale_ema 恒为当前状态尺度
         self._vo_scale_ema = scale
 
     def get_current_pose(self):
@@ -1547,7 +1603,7 @@ class EKF_VIO:
         return self.x[3:6].copy()
 
     def get_imu_dead_reckoning_pose(self):
-        # 独立纯 IMU 航位推算位姿（无 VO 修正）——消融 Pure-IMU 基线用
+        # 独立纯 IMU 航位推算位姿（无 VO 修正），消融 Pure-IMU 基线用
         return self._imu_dr_pos.copy(), self._imu_dr_att.copy()
 
     def get_position_uncertainty(self):
@@ -1889,23 +1945,17 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
     # 视觉里程计
     vo = VisualOdometry()
-    # recoverPose 只恢复单位方向（无度量尺度）：初值取 IMU 帧间位移量级
-    # (≈speed×dt≈0.1)，随后由 estimate_scale 在线跟踪速度变化；初值 1.0 会在
-    # EMA 收敛前把 VO 轨迹过积分 ~18m → 位置残差恒超阈 → 位置分支永不执行
+    # recoverPose 只恢复单位方向（无度量尺度），故取固定尺度初值
     scale_estimator = ScaleEstimator(fixed_scale_value=0.10)
 
-    # ---- VO 绝对位姿累积器（关键修复） ----
-    # VO process_frame() 返回的是帧间相对运动 [dx,dy,dz,roll,pitch,yaw]
-    # EKF visual_update() 需要绝对位姿观测
-    # 因此需要累积 VO 相对运动，构建 VO 绝对位姿
+    # ---- VO 绝对位姿累积器 ----
+    # VO process_frame() 返回帧间相对运动，累积后供 EKF visual_update() 作绝对位姿观测
     vo_abs_pose = list(init_pose)  # 初始化为车辆初始位姿
     vo_prev_relative = None  # 上一帧 VO 相对运动，用于尺度估计
 
-    # ---- 进度看门狗 + 容错计数（可靠性加固） ----
-    # last_progress：最后一次"有图像帧被写入"的时刻；主循环每圈检查，
-    #   长时间无进展（CARLA 挂起/断连）时给出明确告警，不再静默卡死。
-    # consecutive_errors：连续异常帧计数；单帧异常不再让整轮采集提前退出，
-    #   而是跳过该帧继续；连续异常过多才触发车辆重置。
+    # ---- 进度看门狗 + 容错计数 ----
+    # last_progress：最后一次"有图像帧被写入"的时刻（长时间无进展时告警）；
+    # consecutive_errors：连续异常帧计数（单帧异常跳过，过多才触发重置）
     last_progress = time.time()
     stall_warned = False
     consecutive_errors = 0
@@ -1936,7 +1986,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
     img_idx = 0
     stagnant_count = 0
 
-    # 【MOD:D2】油门/刹车平滑状态初始化
+    # 油门/刹车平滑状态
     prev_throttle = 0.0
     prev_brake = 0.0
 
@@ -2118,10 +2168,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 vo_motion_norm = np.linalg.norm(vo_pose[:3])
                 vo_rot_norm = np.linalg.norm(vo_pose[3:6])
                 if vo_motion_norm < 1e-6 and vo_rot_norm < 1e-6:
-                    # VO 返回零运动（特征不足/匹配失败）：携带最近一次有效绝对位姿
-                    # 进入 update 做位置锚定，防止 ~40% 无特征帧纯 IMU 漂移累积
-                    # （位移=0 → 速度观测≈0，会被速度卡方门按状态速度自动拒绝，
-                    #  仅位置观测生效 → 锚定到最后有效 VO 位姿）
+                    # VO 零运动（特征不足）：携带最近一次有效绝对位姿做位置锚定，防纯 IMU 漂移累积
                     ekf.imu_prediction(imu_data.data)
                     if ekf._last_vo_pose is not None:
                         # VO 已锚定过：携带最近一次有效绝对位姿执行 update
@@ -2146,8 +2193,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                                  f"{math.radians(gt_rot.roll):.6f},"
                                  f"{math.radians(gt_rot.pitch):.6f},"
                                  f"{math.radians(gt_rot.yaw):.6f}\n")
-                    # VO 日志写携带绝对位姿(特征丢失期间 VO 轨迹估计保持不变)；
-                    # 原 0,0,0 把"零增量"误记为"零绝对位姿"，使 Pure-VO 基线虚低
+                    # VO 日志写携带绝对位姿(特征丢失期间 VO 轨迹估计保持不变)
                     vo_log.write(f"{img_data.data.timestamp:.6f},"
                                  f"{vo_abs_pose[0]:.6f},{vo_abs_pose[1]:.6f},{vo_abs_pose[2]:.6f},"
                                  f"{vo_abs_pose[3]:.6f},{vo_abs_pose[4]:.6f},{vo_abs_pose[5]:.6f}\n")
@@ -2178,21 +2224,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                     continue
 
                 # ---- 尺度（单目 VO 尺度歧义 = 车体速度 × 帧间隔） ----
-                # recoverPose 只恢复单位方向（t 无度量信息）：度量尺度 = 速度×dt
-                # ≈0.10（GT 路径 495m/250s×0.05s 回归）。此前 current_scale 恒 1.0
-                # → 位置/速度观测量纲错误 → 卡方门恒拒 → 融合退化为纯 IMU。
-                # 在线 estimate_scale 以漂移的 IMU 航位位移为参考会随漂移发散(→0.7)，
-                # 故取固定尺度（ScaleEstimator 推荐用法）。
                 scale = scale_estimator.get_current_scale()
 
-                # ---- 累积 VO 相对运动 → 绝对位姿（坐标系修正） ----
-                # VO process_frame() 返回帧间相对运动：平移在【相机坐标系】
-                # （x右/y下/z光轴），前进运动主要在光轴 dz 上；roll/pitch/yaw
-                # 是帧间【增量】欧拉角（源自帧间 R）。
-                # 旧累积把 (dx,dy) 当水平、dz 当高度 → 前进量被记成高度（vo_z 达
-                # -1603m）。修正：按相机固定安装 pitch=-20° 做正交变换
-                # （光轴 dz → 车辆前进，dy → 高度，dx → 左），再按当前偏航旋转
-                # 到世界系累加，并应用度量尺度。
+                # ---- 累积 VO 相对运动 → 绝对位姿 ----
+                # VO 返回帧间相对运动（平移在相机坐标系，旋转为帧间欧拉角增量）；
+                # 按相机固定安装 pitch=-20° 做正交变换，再按当前偏航旋转到世界系累加，应用度量尺度。
                 cam_dx, cam_dy, cam_dz = float(vo_pose[0]), float(vo_pose[1]), float(vo_pose[2])
                 # 相机固定安装(pitch=-20°，光轴指向车体后下方)的正交映射：
                 # 光轴 -dz → 车辆前进、dx → 左、dy → 高度（符号经录制数据回归验证）
@@ -2331,10 +2367,9 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 destination = select_forward_destination(vehicle, spawn_points)
                 agent.set_destination(destination)
                 print(f"[OK] 到达目标, 新目标: ({destination.x:.1f}, {destination.y:.1f})")
-                # 【MOD:MAP】换目标后验证路径有效性
                 validate_agent_path(agent, vehicle, spawn_points, world)
 
-            # 【MOD:MAP】每 100 帧动态更新自适应安全距离和 PID
+            # 每 100 帧更新自适应安全距离和 PID
             if img_idx % 100 == 0:
                 road_width = estimate_road_width(vehicle, world)
                 adaptive_safe_dist = compute_adaptive_safe_distance(road_width)
@@ -2347,7 +2382,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 curvature = estimate_path_curvature(agent)
                 apply_adaptive_pid(agent, curvature)
 
-            # 【MOD:E6】提前获取车速，供控制逻辑和停滞检测使用
+            # 提前获取车速，供控制逻辑和停滞检测使用；
             # 车辆句柄暂不可用时按 0 处理（触发停滞重置），不抛异常打断采集
             try:
                 vel = vehicle.get_velocity()
@@ -2355,7 +2390,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             except Exception:
                 speed = 0.0
 
-            # 【MOD:MAP】诊断日志：每 200 帧打印路径和路点信息
+            # 诊断日志：每 200 帧打印路径和路点信息
             if img_idx % 200 == 0 and img_idx > 0:
                 try:
                     if hasattr(agent, '_local_planner'):
@@ -2375,26 +2410,24 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 control = agent.run_step()
                 control.manual_gear_shift = False
 
-                # 【MOD:D1】转向角限幅：最大 ±0.5（约 ±30°），防止急转弯
+                # 转向角限幅 ±0.5，防止急转弯
                 max_steer = 0.5
                 control.steer = max(-max_steer, min(max_steer, control.steer))
 
-                # 【MOD:E4】油门/刹车平滑，α 从 0.3 提高到 0.6，减少过度压制
+                # 油门/刹车平滑
                 alpha = 0.6
                 control.throttle = alpha * control.throttle + (1 - alpha) * prev_throttle
                 control.brake = alpha * control.brake + (1 - alpha) * prev_brake
                 prev_throttle = control.throttle
                 prev_brake = control.brake
 
-                # 【MOD:E5】碰撞制动时限：仅碰撞后 1.5 秒内强制减速，之后自动释放
-                # 理由：原逻辑 collision_count>0 永真，一次碰撞后永久刹车导致停滞
+                # 碰撞制动时限：仅碰撞后 1.5 秒内强制减速，之后自动释放
                 if collision_sensor.collision_count > 0:
                     if time.time() - collision_sensor.last_collision_time < 1.5:
                         control.throttle = 0.0
                         control.brake = max(control.brake, 0.3)
 
-                # 【MOD:MAP】刹车歧视：窄路无动态障碍物时抑制过度刹车
-                # 避免 Town10HD 等窄地图误判墙壁为障碍物导致频繁无故刹停
+                # 刹车歧视：窄路无动态障碍物时抑制过度刹车
                 if control.brake > 0.3 and collision_sensor.collision_count == 0:
                     rw = estimate_road_width(vehicle, world)
                     n_dyn = count_nearby_dynamic_actors(vehicle, world)
@@ -2405,7 +2438,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                         if speed < 2.0:
                             control.throttle = max(control.throttle, 0.15)
 
-                # 【MOD:E6】停滞恢复：车速 < 0.05 且无碰撞时，连续 80 帧后强制释放刹车
+                # 停滞恢复：车速 < 0.05 且无碰撞时，连续 80 帧后强制释放刹车
                 if speed < 0.05 and collision_sensor.collision_count == 0:
                     if stagnant_count > 80:
                         control.brake = 0.0
@@ -2432,7 +2465,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 reset_needed = True
                 reset_reason = "碰撞过多"
 
-            # 【MOD:E6】speed 已在控制段之前计算，此处复用；停滞超 150 帧重置
+            # 停滞超 150 帧重置
             if speed < 0.1:
                 stagnant_count += 1
                 if stagnant_count > 150:
@@ -2444,17 +2477,14 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
             if reset_needed:
                 print(f"[RESET] 原因: {reset_reason}")
-                # 可靠性加固：_reset_vehicle 先成功生成新车再销毁旧车，
-                # 生成失败时旧车/传感器保持可用，循环继续推进（旧逻辑下
-                # 此处失败会让 vehicle 指向已销毁 actor，下一帧抛异常后
-                # 整轮采集被中断，跑不满 5000 帧）。
+                # _reset_vehicle 先生成新车再销毁旧车，失败时旧车保持可用、循环继续推进
                 for _reset_attempt in range(3):
                     try:
                         vehicle, agent, camera, cam_transform, imu, collision_sensor = \
                             _reset_vehicle(world, bp_lib, vehicle, spawn_points,
                                            sensor_queue, camera, imu, collision_sensor)
                         stagnant_count = 0
-                        prev_throttle = 0.0   # 【MOD:D2】重置时清空平滑状态
+                        prev_throttle = 0.0   # 重置时清空平滑状态
                         prev_brake = 0.0
                         print(f"[OK] 重置完成 (第{_reset_attempt + 1}次尝试)")
                         break
@@ -2481,8 +2511,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
         import traceback
         traceback.print_exc()
     finally:
-        # ---- 补帧兜底：任何原因提前退出时，用最后已知状态把四个数据文件
-        # 补写到 MAX_SAVE_IMG 行，保证数据集长度完整（图像文件保持实际数量）
+        # ---- 补帧兜底：提前退出时用最后已知状态把四个数据文件补写到 MAX_SAVE_IMG 行
         if img_idx < MAX_SAVE_IMG:
             print(f"[BACKFILL] 采集在 {img_idx}/{MAX_SAVE_IMG} 帧处结束，补写数据文件...")
             try:
@@ -2595,7 +2624,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             total = ekf.innovation_accepted + ekf.innovation_rejected
             acc_rate = (ekf.innovation_accepted / total * 100) if total > 0 else 0
             print(f"\n[EKF STATS] 尺度初始化: {ekf._vo_scale_initialized}")
-            print(f"            尺度状态(叠加在0.10之上): {ekf.get_scale():.4f}")
+            print(f"            尺度水平状态 s(v_ref) (叠加在0.10之上): "
+                  f"{ekf.get_scale():.4f}")
+            _vm = ekf._vs_model
+            print(f"            速度形状模型: n={_vm.n} b={_vm.b:.4f} "
+                  f"s(2)={_vm.s(2):.2f} s(6)={_vm.s(6):.2f} s(12)={_vm.s(12):.2f}")
             print(f"            visual_update 调用: {ekf._update_call_count}")
             print(f"            速度/姿态更新: accepted={ekf.innovation_accepted}, "
                   f"rejected={ekf.innovation_rejected} "
@@ -2605,7 +2638,7 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                   f"rejected={ekf._heading_rejected}")
             print(f"            尺度观测: applied={ekf._scale_applied}, "
                   f"rejected={ekf._scale_rejected}")
-            print(f"            总帧数: {img_idx}")  # 修复：total_frames 未定义，改用同作用域 img_idx
+            print(f"            总帧数: {img_idx}")
         except Exception as e:
             print(f"[EKF STATS] 统计失败: {e}")
 
@@ -2620,10 +2653,8 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 #  离线复算（--replay）：同一份采集 CSV 上重跑 EKF，秒级迭代融合参数
 #  输入: <data_dir>/{ground_truth,visual_odometry,aligned_imu}.txt
 #  输出: 覆盖 <data_dir>/fusion_pose.txt（同采集格式）+ 打印三方法 ATE/RPE/Drift
-#  与活体采集口径一致：每帧 1 次 imu_prediction(dt=0.05) + 1 次 visual_update，
-#  VO 绝对位姿直接取采集时记录的 visual_odometry.txt（主循环累积已含固定尺度
-#  与相机→车体系变换），零运动帧（相邻两行完全相同）走"携带位姿锚定"分支。
-#  注：CSV 未记录 VO 内点数，复算时 _last_vo_inliers 恒取 _vo_match_ref（qf=1）。
+#  与活体采集同口径：每帧 1 次 imu_prediction + 1 次 visual_update；
+#  VO 内点数未记录，复算时 _last_vo_inliers 恒取 _vo_match_ref（qf=1）
 # ═════════════════════════════════════════════════════════════
 
 class _ReplayVec:
@@ -2750,8 +2781,12 @@ def replay(data_dir):
         print(f"{name:<14}{_ate(gt_xy, xy):<12.2f}{_rpe(gt_xy, xy):<12.4f}"
               f"{_drift(xy, gt_xy):<10.2f}{ekf.get_scale() if name == 'EKF Fusion' else float('nan'):<12.4f}")
     print("─" * 62)
-    print(f"[REPLAY] 尺度轨迹: 初值 {VO_SCALE_PRIOR} → 终值 {ekf.get_scale():.4f} "
+    _vm = ekf._vs_model
+    print(f"[REPLAY] 尺度水平轨迹(状态= s(v_ref={_vm.v_ref})): "
+          f"初值 {VO_SCALE_PRIOR} → 终值 {ekf.get_scale():.4f} "
           f"(每250帧: {[(f, round(s, 3)) for f, s in scale_hist[-4:]]})")
+    print(f"[REPLAY] 速度形状模型: n={_vm.n} a={_vm.a:.3f} b={_vm.b:.4f} "
+          f"s(2)={_vm.s(2):.2f} s(6)={_vm.s(6):.2f} s(12)={_vm.s(12):.2f}")
     print(f"[REPLAY] 航向观测: applied={ekf._heading_applied}, "
           f"rejected={ekf._heading_rejected}, 转弯帧≈{ekf._turn_count}")
     print(f"[REPLAY] 位置观测跳过: {ekf._pos_skip_count}")

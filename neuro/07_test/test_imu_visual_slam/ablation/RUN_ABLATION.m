@@ -18,8 +18,10 @@ script_dir = fileparts(mfilename('fullpath'));
 neuro_root = fileparts(fileparts(fileparts(script_dir)));
 
 datasets = {
-    'Town01Data_IMU_Fusion', 'Town01', 'Town', 1802.26;
-    'MH_03_medium', 'MH_03', 'EuRoC', 127.07;
+    'Town01Data_IMU_Fusion', 'Town01', 'Town', 517.07;
+    'Town02Data_IMU_Fusion', 'Town02', 'Town', 661.90;
+    'Town05Data_IMU_Fusion', 'Town05', 'Town', 907.40;
+    'Town10HDData_IMU_Fusion', 'Town10HD', 'Town', 448.76;
 };
 
 %% 处理每个数据集

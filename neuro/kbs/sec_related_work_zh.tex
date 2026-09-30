@@ -1,0 +1,55 @@
+%% ==================== 相关工作（中文版） ====================
+\section{相关工作}
+\label{sec:related}
+
+我们总结了受脑启发的定位-建图系统在不同方面的研究工作。
+
+\subsection{视觉SLAM与传感器融合}
+\label{sec:related_slam}
+
+视觉SLAM在过去二十年中取得了重大进展。Mur-Artal 等人提出了 ORB-SLAM~\cite{mur2015orb}，它提取稀疏 ORB 关键点以实现鲁棒的实时位姿估计，已成为该领域广泛使用的基线。Engel 等人开发了 LSD-SLAM~\cite{engel2014lsd} 与 DSO~\cite{engel2018direct}，它们直接在像素强度上运算而无需特征提取，在纹理丰富的环境中实现半稠密重建。在闭环检测方面，Cummins 与 Newman 提出了基于词袋模型的概率方法 FAB-MAP~\cite{Cummins2008}，而 Arandjelovic 等人引入了 NetVLAD~\cite{Arandjelovic2016}，通过端到端学习地点描述子实现鲁棒的地点识别。然而，这些方法存在关键局限：ORB-SLAM 需要足够的纹理（通常每帧 $>$100 个特征点），在弱纹理环境中会失效；而 DSO 等直接法对运动模糊敏感且需要光度标定。两类方法都有相当高的计算开销——ORB-SLAM 的特征提取与匹配主导了处理时间，而 DSO 的稠密光度优化限制了其在嵌入式平台上的实时性能。
+
+将 IMU 与相机集成，通过提供与光照无关的运动估计来弥补视觉SLAM的局限。Mourikis 与 Roumeliotis 提出了 MSCKF~\cite{Mourikis2007}，这是一种紧耦合视觉-惯性估计器，通过多状态约束优化实现高精度。Qin 等人开发了 VINS-Mono~\cite{Qin2018}，将紧耦合优化与闭环相结合，实现鲁棒的单目视觉-惯性里程计。Mahony 等人~\cite{Mahony2008} 与 Madgwick 等人~\cite{Madgwick2011} 提出了利用频域传感器特性的互补滤波方法——视觉里程计提供精确的低频估计，而IMU捕获高频动力学。然而，MSCKF 与 VINS-Mono 这类紧耦合方法需要仔细初始化 IMU 偏置与尺度，涉及复杂的雅可比推导，且缺乏生物学可解释性。为克服这些局限，我们采用一种受生物启发的互补滤波策略，模仿生物的前庭-视觉整合~\cite{Angelaki2004, Cullen2012}，以最少参数调优提供可解释的传感器融合，并避免联合非线性优化的计算负担。
+
+\subsection{受脑启发的空间认知}
+\label{sec:related_bio}
+
+生物导航系统通过专门的神经回路实现鲁棒的空间认知。O'Keefe 与 Dostrovsky 在海马中发现位置细胞~\cite{OKeefe1971}，它们在特定位置发放并形成认知地图。Hafting 等人在内嗅皮层中发现网格细胞~\cite{Hafting2005}，其周期性六角形发放模式提供了度量路径积分。Taube 等人鉴定出头方向细胞~\cite{Taube1990}，它们像内部罗盘一样编码朝向。Moser 等人~\cite{Moser2017} 对这些空间细胞如何协同工作以实现导航进行了全面综述。Finkelstein 等人的最新发现表明，蝙蝠拥有3D位置细胞、具有面心立方（FCC）晶格结构的3D网格细胞以及3D头方向细胞~\cite{finkelstein2015three, finkelstein2016three}，为体积化空间表征提供了生物学依据。
+
+Milford 等人开创了 RatSLAM~\cite{milford2004ratslam, milford2008mapping}，通过实现位置细胞动力学的连续吸引子网络与用于闭环的经验地图，将啮齿动物空间认知转化为机器人技术，成功演示了长达 66 km 的街区规模建图。Steckel 与 Peremans 开发了 BatSLAM~\cite{steckel2013batslam}，将仿生SLAM扩展到声呐感知。Yu 等人提出了 NeuroSLAM（未发表工作），将其扩展到基于 CNN 视觉处理的3D位置编码。Lowry 等人~\cite{Lowry2016} 分析了空间地图中度量-拓扑的二象性：度量地图提供几何精度但扩展性差，而拓扑地图支持鲁棒闭环但缺乏度量精度。然而，现有仿生框架存在三个关键局限：(1) 大多在2D中运行，或只编码3D位置而不含朝向，缺乏空中/水下导航所需的4自由度表征；(2) 视觉前端仍较简单（如 RatSLAM 的1D强度扫描线在复杂环境中只能产生约5个模板）；(3) IMU 集成缺失或临时拼凑，缺少生物系统中观察到的有原则的前庭-视觉融合。为弥补这些缺口，我们实现了具有 FCC 晶格结构的3D网格细胞与多层头方向细胞以实现完整的4自由度空间表征，集成了一条将模板判别力提升39倍的双流视觉处理流水线，并采用受生物启发的互补滤波进行前庭-视觉整合。
+
+\subsection{基于学习的视觉处理}
+\label{sec:related_learning}
+
+深度学习为视觉地点识别提供了强有力工具。Arandjelovic 等人提出了 NetVLAD~\cite{Arandjelovic2016}，引入可微 VLAD 层实现端到端地点识别训练。Goodale 与 Milner~\cite{Goodale1992} 及 Mishkin 等人~\cite{Mishkin1983} 建立了生物视觉双流理论：腹侧通路（V1$\rightarrow$V4$\rightarrow$IT）处理物体身份与场景识别，而背侧通路（V1$\rightarrow$MT$\rightarrow$MST）处理空间关系与运动~\cite{DiCarlo2012, Duffy1998}。Vaswani 等人提出了 Transformer 架构~\cite{Vaswani2017}，通过自注意力机制捕获长程依赖，使序列任务的有效时序建模成为可能。然而，基于学习的方法面临部署挑战：NetVLAD 需要大规模训练数据集（如含数百万图像的 Google Street View），且难以在无需重训的情况下泛化到新环境；标准 Transformer 的全自注意力对序列长度呈二次复杂度 $\mathcal{O}(N^2)$，限制了实时应用；学习得到的表征缺乏显式空间结构，妨碍可解释性与度量建图的集成。为克服这些局限，我们采用一种无训练方案，结合受生物腹侧/背侧通路启发的双流视觉处理与轻量特征增强机制——后者通过统计调制而非完整注意力矩阵捕获全局-局部交互。该设计将视觉模板判别力从5（RatSLAM）提升到195（提升39倍），同时保持实时性能（约31 FPS）与零样本部署能力。
+
+\subsection{对比分析}
+\label{sec:related_compare}
+
+表~\ref{tab:comparison_bioslam} 从关键架构维度对比了代表性仿生SLAM框架。现有方案存在四个根本局限：(1) 多数框架在2D中运行（RatSLAM、BatSLAM），或只编码3D位置而不含朝向（NeuroSLAM），缺乏完整4自由度表征；(2) 视觉前端依赖简单基于强度的模板（如 RatSLAM 的1-D 扫描线），对光照变化敏感且模板多样性有限；(3) IMU 集成要么缺失，要么依赖计算昂贵的紧耦合优化；(4) 用于特征增强的现代注意力机制仍与显式空间细胞表征脱节。NeuroLocMap 系统性地弥补了这些缺口：我们通过3D网格细胞（FCC 晶格）与多层头方向细胞实现4自由度空间表征；采用带 HART 启发的空间注意力与轻量全局-局部特征调制的双流视觉处理，实现39倍模板提升；通过受生物启发的互补滤波集成前庭-视觉信号；并将这些组件统一到显式空间细胞框架内，实现可解释导航。
+
+\begin{table*}[!t]
+       \centering
+       \footnotesize
+       \caption{仿生导航框架对比}
+       \label{tab:comparison_bioslam}
+       \setlength{\tabcolsep}{2.2pt}
+       \begin{threeparttable}
+              \begin{tabular}{lcccccc}
+                     \toprule
+                     框架                         & 自由度         & 空间细胞        & 融合方法  & 视觉处理     & 闭环  & 时序模型     \\
+                     \midrule
+                     RatSLAM~\cite{milford2008mapping} & 2D          & PC+HDC               & 视觉           & 扫描线           & 经验      & -               \\
+                     BatSLAM~\cite{steckel2013batslam} & 2D          & PC+HDC               & 声呐          & 回声             & 经验      & -               \\
+                     NeuroSLAM                         & 3D          & 3D-GC                & 视觉           & CNN              & 经验      & LSTM            \\
+                     \midrule
+                     \textbf{NeuroLocMap（本文）}       & \textbf{4D} & \textbf{3D-GC+M-HDC} & \textbf{互补} & \textbf{双流+HART} & \textbf{经验} & \textbf{Trans.} \\
+                     \bottomrule
+              \end{tabular}
+              \begin{tablenotes}
+                     \scriptsize
+                     \item \textbf{缩写}: PC: 位置细胞; HDC: 头方向细胞; GC: 网格细胞; M-HDC: 多层头方向细胞; 经验: 经验地图; 互补: 互补滤波; Trans.: 受Transformer启发的时序建模; 视觉: 仅视觉; 双流+HART: 带 HART 启发空间注意力的双流（腹侧/背侧）视觉处理。
+                     \item \textbf{注}: 我们的特征增强使用全局统计调制（$\mathcal{O}(N)$ 复杂度）近似自注意力效果，而非完整 Query-Key-Value 运算（$\mathcal{O}(N^2)$），从而无需训练即可实现实时性能。
+              \end{tablenotes}
+       \end{threeparttable}
+\end{table*}

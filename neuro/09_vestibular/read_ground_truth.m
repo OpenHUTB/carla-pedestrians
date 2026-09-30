@@ -35,15 +35,29 @@ function gt_data = read_ground_truth(gt_file)
         end
         
         % 读取所有数据行
-        % timestamp,pos_x,pos_y,pos_z,roll,pitch,yaw,vel_x,vel_y,vel_z
-        raw_data = textscan(fid, '%f %f %f %f %f %f %f %f %f %f', 'Delimiter', ',');
+        % 10列: timestamp,pos_x,pos_y,pos_z,roll,pitch,yaw,vel_x,vel_y,vel_z
+        % 7列: timestamp,pos_x,pos_y,pos_z,roll,pitch,yaw (2026 采集版, 无vel)
+        fclose(fid);
+        has_header = contains(first_line, 'timestamp') || contains(first_line, 'pos_x');
+        % 首行无论表头还是数据, 列数相同
+        ncols = numel(split(strtrim(first_line), ','));
+        fmt = strjoin(repmat({'%f'}, 1, ncols), ' ');
+        fid = fopen(gt_file, 'r');
+        if has_header
+            fgetl(fid);  % 跳过表头行
+        end
+        raw_data = textscan(fid, fmt, 'Delimiter', ',');
         fclose(fid);
         
         % 解析数据
         gt_data.timestamp = raw_data{1};
         gt_data.pos = [raw_data{2}, raw_data{3}, raw_data{4}];
         gt_data.att = [raw_data{5}, raw_data{6}, raw_data{7}];  % degrees
-        gt_data.vel = [raw_data{8}, raw_data{9}, raw_data{10}];
+        if ncols >= 10
+            gt_data.vel = [raw_data{8}, raw_data{9}, raw_data{10}];
+        else
+            gt_data.vel = zeros(size(gt_data.pos));  % 新数据无速度列
+        end
         gt_data.count = length(gt_data.timestamp);
         
         % 计算轨迹长度
