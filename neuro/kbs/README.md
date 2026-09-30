@@ -68,5 +68,5 @@
 
 - 旧版：`openhutb/neuro/kbs/`
 - 新版：`~/NeuroSLAM_KBS_v2/`
-- 快速 diff：`diff -ru /home/yangrb/openhutb/neuro/kbs /home/yangrb/NeuroSLAM_KBS_v2 --exclude=fig --exclude=*.pdf`
+- 快速 diff（在仓库根目录执行）：`diff -ru neuro/kbs ~/NeuroSLAM_KBS_v2 --exclude=fig --exclude=*.pdf`
 - PDF 中所有红色文字 = 本版相对旧版的修订/待办点；红色方括号 `[V2 ...]` = 待重算说明（定稿时删除）。

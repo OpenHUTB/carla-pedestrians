@@ -31,7 +31,8 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 COLLECTOR = os.path.join(HERE, 'IMU_Vision_Fusion_EKF.py')
 MAX_FRAMES = 5000
-DEFAULT_CARLA_BIN = '/home/yangrb/下载/carla/CARLA_0.9.16/CarlaUE4.sh'
+# CARLA 启动脚本路径: 优先环境变量 CARLA_BIN, 其次 --carla-bin 参数; 均为空且需自动启动时报错提示
+DEFAULT_CARLA_BIN = os.environ.get('CARLA_BIN', '')
 SERVER_PROC_PAT = 'CarlaUE4-Linux-Shipping'
 # 看门狗：连续多少秒数据文件无新增行则判定采集挂起
 HANG_GRACE_SECONDS = 240
@@ -116,6 +117,11 @@ def start_server(carla_bin, port, server_log):
     if port_open(port):
         print('[SERVER] 端口已监听，复用现有 CARLA 服务器')
         return None
+    if not carla_bin or not os.path.exists(carla_bin):
+        raise SystemExit(
+            f'[FATAL] CARLA 启动脚本不可用: {carla_bin!r}\n'
+            '        请设置环境变量 CARLA_BIN 或用 --carla-bin 指定 CarlaUE4.sh 路径，'
+            '或手动启动 CARLA 服务器后再运行本脚本。')
     print(f'[SERVER] 启动 CARLA: {carla_bin} -port={port}')
     server_log.write(f'\n===== server start {time.strftime("%F %T")} =====\n')
     server_log.flush()
