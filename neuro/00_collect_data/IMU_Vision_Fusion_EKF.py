@@ -133,6 +133,21 @@ COLLISION_RESET_THRESHOLD = 3       # 碰撞次数阈值
 # 消融开关：True = R 恒取基准值（关闭自适应缩放），用于隔离验证噪声模型影响
 FIXED_R = False
 
+# 折返采集（NLM闭环生死门验证）：直行到 TURNAROUND_OUT_DIST 后沿路网绕环
+# 返回出生点（单向路网无法原路折返，绕环终点=出生点即重访点），
+# 用于检验 NLM 跨时间闭环是否触发
+TURNAROUND_ACTIVE = False
+TURNAROUND_OUT_DIST = 100.0
+TURNAROUND_MAX_FRAMES = 10000   # 绕环总长~600m, 车均速~0.1m/帧, 5000帧不够走完
+# 双向折返起点(x,y): 设在双向路段, 去程100m后掉头沿对向车道原路返回,
+# 回程与去程走廊完全重叠 = 真重访(单向路网只能绕大环, 无真重访)
+TURNAROUND_BIDIR_START = None
+# 运动学折返(--kin-start): 车沿路点路径逐tick传送, 不靠behavior agent,
+# 绕开"投放碰撞/卡死/U-turn失败"等agent问题; 路径=去程+对侧半圆掉头+回程
+TURNAROUND_KIN_START = None
+KIN_TURN_SPEED = 3.0        # m/s (10.8km/h, 与AGENT_MAX_SPEED=12km/h相当)
+KIN_TURN_MAX_FRAMES = 3200  # 200m路径+静止尾部, 给足VO/EKF
+
 # 残差滑动窗口平滑（自适应 R 用）：对最近 N 帧马氏距离做均值滤波后再映射 R，
 # 抑制单帧 VO 跳变导致的 R 剧烈跳动；卡方离群门仍用原始单帧残差。
 # ENABLE_RESIDUAL_SMOOTH=False 时窗口退化为 1，等价单帧残差（消融对比用）
@@ -315,6 +330,159 @@ def select_forward_destination(vehicle, spawn_points, min_distance=25.0):
     return farthest.location
 
 
+def build_turnaround_relay(world, start_loc, return_dist=100.0, seg=8.0):
+    """构造折返接力目的地序列(生死门用)。
+
+    Town01主路单行西向, 单一目的地"回出生点"会被local planner拒规划
+    (483m绕环)。改为: 去程=出生点前方return_dist处; 回程=沿行驶方向
+    的绕环路点(每seg米一个接力点), 每段都在local planner能力内。
+    返回 (out_dest, relay_pts): out_dest=去程目标, relay_pts=回程接力点列表。
+    若沿行驶方向找不到回出生点的回路, 返回 (out_dest, [])。
+    """
+    m = world.get_map()
+    def _aslist(x):
+        return x if isinstance(x, (list, tuple)) else ([x] if x is not None else [])
+    wp0 = _aslist(m.get_waypoint(start_loc, project_to_road=True))[0]
+    # 去程目标: 沿行驶方向走到 return_dist
+    out_wp = wp0
+    for dstep in range(20, 400, 10):
+        nxt = _aslist(wp0.next(dstep))
+        if not nxt:
+            break
+        out_wp = nxt[0]
+        if out_wp.transform.location.distance(start_loc) >= return_dist:
+            break
+    out_dest = carla.Location(out_wp.transform.location.x,
+                              out_wp.transform.location.y,
+                              out_wp.transform.location.z)
+    # 回程: 从去程目标沿行驶方向Dijkstra回出生点15m内, 每seg米采样接力点
+    import heapq
+    prev = {out_wp.id: None}
+    dist = {out_wp.id: 0.0}
+    seq = 0
+    pq = [(0.0, seq, out_wp)]
+    found = None
+    expanded = 0
+    while pq:
+        du, _, u = heapq.heappop(pq)
+        expanded += 1
+        if du > dist.get(u.id, 1e18):
+            continue
+        if expanded > 30000:
+            break
+        if u.transform.location.distance(start_loc) < 15.0:
+            found = u
+            break
+        for v, wl in ((n, n.transform.location.distance(u.transform.location))
+                      for n in _aslist(u.next(2.0))):
+            nd = du + wl
+            if nd < dist.get(v.id, 1e18):
+                dist[v.id] = nd
+                prev[v.id] = u
+                seq += 1
+                heapq.heappush(pq, (nd, seq, v))
+    if found is None:
+        print(f"[TURNAROUND] 沿行驶方向找不到回出生点的回路(expanded={expanded})")
+        return out_dest, []
+    # 重建路径并采样接力点
+    path = [found]
+    u = found
+    while prev[u.id] is not None:
+        u = prev[u.id]
+        path.append(u)
+    path.reverse()
+    total = sum(a.transform.location.distance(b.transform.location)
+                for a, b in zip(path, path[1:]))
+    relay = []
+    acc = 0.0
+    next_at = seg
+    for a, b in zip(path, path[1:]):
+        step = a.transform.location.distance(b.transform.location)
+        acc += step
+        while acc >= next_at:
+            relay.append(carla.Location(
+                b.transform.location.x, b.transform.location.y,
+                b.transform.location.z))
+            next_at += seg
+    relay.append(carla.Location(start_loc.x, start_loc.y, start_loc.z))
+    print(f"[TURNAROUND] 接力路线: 去程={out_dest.x:.1f},{out_dest.y:.1f} "
+          f"({out_dest.distance(start_loc):.0f}m), "
+          f"回程绕环={total:.0f}m, 接力点={len(relay)}个")
+    return out_dest, relay
+
+
+def build_kinematic_turnaround(world, start_loc, out_dist=100.0,
+                               arc_r=None):
+    """运动学折返路径(不靠behavior agent, 逐tick传送)。
+
+    路径 = 去程(沿当前车道路点) + 半圆U-turn弧(投影回路面) + 回程(对向车道路点)。
+    返回 (path, meta): path为[(Location, yaw_deg), ...], 弧前插入一个
+    (None, None)标记表示U-turn段起点。若对向车道不可用, 弧段降级为原地转向。
+    """
+    import math
+    m = world.get_map()
+
+    def _aslist(x):
+        return x if isinstance(x, (list, tuple)) else ([x] if x is not None else [])
+
+    wp0 = _aslist(m.get_waypoint(start_loc, project_to_road=True))[0]
+    # 去程: 沿当前车道路点
+    out_pts = [wp0.transform.location]
+    u = wp0
+    while u.transform.location.distance(out_pts[0]) < out_dist:
+        nxt = _aslist(u.next(2.0))
+        if not nxt:
+            break
+        u = nxt[0]
+        out_pts.append(u.transform.location)
+    far = out_pts[-1]
+    # 对向车道路点(与去程同路点序)
+    ret_wps = []
+    ok = True
+    for p in out_pts:
+        l = _aslist(m.get_waypoint(p, project_to_road=True))[0].get_left_lane()
+        if l is None:
+            ok = False
+            break
+        ret_wps.append(l.transform.location)
+    if not ok or len(ret_wps) != len(out_pts) or arc_r is None:
+        # 降级: 原地转向(VO为纯旋转, 仍可闭环, 物理不完美)
+        path = [(loc, wp0.transform.rotation.yaw) for loc in out_pts]
+        path.append((None, None))
+        path += [(loc, (wp0.transform.rotation.yaw + 180.0) % 360.0)
+                 for loc in reversed(ret_wps)]
+        print(f"[KIN] 降级为原地U-turn (对向车道不可用)")
+        return path, {'arc': False, 'out_len': far.distance(out_pts[0])}
+    # U-turn弧: 圆心=去程终点与对向车道终点中点, 半径=arc_r
+    c = carla.Location((far.x + ret_wps[-1].x) / 2.0,
+                       (far.y + ret_wps[-1].y) / 2.0,
+                       (far.z + ret_wps[-1].z) / 2.0)
+    r = arc_r if arc_r > 0 else c.distance(far)
+    # 从far到ret_wps[-1]的半圆, 按弧长2m采样
+    a0 = math.atan2(far.y - c.y, far.x - c.x)
+    a1 = math.atan2(ret_wps[-1].y - c.y, ret_wps[-1].x - c.x)
+    # 取逆时针/顺时针中"不穿越去程走廊"的半圆: 两向角差应≈±pi, 取绝对值大者
+    d_cw = (a1 - a0) % (2 * math.pi)
+    d_ccw = (a0 - a1) % (2 * math.pi)
+    d = d_cw if d_cw > d_ccw else -d_ccw
+    n_arc = max(10, int(abs(d) * r / 2.0))
+    arc_pts = []
+    for k in range(1, n_arc + 1):
+        a = a0 + d * k / n_arc
+        q = carla.Location(c.x + r * math.cos(a), c.y + r * math.sin(a), c.z)
+        # 投影回路面, 防弧跑出道路
+        q = _aslist(m.get_waypoint(q, project_to_road=True))[0].transform.location
+        arc_pts.append(q)
+    path = [(loc, wp0.transform.rotation.yaw) for loc in out_pts]
+    path.append((None, None))  # U-turn标记(运行时按弧切向插值yaw)
+    path += [(loc, None) for loc in arc_pts]
+    yaw_ret = (wp0.transform.rotation.yaw + 180.0) % 360.0
+    path += [(loc, yaw_ret) for loc in reversed(ret_wps)]
+    print(f"[KIN] 运动学折返: 去程={far.distance(out_pts[0]):.0f}m, "
+          f"U-turn弧={len(arc_pts)}点(r={r:.1f}m), 回程对向车道={len(ret_wps)}点")
+    return path, {'arc': True, 'out_len': far.distance(out_pts[0])}
+
+
 # ═════════════════════════════════════════════════════════════
 #  地图自适应辅助函数
 # ═════════════════════════════════════════════════════════════
@@ -421,7 +589,12 @@ def validate_agent_path(agent, vehicle, spawn_points, world, max_retries=3):
     for attempt in range(max_retries):
         try:
             if hasattr(agent, '_local_planner'):
-                wp_queue = agent._local_planner.waypoints_queue
+                # CARLA 0.9.16 属性为 _waypoints_queue, 旧版为 waypoints_queue
+                wp_queue = getattr(agent._local_planner, '_waypoints_queue',
+                                   None)
+                if wp_queue is None:
+                    wp_queue = getattr(agent._local_planner, 'waypoints_queue',
+                                       None)
                 if wp_queue is not None and len(wp_queue) > 0:
                     target_wp = wp_queue[-1][0]
                     twp_loc = target_wp.transform.location
@@ -835,6 +1008,58 @@ def init_carla_environment(host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
         raise PermissionError(f"无权限操作目录: {OUTPUT_DIR}")
     print(f"输出目录: {OUTPUT_DIR}")
 
+    # 12) 折返模式: 构造路线(去程目标 + 回程)
+    if TURNAROUND_ACTIVE:
+        if TURNAROUND_BIDIR_START is not None:
+            # 双向折返: 定点投放到双向路段, 去程100m, 掉头沿对向车道原路返回
+            m = world.get_map()
+            def _aslist(x):
+                return x if isinstance(x, (list, tuple)) else ([x] if x is not None else [])
+            sx, sy = TURNAROUND_BIDIR_START
+            wp0 = _aslist(m.get_waypoint(carla.Location(sx, sy, 0.0),
+                                         project_to_road=True))[0]
+            transform = wp0.transform
+            vehicle.set_transform(transform)
+            start_loc = wp0.transform.location
+            # 去程目标: 同路段沿行驶方向 TURNAROUND_OUT_DIST
+            out_wp = wp0
+            for dstep in range(20, 400, 10):
+                nxt = _aslist(wp0.next(dstep))
+                if not nxt:
+                    break
+                cand = nxt[0]
+                if cand.road_id != wp0.road_id:
+                    break
+                out_wp = cand
+                if out_wp.transform.location.distance(start_loc) >= TURNAROUND_OUT_DIST:
+                    break
+            out_dest = carla.Location(out_wp.transform.location.x,
+                                      out_wp.transform.location.y,
+                                      out_wp.transform.location.z)
+            agent.set_destination(out_dest)
+            validate_agent_path(agent, vehicle, spawn_points, world)
+            ctx = {'start_loc': start_loc, 'out_dest': out_dest,
+                   'relay_pts': [carla.Location(start_loc.x, start_loc.y,
+                                                start_loc.z)],
+                   'relay_idx': 0, 'phase': 'out', 'bidir': True}
+            print(f"[TURNAROUND] 双向折返: 投放=({start_loc.x:.1f},{start_loc.y:.1f}), "
+                  f"去程=({out_dest.x:.1f},{out_dest.y:.1f}) "
+                  f"({out_dest.distance(start_loc):.0f}m), 掉头沿对向车道返回")
+        else:
+            # 单向路网: 绕环接力路线
+            start_loc = vehicle.get_transform().location
+            out_dest, relay_pts = build_turnaround_relay(
+                world, start_loc, return_dist=TURNAROUND_OUT_DIST)
+            agent.set_destination(out_dest)
+            validate_agent_path(agent, vehicle, spawn_points, world)
+            ctx = {'start_loc': start_loc, 'out_dest': out_dest,
+                   'relay_pts': relay_pts, 'relay_idx': 0, 'phase': 'out',
+                   'bidir': False}
+            print(f"[TURNAROUND] 绕环折返: 出生点=({start_loc.x:.1f},{start_loc.y:.1f}), "
+                  f"去程=({out_dest.x:.1f},{out_dest.y:.1f}), "
+                  f"回程接力点={len(relay_pts)}个")
+        return (world, bp_lib, vehicle, spawn_points, world.get_spectator(),
+                agent, traffic_manager, collision_sensor, ctx)
     return (world, bp_lib, vehicle, spawn_points, world.get_spectator(),
             agent, traffic_manager, collision_sensor)
 
@@ -1915,9 +2140,15 @@ def plot_trajectory_comparison(output_dir, town_name=None):
 def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
     """主入口：数据采集 + 完整性校验"""
     # 初始化环境
+    start_loc = None
     try:
-        (world, bp_lib, vehicle, spawn_points, spectator,
-         agent, traffic_manager, collision_sensor) = init_carla_environment(host, port)
+        _env = init_carla_environment(host, port)
+        if len(_env) == 9:  # 折返模式多返回出生点
+            (world, bp_lib, vehicle, spawn_points, spectator,
+             agent, traffic_manager, collision_sensor, start_loc) = _env
+        else:
+            (world, bp_lib, vehicle, spawn_points, spectator,
+             agent, traffic_manager, collision_sensor) = _env
     except Exception as e:
         print(f"\n[FATAL] 初始化失败: {e}")
         sys.exit(1)
@@ -2014,8 +2245,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             pass
         return last_loc, last_rot
 
+    # 折返模式帧上限放宽(绕环~600m, 5000帧走不完)
+    EFFECTIVE_MAX = TURNAROUND_MAX_FRAMES if TURNAROUND_ACTIVE else MAX_SAVE_IMG
+
     try:
-        while img_idx < MAX_SAVE_IMG:
+        while img_idx < EFFECTIVE_MAX:
             # tick 容错：CARLA 断连/超时不再抛出中断整轮采集，
             # 而是尝试重连并重挂车辆与传感器，持续失败才退出
             try:
@@ -2351,8 +2585,8 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                           f"uncert={metrics['avg_uncertainty']:.4f}, "
                           f"matches={num_matches}, scale={scale:.4f}")
 
-                if img_idx >= MAX_SAVE_IMG:
-                    print(f"达到最大保存数量 ({MAX_SAVE_IMG})，退出采集")
+                if img_idx >= EFFECTIVE_MAX:
+                    print(f"达到最大保存数量 ({EFFECTIVE_MAX})，退出采集")
                     break
 
                 if not headless:
@@ -2364,10 +2598,35 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
             # 智能体控制
             if agent.done():
-                destination = select_forward_destination(vehicle, spawn_points)
-                agent.set_destination(destination)
-                print(f"[OK] 到达目标, 新目标: ({destination.x:.1f}, {destination.y:.1f})")
-                validate_agent_path(agent, vehicle, spawn_points, world)
+                if TURNAROUND_ACTIVE and start_loc is not None:
+                    if start_loc.get('phase') == 'out':
+                        # 去程结束 → 启动回程接力
+                        rp = start_loc['relay_pts']
+                        if not rp:
+                            print(f"[TURNAROUND] 无回程接力点，折返提前结束 (帧数={img_idx})")
+                            break
+                        start_loc['phase'] = 'return'
+                        start_loc['relay_idx'] = 0
+                        agent.set_destination(rp[0])
+                        print(f"[TURNAROUND] 去程完成，回程接力启动 "
+                              f"({len(rp)}个接力点), 当前=({rp[0].x:.1f},{rp[0].y:.1f})")
+                        validate_agent_path(agent, vehicle, spawn_points, world)
+                    else:
+                        # 回程: 推进下一个接力点
+                        rp = start_loc['relay_pts']
+                        start_loc['relay_idx'] += 1
+                        if start_loc['relay_idx'] >= len(rp):
+                            print(f"[TURNAROUND] 已返回出生点，折返采集完成 (帧数={img_idx})")
+                            break
+                        agent.set_destination(rp[start_loc['relay_idx']])
+                        print(f"[TURNAROUND] 接力 {start_loc['relay_idx']}/{len(rp)-1}: "
+                              f"({rp[start_loc['relay_idx']].x:.1f},{rp[start_loc['relay_idx']].y:.1f})")
+                        validate_agent_path(agent, vehicle, spawn_points, world)
+                elif not TURNAROUND_ACTIVE:
+                    destination = select_forward_destination(vehicle, spawn_points)
+                    agent.set_destination(destination)
+                    print(f"[OK] 到达目标, 新目标: ({destination.x:.1f}, {destination.y:.1f})")
+                    validate_agent_path(agent, vehicle, spawn_points, world)
 
             # 每 100 帧更新自适应安全距离和 PID
             if img_idx % 100 == 0:
@@ -2486,6 +2745,27 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                         stagnant_count = 0
                         prev_throttle = 0.0   # 重置时清空平滑状态
                         prev_brake = 0.0
+                        # 双向折返模式: 重置会随机重投放并劫持目的地,
+                        # 送回双向起点、折返状态归零, 重新出发(保持折返轨迹干净)
+                        if (TURNAROUND_ACTIVE and start_loc is not None
+                                and TURNAROUND_BIDIR_START is not None):
+                            try:
+                                _m = world.get_map()
+                                _sx, _sy = TURNAROUND_BIDIR_START
+                                _wps = _m.get_waypoint(
+                                    carla.Location(_sx, _sy, 0.0),
+                                    project_to_road=True)
+                                _wp0 = (_wps[0]
+                                        if isinstance(_wps, (list, tuple))
+                                        else _wps)
+                                vehicle.set_transform(_wp0.transform)
+                                start_loc['phase'] = 'out'
+                                start_loc['relay_idx'] = 0
+                                agent.set_destination(start_loc['out_dest'])
+                                print(f"[TURNAROUND] 重置后送回起点 "
+                                      f"({_sx},{_sy})，重新出发")
+                            except Exception as _e:
+                                print(f"[WARN] 折返重置回送失败: {_e}")
                         print(f"[OK] 重置完成 (第{_reset_attempt + 1}次尝试)")
                         break
                     except Exception as e:
@@ -2512,7 +2792,8 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
         traceback.print_exc()
     finally:
         # ---- 补帧兜底：提前退出时用最后已知状态把四个数据文件补写到 MAX_SAVE_IMG 行
-        if img_idx < MAX_SAVE_IMG:
+        # 折返模式按实际帧数交付(补帧会伪造静止段污染GT/EKF)，跳过
+        if img_idx < MAX_SAVE_IMG and not TURNAROUND_ACTIVE:
             print(f"[BACKFILL] 采集在 {img_idx}/{MAX_SAVE_IMG} 帧处结束，补写数据文件...")
             try:
                 try:
@@ -2815,6 +3096,13 @@ if __name__ == "__main__":
     _parser.add_argument('--map', type=str, default=DEFAULT_TARGET_MAP,
                          help=f'CARLA 地图名称 (默认: {DEFAULT_TARGET_MAP}), '
                               f'例如: Town01, Town02, Town03, Town05, Town10HD')
+    _parser.add_argument('--turnaround', action='store_true',
+                         help='折返采集模式: 直行约100m后掉头返回出生点 '
+                              '(NLM闭环生死门验证, 输出独立目录, 不补帧)')
+    _parser.add_argument('--bidir-start', type=str, default=None,
+                         metavar='X,Y',
+                         help='双向折返起点(如 "106,133"): 定点投放到该双向路段, '
+                              '去程100m后沿对向车道原路返回(真重访)')
     _parser.add_argument('--replay', type=str, default=None, metavar='DATA_DIR',
                          help='离线复算 EKF 融合（不采集）：在指定数据目录的 '
                               'ground_truth/visual_odometry/aligned_imu 上重跑，'
@@ -2826,6 +3114,19 @@ if __name__ == "__main__":
 
     # 根据命令行参数覆盖地图和输出目录
     TARGET_MAP = _args.map
-    OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
+    TURNAROUND_ACTIVE = _args.turnaround
+    if _args.bidir_start:
+        try:
+            _bx, _by = _args.bidir_start.split(',')
+            TURNAROUND_BIDIR_START = (float(_bx), float(_by))
+            TURNAROUND_ACTIVE = True
+        except ValueError:
+            print(f"[WARN] --bidir-start 格式错误: {_args.bidir_start!r} (应为 X,Y)")
+    if TURNAROUND_ACTIVE:
+        # 折返模式独立输出目录，不覆盖 {map}Data_IMU_Fusion 的常规数据
+        OUTPUT_DIR = os.path.join(current_dir, '..', 'data',
+                                  f'{TARGET_MAP}Turnaround_IMU_Fusion')
+    else:
+        OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
 
     main(headless=_args.headless, host=_args.host, port=_args.port)
