@@ -71,6 +71,7 @@ global VT; VT = [];  % VT数组
 global YAW_HEIGHT_HDC; YAW_HEIGHT_HDC = zeros(36, 36);
 global GRIDCELLS; GRIDCELLS = zeros(36, 36, 36);
 global EXPERIENCES; EXPERIENCES = [];
+global ACCUM_DELTA_X; global ACCUM_DELTA_Y; global ACCUM_DELTA_Z;
 global NUM_EXPS; NUM_EXPS = 0;
 global CUR_EXP_ID; CUR_EXP_ID = 0;
 global PREV_TRANS_V; PREV_TRANS_V = 0;
@@ -315,13 +316,47 @@ for frame_idx = 1:num_frames
     % 2. 计算IMU辅助的视觉里程计（性能优化：传入纯视觉结果，避免重复计算）
     pure_visual_results = [pure_transV, pure_yawRotV, pure_heightV];
     [transV, yawRotV, heightV] = imu_aided_visual_odometry(rawImg, imu_data, frame_idx, pure_visual_results);
-    
-    % 更新IMU-aided轨迹
-    odo_yaw = odo_yaw + yawRotV * DEGREE_TO_RADIAN;
-    odo_height = odo_height + heightV;
-    odo_x = odo_x + transV * cos(odo_yaw);
-    odo_y = odo_y + transV * sin(odo_yaw);
-    odo_z = odo_height;
+
+    % 可选: 用Python EKF融合轨迹驱动NLM运动源(统一地基)
+    % 背景: NLM原运动源是MATLAB端重推的IMU辅助VO(对齐GT后RMSE≈244m),
+    % 而论文EKF Fusion列(≈47m)从未进入NLM主循环, 导致Table2对比口径错位。
+    % 开启后GC/HDC/经验地图基于EKF轨迹的逐帧增量运行, 单位均为逐帧米/度。
+    global NLM_USE_EKF_ODO;
+    if ~isempty(NLM_USE_EKF_ODO) && NLM_USE_EKF_ODO && ...
+            frame_idx >= 1 && frame_idx <= size(fusion_data.pos, 1)
+        ekf_x = fusion_data.pos(frame_idx, 1);
+        ekf_y = fusion_data.pos(frame_idx, 2);
+        ekf_z = fusion_data.pos(frame_idx, 3);
+        ekf_yaw_deg = fusion_data.att(frame_idx, 3);
+        if frame_idx > 1
+            ekf_px = fusion_data.pos(frame_idx-1, 1);
+            ekf_py = fusion_data.pos(frame_idx-1, 2);
+            ekf_zy = fusion_data.pos(frame_idx-1, 3);
+            ekf_pyaw = fusion_data.att(frame_idx-1, 3);
+            dyaw_rad = ekf_yaw_deg - ekf_pyaw;
+            while dyaw_rad >  pi, dyaw_rad = dyaw_rad - 2*pi; end
+            while dyaw_rad < -pi, dyaw_rad = dyaw_rad + 2*pi; end
+            dpos = [ekf_x - ekf_px, ekf_y - ekf_py, ekf_z - ekf_zy];
+            % EKF航向角为右手法则绕z轴(俯视顺时针为正), 与里程计约定一致
+            transV = sign(cosd(ekf_pyaw)*dpos(1) + sind(ekf_pyaw)*dpos(2)) * norm(dpos(1:2));
+            heightV = dpos(3);
+            yawRotV = dyaw_rad * 180 / pi;
+        else
+            transV = 0; heightV = 0; yawRotV = 0;
+        end
+        % 钳位: gc_iteration用(1-transV)/transV做指数衰减, 需|transV|<1
+        transV = max(min(transV, 0.25), -0.25);
+        odo_x = ekf_x; odo_y = ekf_y; odo_z = ekf_z;
+        odo_yaw = ekf_yaw_deg * DEGREE_TO_RADIAN;
+        odo_height = ekf_z;
+    else
+        % 更新IMU-aided轨迹
+        odo_yaw = odo_yaw + yawRotV * DEGREE_TO_RADIAN;
+        odo_height = odo_height + heightV;
+        odo_x = odo_x + transV * cos(odo_yaw);
+        odo_y = odo_y + transV * sin(odo_yaw);
+        odo_z = odo_height;
+    end
     
     imu_aided_traj(frame_idx, :) = [odo_x, odo_y, odo_z];
     
@@ -357,10 +392,14 @@ for frame_idx = 1:num_frames
     exp_map_iteration(vtId, transV, yawRotV * DEGREE_TO_RADIAN, heightV, gcX, gcY, gcZ, curYawTheta, curHeightValue);
     
     % 使用全局变量CUR_EXP_ID获取当前经验节点
+    % 输出逐帧位置 = 锚点节点坐标 + 该节点以来的累积增量(地图坐标系航位推算),
+    % 而非节点坐标本身: 节点是稀疏锚点(同一VT下可停留数百帧), 直接输出节点
+    % 坐标会得到"阶梯轨迹"(定位点冻结), 阶梯残差是之前NLM误差远大于EKF前端
+    % 的主因(2026-09-30 诊断: Town05 1000帧, 节点5活跃帧4-359)。
     if ~isempty(EXPERIENCES) && CUR_EXP_ID > 0 && CUR_EXP_ID <= length(EXPERIENCES)
-        exp_trajectory(frame_idx, :) = [EXPERIENCES(CUR_EXP_ID).x_exp, ...
-                                         EXPERIENCES(CUR_EXP_ID).y_exp, ...
-                                         EXPERIENCES(CUR_EXP_ID).z_exp];
+        exp_trajectory(frame_idx, :) = [EXPERIENCES(CUR_EXP_ID).x_exp + ACCUM_DELTA_X, ...
+                                         EXPERIENCES(CUR_EXP_ID).y_exp + ACCUM_DELTA_Y, ...
+                                         EXPERIENCES(CUR_EXP_ID).z_exp + ACCUM_DELTA_Z];
     else
         exp_trajectory(frame_idx, :) = [0, 0, 0];
     end
