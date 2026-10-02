@@ -90,6 +90,7 @@ global IMU_YAW_WEIGHT_OVERRIDE;
 global IMU_TRANS_WEIGHT_OVERRIDE;
 global IMU_HEIGHT_WEIGHT_OVERRIDE;
 global GC_VT_INJECT_ENERGY_OVERRIDE;
+global DIAG_MATCH_LOG;  % [DIAG] 匹配事件日志（exp_map_iteration 写入, 本脚本保存）
 
 % 应用覆盖参数（如果存在）
 VT_MATCH_THRESHOLD = 0.08;  % 默认值
@@ -227,6 +228,23 @@ imu_data = read_imu_data(data_path);
 % 读取融合位姿数据
 fusion_data = read_fusion_pose(data_path);
 
+% 2026-10-02 根因修复: exp-map DR系初始航向恒为0, 而EKF世界系初始航向=att.z[0]。
+% Town01车辆朝-x起步(att.z[0]=180°), 'simple'对齐无旋转, 无法吸收该翻转→ATE 266m。
+% 使DR系与EKF世界系同向: exp系=world系旋转-att.z[0], 初始航向设为att.z[0]。
+% (HDC/yaw_hdc只比较帧间增量差, 不受常数偏移影响, 闭环匹配不受影响)
+global NLM_USE_EKF_ODO;
+if ~isempty(NLM_USE_EKF_ODO) && NLM_USE_EKF_ODO && ~isempty(fusion_data.att)
+    global ACCUM_DELTA_YAW;
+    initial_ekf_yaw_rad = fusion_data.att(1, 3) * DEGREE_TO_RADIAN;
+    while initial_ekf_yaw_rad >  pi, initial_ekf_yaw_rad = initial_ekf_yaw_rad - 2*pi; end
+    while initial_ekf_yaw_rad < -pi, initial_ekf_yaw_rad = initial_ekf_yaw_rad + 2*pi; end
+    ACCUM_DELTA_YAW = initial_ekf_yaw_rad;
+    if NUM_EXPS >= 1
+        EXPERIENCES(1).yaw_exp_rad = initial_ekf_yaw_rad;
+    end
+    fprintf('EKF-odo: 经验地图初始航向=%.2f deg\n', initial_ekf_yaw_rad / DEGREE_TO_RADIAN);
+end
+
 % 读取Ground Truth数据（如果存在）
 gt_file = fullfile(data_path, 'ground_truth.txt');
 if exist(gt_file, 'file')
@@ -322,6 +340,7 @@ for frame_idx = 1:num_frames
     % 而论文EKF Fusion列(≈47m)从未进入NLM主循环, 导致Table2对比口径错位。
     % 开启后GC/HDC/经验地图基于EKF轨迹的逐帧增量运行, 单位均为逐帧米/度。
     global NLM_USE_EKF_ODO;
+    transV_gc = transV;  % GC迭代输入: 默认=VO值(非EKF分支行为不变)
     if ~isempty(NLM_USE_EKF_ODO) && NLM_USE_EKF_ODO && ...
             frame_idx >= 1 && frame_idx <= size(fusion_data.pos, 1)
         ekf_x = fusion_data.pos(frame_idx, 1);
@@ -333,19 +352,25 @@ for frame_idx = 1:num_frames
             ekf_py = fusion_data.pos(frame_idx-1, 2);
             ekf_zy = fusion_data.pos(frame_idx-1, 3);
             ekf_pyaw = fusion_data.att(frame_idx-1, 3);
-            dyaw_rad = ekf_yaw_deg - ekf_pyaw;
-            while dyaw_rad >  pi, dyaw_rad = dyaw_rad - 2*pi; end
-            while dyaw_rad < -pi, dyaw_rad = dyaw_rad + 2*pi; end
+            % 2026-10-02 根因修复: att列航向单位是度(见 odo_yaw=ekf_yaw_deg*D2R),
+            % 原代码把度差当弧度回绕±π再乘180/pi, 帧间航向被放大57.3倍,
+            % 经验地图DR方向系统性漂移(Town05 ATE 297m; Python复刻证实修正后44m)
+            dyaw_deg = ekf_yaw_deg - ekf_pyaw;
+            while dyaw_deg >  180, dyaw_deg = dyaw_deg - 360; end
+            while dyaw_deg < -180, dyaw_deg = dyaw_deg + 360; end
             dpos = [ekf_x - ekf_px, ekf_y - ekf_py, ekf_z - ekf_zy];
             % EKF航向角为右手法则绕z轴(俯视顺时针为正), 与里程计约定一致
             transV = sign(cosd(ekf_pyaw)*dpos(1) + sind(ekf_pyaw)*dpos(2)) * norm(dpos(1:2));
             heightV = dpos(3);
-            yawRotV = dyaw_rad * 180 / pi;
+            yawRotV = dyaw_deg;
         else
             transV = 0; heightV = 0; yawRotV = 0;
         end
         % 钳位: gc_iteration用(1-transV)/transV做指数衰减, 需|transV|<1
-        transV = max(min(transV, 0.25), -0.25);
+        % 2026-10-02 根因修复: 只钳位GC输入(transV_gc); 经验地图用真实EKF帧间
+        % 位移累积, 否则截掉EKF路径长的22-26%(与实测NLM轨迹长度亏损完全吻合),
+        % NLM系统性欠积分(Town05 ATE 284m, 去钳位DR模拟复现到~45m)
+        transV_gc = max(min(transV, 0.25), -0.25);
         odo_x = ekf_x; odo_y = ekf_y; odo_z = ekf_z;
         odo_yaw = ekf_yaw_deg * DEGREE_TO_RADIAN;
         odo_height = ekf_z;
@@ -385,7 +410,7 @@ for frame_idx = 1:num_frames
     curYawThetaInRadian = curYawTheta * YAW_HEIGHT_HDC_Y_TH_SIZE;
     
     % 更新3D网格细胞
-    gc_iteration(vtId, transV, curYawThetaInRadian, heightV);
+    gc_iteration(vtId, transV_gc, curYawThetaInRadian, heightV);
     [gcX, gcY, gcZ] = get_gc_xyz();
     
     % 更新经验地图
@@ -411,6 +436,26 @@ end
 fprintf('[5/9] SLAM处理完成！\n');
 fprintf('  经验地图节点数: %d\n', NUM_EXPS);
 fprintf('  视觉模板数: %d\n', NUM_VT);  % 使用NUM_VT（增强方法）而不是VT_ID_COUNT
+if exist('EXPERIENCES', 'var') && ~isempty(EXPERIENCES)
+    n_lc = 0;
+    for exp_k = 1:length(EXPERIENCES)
+        if EXPERIENCES(exp_k).numlinks > 0
+            for lnk_j = 1:EXPERIENCES(exp_k).numlinks
+                if EXPERIENCES(exp_k).links(lnk_j).exp_id < exp_k
+                    n_lc = n_lc + 1;
+                end
+            end
+        end
+    end
+    fprintf('  闭环数(heuristic): %d\n', n_lc);
+end
+global EXP_LOOP_CLOSURE_LINKS;
+if isnumeric(EXP_LOOP_CLOSURE_LINKS)
+    fprintf('  闭环数(官方计数器): %d\n', EXP_LOOP_CLOSURE_LINKS);
+end
+global DIAG_VT_REVISIT DIAG_MULTI_CAND DIAG_MULTI_REJECT DIAG_SINGLE_BELOW DIAG_SINGLE_MATCH DIAG_CE_REJECT DIAG_CE_MAX DIAG_MAX_DELTA;
+fprintf('  [DIAG] VT重访=%d 单候选过阈值=%d 单候选匹配成功=%d 多候选过阈值=%d 多候选拒绝=%d CE拒绝=%d (CE最大=%.2fm) 单候选最大delta=%.2f (阈值=%d)\n', ...
+    DIAG_VT_REVISIT, DIAG_SINGLE_BELOW, DIAG_SINGLE_MATCH, DIAG_MULTI_CAND, DIAG_MULTI_REJECT, DIAG_CE_REJECT, DIAG_CE_MAX, DIAG_MAX_DELTA, DELTA_EXP_GC_HDC_THRESHOLD);
 if NUM_EXPS < 10
     warning('经验地图节点数过少（%d个），可能导致轨迹异常！', NUM_EXPS);
     fprintf('  建议：降低DELTA_EXP_GC_HDC_THRESHOLD参数\n');
@@ -496,7 +541,12 @@ end
 
 %% 8. 保存结果
 fprintf('[8/9] 保存结果...\n');
-result_path = fullfile(data_path, 'slam_results');
+% 结果子目录可覆盖（对照实验用，避免多组结果互相覆盖）
+global RESULT_SUBDIR;
+if isempty(RESULT_SUBDIR) || ~ischar(RESULT_SUBDIR)
+    RESULT_SUBDIR = 'slam_results';
+end
+result_path = fullfile(data_path, RESULT_SUBDIR);
 if ~exist(result_path, 'dir')
     mkdir(result_path);
 end
@@ -519,6 +569,16 @@ dlmwrite(fullfile(result_path, 'imu_aided_trajectory.txt'), imu_aided_traj, 'pre
 
 % 保存经验地图轨迹
 dlmwrite(fullfile(result_path, 'exp_trajectory.txt'), exp_trajectory, 'precision', 6);
+
+% 保存经验地图结构（闭环/链接事后诊断用）
+if exist('EXPERIENCES', 'var') && ~isempty(EXPERIENCES)
+    save(fullfile(result_path, 'experiences.mat'), 'EXPERIENCES', 'NUM_EXPS', 'CUR_EXP_ID');
+end
+
+% [DIAG] 保存匹配事件日志（重锚定损伤分解用）
+if exist('DIAG_MATCH_LOG', 'var') && ~isempty(DIAG_MATCH_LOG)
+    save(fullfile(result_path, 'match_log.mat'), 'DIAG_MATCH_LOG');
+end
 
 % 如果有Ground Truth，也保存一份副本
 if has_ground_truth
