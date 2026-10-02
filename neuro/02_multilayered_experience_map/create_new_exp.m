@@ -64,9 +64,19 @@ function create_new_exp(curExpId, newExpId, vt_id, xGc, yGc, zGc, curYawHdc, cur
     EXPERIENCES(newExpId).vt_id = vt_id;
     
     % update the coordinate of em (x_exp, y_exp, z_exp, yaw_exp_rad, height_exp)
-    EXPERIENCES(newExpId).x_exp = EXPERIENCES(curExpId).x_exp + ACCUM_DELTA_X;
-    EXPERIENCES(newExpId).y_exp = EXPERIENCES(curExpId).y_exp + ACCUM_DELTA_Y;
-    EXPERIENCES(newExpId).z_exp = EXPERIENCES(curExpId).z_exp + ACCUM_DELTA_Z;
+    % 2026-10-02 EKF-odo节点坐标钉扎: 若 NLM_EKF_ANCHOR_MAP 已设置(EKF-odo模式),
+    % 新节点坐标直接取创建帧的EKF地图系位置(真实米), 消除DR累积在GC钳位下的
+    % 欠积分压缩(地图架系scale 0.38-1.6); 非EKF-odo路径该全局为空, 行为不变
+    global NLM_EKF_ANCHOR_MAP;
+    if ~isempty(NLM_EKF_ANCHOR_MAP)
+        EXPERIENCES(newExpId).x_exp = NLM_EKF_ANCHOR_MAP(1);
+        EXPERIENCES(newExpId).y_exp = NLM_EKF_ANCHOR_MAP(2);
+        EXPERIENCES(newExpId).z_exp = NLM_EKF_ANCHOR_MAP(3);
+    else
+        EXPERIENCES(newExpId).x_exp = EXPERIENCES(curExpId).x_exp + ACCUM_DELTA_X;
+        EXPERIENCES(newExpId).y_exp = EXPERIENCES(curExpId).y_exp + ACCUM_DELTA_Y;
+        EXPERIENCES(newExpId).z_exp = EXPERIENCES(curExpId).z_exp + ACCUM_DELTA_Z;
+    end
     
     EXPERIENCES(newExpId).yaw_exp_rad = clip_radian_180(ACCUM_DELTA_YAW);
 %     EXPERIENCES(newExpId).height_exp = ACCUM_DELTA_HEIGHT;
