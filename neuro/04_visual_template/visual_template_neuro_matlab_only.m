@@ -117,7 +117,4 @@ function vt_id = visual_template_neuro_matlab_only(rawImg, x, y, z, yaw, height)
             VT_HISTORY_FIRST = [VT_HISTORY_FIRST; vt_id];
         end
     end
-    
-    % 更新前一个VT ID
-    PREV_VT_ID = vt_id;
 end

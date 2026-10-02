@@ -449,6 +449,8 @@ function main(visualDataFile, groundTruthFile, expMapHistoryFile, odoMapHistoryF
                 %% 14. 经验图迭代
                 disp('[14/12] 经验图迭代...');
                 exp_map_iteration(vt_id, transV, yawRotV, heightV, gcX, gcY, gcZ, curYawTheta, curHeightValue);
+                % 更新前一个VT ID（调用方管理，exp_map_iteration依赖其判断模板是否切换）
+                PREV_VT_ID = vt_id;
                 disp(['[14/12] 经验图当前节点数：', num2str(NUM_EXPS)]);
 
                 %% 15. 更新轨迹数据（修复版：矩阵存储连接关系）

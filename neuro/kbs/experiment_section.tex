@@ -174,13 +174,14 @@ To quantify the con\-tri\-bu\-tion of each component in our bio-inspired framewo
             \midrule
             w/o IMU fusion              & 315.3          & 38.2          & +169.8 m   & +116.8\%\tnote{a} \\
             w/o Experience map          & 186.0          & 17.8          & +40.5 m    & +27.9\%           \\
-            w/o Transformer-inspired    & 183.0          & 18.1          & +37.5 m    & +25.8\%           \\
-            w/o Dual-stream vision      & 180.0          & 17.6          & +34.5 m    & +23.8\%           \\
+            \color{red}w/o Transformer-inspired    & 183.0          & 18.1          & +37.5 m    & +25.8\%\tnote{b}  \\
+            w/o Dual-stream vision      & 180.0          & 17.6          & +34.5 m    & +23.8\%\tnote{b}  \color{black}\\
             \bottomrule
         \end{tabular}
         \begin{tablenotes}
             \scriptsize
             \item[a] Improvement calculated as (Ablated - Full) / Full $\times$ 100\%. Values $>$100\% indicate the ablated configuration has more than 2$\times$ the error of the full framework.
+            \item[b] \color{red}[V2: the two red rows (w/o Transformer-inspired, w/o Dual-stream vision) cannot be reproduced with the current final code (no corresponding switches in the pipeline); re-measure after the switches are implemented or remove before final draft.]\color{black}
         \end{tablenotes}
     \end{threeparttable}
 \end{table*}
@@ -192,12 +193,12 @@ To quantify the con\-tri\-bu\-tion of each component in our bio-inspired framewo
 
     \item \textbf{Experience Map (+27.9\%, 25.6\% con\-tri\-bu\-tion)}: Removing hippo\-campus-inspired loop closure de\-grades per\-for\-mance (145.5~m$\rightarrow$186.0~m), confirming that global correction via experience map relaxation is essential for drift correction. The 40.5~m deg\-ra\-da\-tion represents 25.6\% of cumulative error, demonstrating that topological memory provides substantial benefit even when local odometry is accurate. Loop closure detection (15--47 loops across scenarios) enables global consistency through pose graph optimization.
 
-    \item \textbf{Trans\-form\-er-in\-spired Encoding (+25.8\%, 23.7\% con\-tri\-bu\-tion)}: Removing the Trans\-former-inspired sequence encoding increases RMSE by 37.5~m (145.5$\rightarrow$183.0~m), confirming that capturing long-range depen\-dencies enhances loop closure detection. The 23.7\% con\-tri\-bu\-tion validates the archi\-tectural choice of combining local LSTM temporal coherence with global Trans\-form\-er-in\-spired context aggregation, mimicking hippo\-campal replay mechanisms where short-term episodic memory consolidates into long-term spatial maps.
+    \item \color{red}\textbf{Trans\-form\-er-in\-spired Encoding (+25.8\%, 23.7\% con\-tri\-bu\-tion)}: Removing the Trans\-former-inspired sequence encoding increases RMSE by 37.5~m (145.5$\rightarrow$183.0~m), confirming that capturing long-range depen\-dencies enhances loop closure detection. The 23.7\% con\-tri\-bu\-tion validates the archi\-tectural choice of combining local LSTM temporal coherence with global Trans\-form\-er-in\-spired context aggregation, mimicking hippo\-campal replay mechanisms where short-term episodic memory consolidates into long-term spatial maps. \color{black}\color{red}[V2: the corresponding ablation row is not reproducible under the current code; this item is to be re-measured or removed.]\color{black}
 
-    \item \textbf{Dual-Stream Vision (+23.8\%, 21.8\% con\-tri\-bu\-tion)}: Removing the dual-stream archi\-tecture de\-grades RMSE by 34.5~m (145.5$\rightarrow$180.0~m), validating the biological ``what/where'' pathway separation for robust feature discrim\-ination. The 21.8\% con\-tri\-bu\-tion demon\-strates that separating appearance (ventral stream) and motion (dorsal stream) processing improves both place recognition and odometry estimation compared to single-stream architectures.
+    \item \color{red}\textbf{Dual-Stream Vision (+23.8\%, 21.8\% con\-tri\-bu\-tion)}: Removing the dual-stream archi\-tecture de\-grades RMSE by 34.5~m (145.5$\rightarrow$180.0~m), validating the biological ``what/where'' pathway separation for robust feature discrim\-ination. The 21.8\% con\-tri\-bu\-tion demon\-strates that separating appearance (ventral stream) and motion (dorsal stream) processing improves both place recognition and odometry estimation compared to single-stream architectures. \color{black}\color{red}[V2: the corresponding ablation row is not reproducible under the current code; this item is to be re-measured or removed.]\color{black}
 \end{itemize}
 
-\textbf{Synergistic Effects.} The cumulative ablation error (445.3~m) exceeds the sum of individual contributions (282.3~m), revealing positive synergy: IMU fusion provides stable input to spatial cells ($\rightarrow$ better grid cell accuracy), which in turn improves experience map anchoring ($\rightarrow$ more reliable loop closure). This 1+1$>$2 effect (57.8\% synergy gain) confirms the biological principle that multimodal integration yields superlinear per\-for\-mance improvements, consistent with findings in rodent navigation where ves\-tib\-u\-lar and visual cues interact nonlinearly in entorhinal cortex~\cite{Winter2015}.
+\color{red}\textbf{Synergistic Effects.} The cumulative ablation error (445.3~m) exceeds the sum of individual contributions (282.3~m), revealing positive synergy: IMU fusion provides stable input to spatial cells ($\rightarrow$ better grid cell accuracy), which in turn improves experience map anchoring ($\rightarrow$ more reliable loop closure). This 1+1$>$2 effect (57.8\% synergy gain) confirms the biological principle that multimodal integration yields superlinear per\-for\-mance improvements, consistent with findings in rodent navigation where ves\-tib\-u\-lar and visual cues interact nonlinearly in entorhinal cortex~\cite{Winter2015}. \color{black}\color{red}[V2: the numbers in this paragraph depend on the two non-reproducible ablation rows; to be recomputed or removed.]\color{black}
 
 % Ablation and VT growth figure
 \begin{figure*}[!t]
@@ -223,7 +224,7 @@ To quantify the con\-tri\-bu\-tion of each component in our bio-inspired framewo
     \item \textbf{Synergy}: LSTM provides stable input to the Trans\-form\-er-in\-spired module by filtering noise, while the global context guides LSTM via loop closure corrections. This two-level temporal hierarchy mimics hippocampal replay mechanisms where short-term episodic memory (LSTM: frame-by-frame processing, $<$10~frame window) consolidates into long-term spatial maps (Trans\-form\-er-in\-spired: 50--100~frame sequences).
 \end{itemize}
 
-The 25.8\% Trans\-form\-er-in\-spired con\-tri\-bu\-tion (Table~\ref{tab:ablation}) primarily reflects its loop closure advantage. Combined LSTM+Trans\-form\-er-in\-spired likely contribute $\sim$30\%, but separating their individual effects requires extensive cross-validation left for future work. Compared to NeuroSLAM's single LSTM layer, our dual temporal architecture achieves superior per\-for\-mance (145.5~m vs. NeuroSLAM's reported 320~m on similar scenarios), validating the architectural innovation.
+\color{red}The 25.8\% Trans\-form\-er-in\-spired con\-tri\-bu\-tion (Table~\ref{tab:ablation}) primarily reflects its loop closure advantage. Combined LSTM+Trans\-form\-er-in\-spired likely contribute $\sim$30\%, but separating their individual effects requires extensive cross-validation left for future work. \color{black}\color{red}[V2: based on the non-reproducible ablation rows; to be re-measured or removed.]\color{black} Compared to NeuroSLAM's single LSTM layer, our dual temporal architecture achieves superior per\-for\-mance (145.5~m vs. NeuroSLAM's reported 320~m on similar scenarios), validating the architectural innovation.
 
 \subsection{Discussion and Insights}
 

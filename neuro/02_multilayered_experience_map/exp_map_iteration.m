@@ -98,6 +98,19 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     if isempty(EXP_MAX_LOOP_CE)
         EXP_MAX_LOOP_CE = 20;
     end
+
+    %% [DIAG] 闭环诊断计数器（论文重跑用，最终会移除）
+    global DIAG_VT_REVISIT DIAG_BELOW_THR DIAG_MAX_DELTA DIAG_MULTI_CAND DIAG_MULTI_REJECT ...
+           DIAG_SINGLE_BELOW DIAG_SINGLE_MATCH DIAG_CE_REJECT DIAG_CE_MAX;
+    if isempty(DIAG_VT_REVISIT), DIAG_VT_REVISIT = 0; end
+    if isempty(DIAG_BELOW_THR), DIAG_BELOW_THR = 0; end
+    if isempty(DIAG_MAX_DELTA), DIAG_MAX_DELTA = 0; end
+    if isempty(DIAG_MULTI_CAND), DIAG_MULTI_CAND = 0; end
+    if isempty(DIAG_MULTI_REJECT), DIAG_MULTI_REJECT = 0; end
+    if isempty(DIAG_SINGLE_BELOW), DIAG_SINGLE_BELOW = 0; end
+    if isempty(DIAG_SINGLE_MATCH), DIAG_SINGLE_MATCH = 0; end
+    if isempty(DIAG_CE_REJECT), DIAG_CE_REJECT = 0; end
+    if isempty(DIAG_CE_MAX), DIAG_CE_MAX = 0; end
     
     ACCUM_DELTA_YAW = clip_radian_180(ACCUM_DELTA_YAW + yawRotV);
 %     ACCUM_DELTA_HEIGHT = mod(ACCUM_DELTA_HEIGHT + heightV, YAW_HEIGHT_HDC_H_DIM);
@@ -133,6 +146,9 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     % If the visual template is new, create a new experience.
     % Otherwise, prefer matching an existing experience for this VT before creating a new one
     % (important when delta_em is large due to drift but VT repeats).
+    if VT(vt_id).numExp > 0
+        DIAG_VT_REVISIT = DIAG_VT_REVISIT + 1;  % [DIAG]
+    end
     if VT(vt_id).numExp == 0
 
         NUM_EXPS = NUM_EXPS + 1;
@@ -191,8 +207,13 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                 ratio = 0;
             end
 
+            if vals(1) < DELTA_EXP_GC_HDC_THRESHOLD
+                DIAG_MULTI_CAND = DIAG_MULTI_CAND + 1;  % [DIAG]
+            end
             if vals(1) < DELTA_EXP_GC_HDC_THRESHOLD && ratio < EXP_MATCH_RATIO_THRESHOLD
                 matched_exp_id = VT(vt_id).EXPERIENCES(ids(1)).id;
+            else
+                DIAG_MULTI_REJECT = DIAG_MULTI_REJECT + 1;  % [DIAG]
             end
 
             if matched_exp_id ~= 0
@@ -204,10 +225,13 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                 ce_tmp = sqrt((EXPERIENCES(matched_exp_id).x_exp - lx_tmp)^2 + (EXPERIENCES(matched_exp_id).y_exp - ly_tmp)^2 + (EXPERIENCES(matched_exp_id).z_exp - lz_tmp)^2);
                 if ~isfinite(ce_tmp) || ce_tmp > EXP_MAX_LOOP_CE
                     matched_exp_id = 0;
+                    DIAG_CE_REJECT = DIAG_CE_REJECT + 1;  % [DIAG]
+                    if isfinite(ce_tmp) && ce_tmp > DIAG_CE_MAX, DIAG_CE_MAX = ce_tmp; end
                 end
             end
 
             if matched_exp_id ~= 0
+                log_exp_match(ce_tmp, matched_exp_id);  % [DIAG]
                 link_exists = 0;
                 for link_id = 1 : EXPERIENCES(CUR_EXP_ID).numlinks
                     if EXPERIENCES(CUR_EXP_ID).links(link_id).exp_id == matched_exp_id
@@ -253,6 +277,12 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
             end
 
             MIN_DELTA_EM = [MIN_DELTA_EM; min_delta];
+            if min_delta < DELTA_EXP_GC_HDC_THRESHOLD
+                DIAG_SINGLE_BELOW = DIAG_SINGLE_BELOW + 1;  % [DIAG]
+            end
+            if min_delta > DIAG_MAX_DELTA
+                DIAG_MAX_DELTA = min_delta;  % [DIAG]
+            end
             ratio = 0;
             if numel(vals) >= 2
                 ratio = vals(1) / (vals(2) + eps);
@@ -274,10 +304,20 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                     ce_tmp = sqrt((EXPERIENCES(matched_exp_id).x_exp - lx_tmp)^2 + (EXPERIENCES(matched_exp_id).y_exp - ly_tmp)^2 + (EXPERIENCES(matched_exp_id).z_exp - lz_tmp)^2);
                     if ~isfinite(ce_tmp) || ce_tmp > EXP_MAX_LOOP_CE
                         matched_exp_id = 0;
+                        DIAG_CE_REJECT = DIAG_CE_REJECT + 1;  % [DIAG]
+                        if isfinite(ce_tmp) && ce_tmp > DIAG_CE_MAX, DIAG_CE_MAX = ce_tmp; end
                     end
                 end
 
+                % [DIAG/FIX] 对照: 禁用重锚定(永不匹配旧经验), 隔离纯DR基底质量
+                global EXP_DISABLE_REANCHOR;
+                if ~isempty(EXP_DISABLE_REANCHOR) && EXP_DISABLE_REANCHOR
+                    matched_exp_id = 0;
+                end
+
                 if matched_exp_id ~= 0
+                    DIAG_SINGLE_MATCH = DIAG_SINGLE_MATCH + 1;  % [DIAG]
+                    log_exp_match(ce_tmp, matched_exp_id);  % [DIAG]
                     % see if the previous experience already has a link to the current experience
                     link_exists = 0;
                     for link_id = 1 : EXPERIENCES(CUR_EXP_ID).numlinks
@@ -410,5 +450,21 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     % keep a frame by frame history of which experience was currently active
     global EXP_HISTORY;
     EXP_HISTORY = [EXP_HISTORY; CUR_EXP_ID];
+end
+
+%% [DIAG] 记录每次成功匹配(重锚定事件), 供离线分解 teleport 损伤来源
+%  字段: frame from_id to_id age_diff(from-to,正=匹配到更老节点)
+%       from_x from_y to_x to_y ce(约束误差m)
+function log_exp_match(ce_val, to_id)
+    global DIAG_MATCH_LOG;
+    global CUR_EXP_ID;
+    global EXPERIENCES;
+    global EXP_HISTORY;
+    if isempty(DIAG_MATCH_LOG), DIAG_MATCH_LOG = zeros(0, 9); end
+    if isempty(EXP_HISTORY), cur_frame = 1; else, cur_frame = EXP_HISTORY(end); end
+    row = [cur_frame, CUR_EXP_ID, to_id, CUR_EXP_ID - to_id, ...
+           EXPERIENCES(CUR_EXP_ID).x_exp, EXPERIENCES(CUR_EXP_ID).y_exp, ...
+           EXPERIENCES(to_id).x_exp, EXPERIENCES(to_id).y_exp, ce_val];
+    DIAG_MATCH_LOG(end+1, :) = row;
 end
 
