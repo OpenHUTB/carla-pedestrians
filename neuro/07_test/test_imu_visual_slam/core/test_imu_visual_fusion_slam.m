@@ -119,6 +119,18 @@ if ~isempty(GC_VT_INJECT_ENERGY_OVERRIDE)
     GC_VT_INJECT_ENERGY = GC_VT_INJECT_ENERGY_OVERRIDE;
     fprintf('   ✓ GC VT注入能量覆盖: %.2f\n', GC_VT_INJECT_ENERGY);
 end
+% 2026-10-02 EKF-odo节点钉扎模式: 禁用每帧地图松弛循环。
+% 原因: 钉扎节点坐标=EKF真值, 但link存的d_xy/heading是DR值, EXP_LOOPS松弛
+% 按link反解会把钉扎节点整体拖拽(Town05: 44节点被甩离EKF 1309-1428m, ATE
+% 173.54→LOOPS=0后25.32且节点到EKF距离=0)。非EKF-odo路径不受影响。
+global NLM_USE_EKF_ODO;
+if ~isempty(NLM_USE_EKF_ODO) && NLM_USE_EKF_ODO
+    if ~isempty(EXP_LOOPS_OVERRIDE)
+        fprintf('   ⚠ EKF-odo钉扎模式: 忽略EXP_LOOPS_OVERRIDE=%d, 强制EXP_LOOPS=0\n', EXP_LOOPS_OVERRIDE);
+    end
+    EXP_LOOPS = 0;
+    fprintf('   ✓ EKF-odo钉扎模式: 地图松弛循环已禁用 (EXP_LOOPS=0)\n');
+end
 
 %% 4. 初始化各模块参数
 fprintf('[3/9] 初始化模块参数...\n');
@@ -239,6 +251,11 @@ if ~isempty(NLM_USE_EKF_ODO) && NLM_USE_EKF_ODO && ~isempty(fusion_data.att)
     while initial_ekf_yaw_rad >  pi, initial_ekf_yaw_rad = initial_ekf_yaw_rad - 2*pi; end
     while initial_ekf_yaw_rad < -pi, initial_ekf_yaw_rad = initial_ekf_yaw_rad + 2*pi; end
     ACCUM_DELTA_YAW = initial_ekf_yaw_rad;
+    % 节点钉扎参考: 首帧EKF世界位置 (地图系 = 世界系平移 -首帧位置)
+    global NLM_INIT_EKF_X0 NLM_INIT_EKF_Y0 NLM_INIT_EKF_Z0;
+    NLM_INIT_EKF_X0 = fusion_data.pos(1, 1);
+    NLM_INIT_EKF_Y0 = fusion_data.pos(1, 2);
+    NLM_INIT_EKF_Z0 = fusion_data.pos(1, 3);
     if NUM_EXPS >= 1
         EXPERIENCES(1).yaw_exp_rad = initial_ekf_yaw_rad;
     end
@@ -341,6 +358,7 @@ for frame_idx = 1:num_frames
     % 开启后GC/HDC/经验地图基于EKF轨迹的逐帧增量运行, 单位均为逐帧米/度。
     global NLM_USE_EKF_ODO;
     transV_gc = transV;  % GC迭代输入: 默认=VO值(非EKF分支行为不变)
+    global NLM_EKF_ANCHOR_MAP;  % EKF-odo节点坐标钉扎(地图系EKF位置)
     if ~isempty(NLM_USE_EKF_ODO) && NLM_USE_EKF_ODO && ...
             frame_idx >= 1 && frame_idx <= size(fusion_data.pos, 1)
         ekf_x = fusion_data.pos(frame_idx, 1);
@@ -374,6 +392,11 @@ for frame_idx = 1:num_frames
         odo_x = ekf_x; odo_y = ekf_y; odo_z = ekf_z;
         odo_yaw = ekf_yaw_deg * DEGREE_TO_RADIAN;
         odo_height = ekf_z;
+        % 2026-10-02 节点坐标钉扎: EKF位置映射到地图系(=ACCUM_DELTA积分系,
+        % 由 ACCUM_DELTA 恒等于 世界增量旋转(-初始航向) 推出), 供 create_new_exp
+        % 直接给新节点真实米坐标, 消除GC钳位导致的地图架系欠积分压缩
+        % (Town05 纯DR基线 92m→预期≈EKF; CE门恢复为同架系几何验证器)
+        NLM_EKF_ANCHOR_MAP = [ekf_x - NLM_INIT_EKF_X0, ekf_y - NLM_INIT_EKF_Y0, ekf_z - NLM_INIT_EKF_Z0];
     else
         % 更新IMU-aided轨迹
         odo_yaw = odo_yaw + yawRotV * DEGREE_TO_RADIAN;
