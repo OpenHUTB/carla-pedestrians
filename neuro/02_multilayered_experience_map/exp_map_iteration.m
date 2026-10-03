@@ -130,6 +130,8 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     if isempty(DIAG_CE_MAX), DIAG_CE_MAX = 0; end
     if isempty(DIAG_LOOP_ACCEPT), DIAG_LOOP_ACCEPT = 0; end
     if isempty(DIAG_YAW_REJECT), DIAG_YAW_REJECT = 0; end
+    global DIAG_FUNNEL_LOG;
+    if isempty(DIAG_FUNNEL_LOG), DIAG_FUNNEL_LOG = zeros(0, 10); end
     
     ACCUM_DELTA_YAW = clip_radian_180(ACCUM_DELTA_YAW + yawRotV);
 %     ACCUM_DELTA_HEIGHT = mod(ACCUM_DELTA_HEIGHT + heightV, YAW_HEIGHT_HDC_H_DIM);
@@ -169,7 +171,7 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
         DIAG_VT_REVISIT = DIAG_VT_REVISIT + 1;  % [DIAG]
     end
     if VT(vt_id).numExp == 0
-
+        log_funnel(0, inf, inf, 0, 0, 0, vt_id);  % [DIAG] 漏斗: VT新建节点
         NUM_EXPS = NUM_EXPS + 1;
         create_new_exp(CUR_EXP_ID, NUM_EXPS, vt_id, xGc, yGc, zGc, curYawHdc, curHeight);
 
@@ -233,6 +235,7 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                 matched_exp_id = VT(vt_id).EXPERIENCES(ids(1)).id;
             else
                 DIAG_MULTI_REJECT = DIAG_MULTI_REJECT + 1;  % [DIAG]
+                log_funnel(2, vals(1), ratio, 0, 0, 0, vt_id);  % [DIAG] 漏斗: 多候选ratio门拒绝(哈希碰撞)
             end
 
             if matched_exp_id ~= 0
@@ -243,6 +246,7 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                 lz_tmp = EXPERIENCES(CUR_EXP_ID).z_exp + ACCUM_DELTA_Z;
                 ce_tmp = sqrt((EXPERIENCES(matched_exp_id).x_exp - lx_tmp)^2 + (EXPERIENCES(matched_exp_id).y_exp - ly_tmp)^2 + (EXPERIENCES(matched_exp_id).z_exp - lz_tmp)^2);
                 if ~isfinite(ce_tmp) || ce_tmp > EXP_MAX_LOOP_CE
+                    log_funnel(3, vals(1), ratio, matched_exp_id, ce_tmp, d_xy_tmp, vt_id);  % [DIAG] 漏斗: 多候选CE门拒绝
                     matched_exp_id = 0;
                     DIAG_CE_REJECT = DIAG_CE_REJECT + 1;  % [DIAG]
                     if isfinite(ce_tmp) && ce_tmp > DIAG_CE_MAX, DIAG_CE_MAX = ce_tmp; end
@@ -252,6 +256,11 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
             if matched_exp_id ~= 0
                 log_exp_match(ce_tmp, matched_exp_id);  % [DIAG]
                 matched_exp_id = nl_apply_loop_fix(matched_exp_id, ce_tmp);  % [B-fix] 朝向门+修正传播(0=拒绝, 落到建新节点)
+                if matched_exp_id ~= 0
+                    log_funnel(4, vals(1), ratio, matched_exp_id, ce_tmp, d_xy_tmp, vt_id);  % [DIAG] 漏斗: 多候选闭环接受
+                else
+                    log_funnel(8, vals(1), ratio, ids(1), ce_tmp, d_xy_tmp, vt_id);  % [DIAG] 漏斗: 朝向门拒绝
+                end
             end
             if matched_exp_id ~= 0
                 link_exists = 0;
@@ -325,6 +334,7 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                     lz_tmp = EXPERIENCES(CUR_EXP_ID).z_exp + ACCUM_DELTA_Z;
                     ce_tmp = sqrt((EXPERIENCES(matched_exp_id).x_exp - lx_tmp)^2 + (EXPERIENCES(matched_exp_id).y_exp - ly_tmp)^2 + (EXPERIENCES(matched_exp_id).z_exp - lz_tmp)^2);
                     if ~isfinite(ce_tmp) || ce_tmp > EXP_MAX_LOOP_CE
+                        log_funnel(6, min_delta, ratio, matched_exp_id, ce_tmp, d_xy_tmp, vt_id);  % [DIAG] 漏斗: 单候选CE门拒绝
                         matched_exp_id = 0;
                         DIAG_CE_REJECT = DIAG_CE_REJECT + 1;  % [DIAG]
                         if isfinite(ce_tmp) && ce_tmp > DIAG_CE_MAX, DIAG_CE_MAX = ce_tmp; end
@@ -339,6 +349,11 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
 
                 if matched_exp_id ~= 0
                     matched_exp_id = nl_apply_loop_fix(matched_exp_id, ce_tmp);  % [B-fix] 朝向门+修正传播(0=拒绝, 落到建新节点)
+                    if matched_exp_id ~= 0
+                        log_funnel(7, min_delta, ratio, matched_exp_id, ce_tmp, d_xy_tmp, vt_id);  % [DIAG] 漏斗: 单候选闭环接受
+                    else
+                        log_funnel(8, min_delta, ratio, ids(1), ce_tmp, d_xy_tmp, vt_id);  % [DIAG] 漏斗: 朝向门拒绝
+                    end
                 end
 
                 if matched_exp_id ~= 0
@@ -378,6 +393,8 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                      end
                 end
 
+            else
+                log_funnel(5, min_delta, ratio, 0, 0, 0, vt_id);  % [DIAG] 漏斗: 单候选无阈值内候选
             end
 
             % if there wasn't an experience with the current visual template and grid cell (x y z) and head direction cell (yaw, height)
@@ -401,6 +418,7 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     elseif delta_em > DELTA_EXP_GC_HDC_THRESHOLD
 
         % VT did not change, but the pose-cell state drifted enough: create a new experience.
+        log_funnel(1, delta_em, 0, 0, 0, 0, vt_id);  % [DIAG] 漏斗: VT未变位姿漂移新建
         NUM_EXPS = NUM_EXPS + 1;
         create_new_exp(CUR_EXP_ID, NUM_EXPS, vt_id, xGc, yGc, zGc, curYawHdc, curHeight);
 
@@ -541,5 +559,33 @@ function log_exp_match(ce_val, to_id)
            EXPERIENCES(CUR_EXP_ID).x_exp, EXPERIENCES(CUR_EXP_ID).y_exp, ...
            EXPERIENCES(to_id).x_exp, EXPERIENCES(to_id).y_exp, ce_val];
     DIAG_MATCH_LOG(end+1, :) = row;
+end
+
+%% [DIAG] 闭环漏斗日志: 记录每个VT决策点, 定位真闭环episode死在哪一级
+%  行: [frame branch min_delta ratio match_id ce age d_xy vt_id]
+%  branch: 0=VT新建 1=位姿漂移新建 2=多候选ratio拒 3=多候选CE拒
+%          4=多候选闭环接受 5=无阈值内候选 6=单候选CE拒 7=单候选闭环接受 8=朝向门拒
+%  global FUNNEL_LOG_PATH 非空时追加写文件(默认关, 零开销)
+function log_funnel(branch, min_delta, ratio, match_id, ce_val, d_xy, vt_id)
+    global DIAG_FUNNEL_LOG;
+    global CUR_EXP_ID;
+    global EXP_HISTORY;
+    global FUNNEL_LOG_PATH;
+    if isempty(DIAG_FUNNEL_LOG), DIAG_FUNNEL_LOG = zeros(0, 9); end
+    if isempty(EXP_HISTORY), cur_frame = 1; else, cur_frame = EXP_HISTORY(end); end
+    age = 0;
+    if match_id > 0, age = CUR_EXP_ID - match_id; end
+    row = [cur_frame, branch, min_delta, ratio, match_id, ce_val, age, d_xy, vt_id];
+    DIAG_FUNNEL_LOG(end+1, :) = row;
+    if ~isempty(FUNNEL_LOG_PATH) && ~isempty(FUNNEL_LOG_PATH{1})
+        try
+            fid = fopen(FUNNEL_LOG_PATH{1}, 'a');
+            if fid > 0
+                fprintf(fid, '%d %d %.4f %.4f %d %.3f %d %.3f %d\n', row);
+                fclose(fid);
+            end
+        catch
+        end
+    end
 end
 
