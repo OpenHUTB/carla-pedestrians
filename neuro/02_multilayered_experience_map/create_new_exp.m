@@ -68,10 +68,14 @@ function create_new_exp(curExpId, newExpId, vt_id, xGc, yGc, zGc, curYawHdc, cur
     % 新节点坐标直接取创建帧的EKF地图系位置(真实米), 消除DR累积在GC钳位下的
     % 欠积分压缩(地图架系scale 0.38-1.6); 非EKF-odo路径该全局为空, 行为不变
     global NLM_EKF_ANCHOR_MAP;
+    global NLM_LOOP_CORR;  % [B-fix] 闭环累计修正量
     if ~isempty(NLM_EKF_ANCHOR_MAP)
-        EXPERIENCES(newExpId).x_exp = NLM_EKF_ANCHOR_MAP(1);
-        EXPERIENCES(newExpId).y_exp = NLM_EKF_ANCHOR_MAP(2);
-        EXPERIENCES(newExpId).z_exp = NLM_EKF_ANCHOR_MAP(3);
+        % [B-fix] 钉扎坐标继承闭环累计修正: 新节点=EKF锚点+NLM_LOOP_CORR,
+        % 使已接受的闭环修正传播到后续整条后缀(否则闭环一离开匹配节点即被抹掉)
+        if isempty(NLM_LOOP_CORR), NLM_LOOP_CORR = [0, 0, 0]; end
+        EXPERIENCES(newExpId).x_exp = NLM_EKF_ANCHOR_MAP(1) + NLM_LOOP_CORR(1);
+        EXPERIENCES(newExpId).y_exp = NLM_EKF_ANCHOR_MAP(2) + NLM_LOOP_CORR(2);
+        EXPERIENCES(newExpId).z_exp = NLM_EKF_ANCHOR_MAP(3) + NLM_LOOP_CORR(3);
     else
         EXPERIENCES(newExpId).x_exp = EXPERIENCES(curExpId).x_exp + ACCUM_DELTA_X;
         EXPERIENCES(newExpId).y_exp = EXPERIENCES(curExpId).y_exp + ACCUM_DELTA_Y;
