@@ -99,9 +99,26 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
         EXP_MAX_LOOP_CE = 20;
     end
 
+    % [B-fix] 闭环修正传播(单向累计修正, 替代被禁用的每帧松弛循环):
+    % 真闭环被接受(CE门+朝向门双验证)时, 匹配节点位移β·Δ并累计进NLM_LOOP_CORR,
+    % 后续新节点经create_new_exp继承(EKF-odo钉扎=锚点+NLM_LOOP_CORR)→修正粘住整条后缀。
+    % 根因: 原EKF-odo模式新节点钉扎原始EKF坐标, 闭环修正一离开匹配节点即被抹掉
+    % (CE扫描: 10HD CE=200仅-2.1m; 闭环上限模拟10HD可达3.48m, 差距即修正不传播)。
+    global NLM_LOOP_BETA NLM_LOOP_CE_MIN NLM_LOOP_STEP_MAX NLM_LOOP_YAW_GATE NLM_LOOP_CORR;
+    global NLM_LOOP_FIX_ENABLE;
+    if isempty(NLM_LOOP_FIX_ENABLE), NLM_LOOP_FIX_ENABLE = false; end % 持续性修正开关: 默认关=纯重锚定(基线行为), 开=朝向门+β·r后缀传播
+    if isempty(NLM_LOOP_BETA), NLM_LOOP_BETA = 1.0; end               % 修正力度β
+    if isempty(NLM_LOOP_CE_MIN), NLM_LOOP_CE_MIN = 3; end             % CE<3m=近邻重访: 纯跳转不修正
+    if isempty(NLM_LOOP_STEP_MAX), NLM_LOOP_STEP_MAX = 25; end        % 单步修正钳位(m)
+    if isempty(NLM_LOOP_YAW_GATE), NLM_LOOP_YAW_GATE = 60 * pi / 180; end % 朝向门: 同向或反向容差
+    if isempty(NLM_LOOP_CORR), NLM_LOOP_CORR = [0, 0, 0]; end
+    % 注: 跨run重置由驱动脚本在调用core前显式 NLM_LOOP_CORR=[0,0,0] 完成
+    % (此处不能依赖EXP_HISTORY, 其global声明在函数后部, 提前引用不解析)
+
     %% [DIAG] 闭环诊断计数器（论文重跑用，最终会移除）
     global DIAG_VT_REVISIT DIAG_BELOW_THR DIAG_MAX_DELTA DIAG_MULTI_CAND DIAG_MULTI_REJECT ...
-           DIAG_SINGLE_BELOW DIAG_SINGLE_MATCH DIAG_CE_REJECT DIAG_CE_MAX;
+           DIAG_SINGLE_BELOW DIAG_SINGLE_MATCH DIAG_CE_REJECT DIAG_CE_MAX ...
+           DIAG_LOOP_ACCEPT DIAG_YAW_REJECT;
     if isempty(DIAG_VT_REVISIT), DIAG_VT_REVISIT = 0; end
     if isempty(DIAG_BELOW_THR), DIAG_BELOW_THR = 0; end
     if isempty(DIAG_MAX_DELTA), DIAG_MAX_DELTA = 0; end
@@ -111,6 +128,8 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     if isempty(DIAG_SINGLE_MATCH), DIAG_SINGLE_MATCH = 0; end
     if isempty(DIAG_CE_REJECT), DIAG_CE_REJECT = 0; end
     if isempty(DIAG_CE_MAX), DIAG_CE_MAX = 0; end
+    if isempty(DIAG_LOOP_ACCEPT), DIAG_LOOP_ACCEPT = 0; end
+    if isempty(DIAG_YAW_REJECT), DIAG_YAW_REJECT = 0; end
     
     ACCUM_DELTA_YAW = clip_radian_180(ACCUM_DELTA_YAW + yawRotV);
 %     ACCUM_DELTA_HEIGHT = mod(ACCUM_DELTA_HEIGHT + heightV, YAW_HEIGHT_HDC_H_DIM);
@@ -232,6 +251,9 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
 
             if matched_exp_id ~= 0
                 log_exp_match(ce_tmp, matched_exp_id);  % [DIAG]
+                matched_exp_id = nl_apply_loop_fix(matched_exp_id, ce_tmp);  % [B-fix] 朝向门+修正传播(0=拒绝, 落到建新节点)
+            end
+            if matched_exp_id ~= 0
                 link_exists = 0;
                 for link_id = 1 : EXPERIENCES(CUR_EXP_ID).numlinks
                     if EXPERIENCES(CUR_EXP_ID).links(link_id).exp_id == matched_exp_id
@@ -313,6 +335,10 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
                 global EXP_DISABLE_REANCHOR;
                 if ~isempty(EXP_DISABLE_REANCHOR) && EXP_DISABLE_REANCHOR
                     matched_exp_id = 0;
+                end
+
+                if matched_exp_id ~= 0
+                    matched_exp_id = nl_apply_loop_fix(matched_exp_id, ce_tmp);  % [B-fix] 朝向门+修正传播(0=拒绝, 落到建新节点)
                 end
 
                 if matched_exp_id ~= 0
@@ -450,6 +476,55 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
     % keep a frame by frame history of which experience was currently active
     global EXP_HISTORY;
     EXP_HISTORY = [EXP_HISTORY; CUR_EXP_ID];
+end
+
+%% [B-fix] 真闭环修正传播: 朝向一致性门验证 + 残差β·r累进NLM_LOOP_CORR
+%  入参: matched_exp_id(通过CE门的匹配节点), ce_tmp(约束误差m)
+%  返回: 0=拒绝(该次匹配作废, 上游落到建新节点路径); 否则=accepted的matched_exp_id
+%  原理: matched是早期节点(EKF早期漂移小, 位置相对可信), 残差主要来自后缀累积漂移。
+%  故不动节点, 只把后缀累计修正量 NLM_LOOP_CORR -= β·r, 其中
+%  r = (CUR.pos + ACCUM_DELTA) - matched.pos 与上游CE门同一公式(ce_tmp=|r|)。
+%  后续新节点经create_new_exp继承(钉扎=EKF锚点+NLM_LOOP_CORR)→闭环修正传播到整条后缀。
+function out_id = nl_apply_loop_fix(matched_exp_id, ce_tmp)
+    global EXPERIENCES CUR_EXP_ID NLM_LOOP_BETA NLM_LOOP_CE_MIN NLM_LOOP_STEP_MAX ...
+           NLM_LOOP_YAW_GATE NLM_LOOP_CORR;
+    global ACCUM_DELTA_X ACCUM_DELTA_Y ACCUM_DELTA_Z;
+    global DIAG_LOOP_ACCEPT DIAG_YAW_REJECT;
+    out_id = matched_exp_id;
+    if isempty(matched_exp_id) || matched_exp_id <= 0
+        return;
+    end
+    % 持续性修正总开关: 关=仅重锚定(纯jump, 基线行为), 开=朝向门+后缀传播
+    global NLM_LOOP_FIX_ENABLE;
+    if ~NLM_LOOP_FIX_ENABLE
+        return;
+    end
+    % 仅对真闭环(远距重访)做修正; 近邻重访CE<CE_MIN=纯重锚定跳转(现状行为)
+    if ce_tmp < NLM_LOOP_CE_MIN
+        return;
+    end
+    % 朝向一致性门: 同向或反向(掉头重访)容差内才接受, 过滤GT无关的VT哈希碰撞
+    % (get_signed_delta_radian 返回 [-pi,pi] 内从CUR到matched的有符号最短角差)
+    d_yaw = get_signed_delta_radian(EXPERIENCES(CUR_EXP_ID).yaw_exp_rad, EXPERIENCES(matched_exp_id).yaw_exp_rad);
+    if abs(d_yaw) > NLM_LOOP_YAW_GATE && abs(abs(d_yaw) - pi) > NLM_LOOP_YAW_GATE
+        DIAG_YAW_REJECT = DIAG_YAW_REJECT + 1;
+        out_id = 0;
+        return;
+    end
+    % 残差r: 与CE门同一公式 — 当前节点沿ACCUM_DELTA方向推算的"matched应在位置"减matched现位置
+    % (上游调用本函数时ACCUM_DELTA尚未清零, 可用)
+    r = [EXPERIENCES(CUR_EXP_ID).x_exp + ACCUM_DELTA_X - EXPERIENCES(matched_exp_id).x_exp, ...
+         EXPERIENCES(CUR_EXP_ID).y_exp + ACCUM_DELTA_Y - EXPERIENCES(matched_exp_id).y_exp, ...
+         EXPERIENCES(CUR_EXP_ID).z_exp + ACCUM_DELTA_Z - EXPERIENCES(matched_exp_id).z_exp];
+    % 单步钳位: |r|上限=STEP_MAX(默认25m), 按比例缩放, 防错配把后缀甩飞
+    norm_r = norm(r);
+    if norm_r < 1e-6
+        return;
+    end
+    step = -NLM_LOOP_BETA * min(1, NLM_LOOP_STEP_MAX / norm_r) * r;
+    % 累计修正量(后缀平移量): 后续新节点经create_new_exp继承
+    NLM_LOOP_CORR = NLM_LOOP_CORR + step;
+    DIAG_LOOP_ACCEPT = DIAG_LOOP_ACCEPT + 1;
 end
 
 %% [DIAG] 记录每次成功匹配(重锚定事件), 供离线分解 teleport 损伤来源
