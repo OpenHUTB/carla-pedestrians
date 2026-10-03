@@ -400,6 +400,7 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
             % if there wasn't an experience with the current visual template and grid cell (x y z) and head direction cell (yaw, height)
             % then create a new experience
             if matched_exp_id == 0
+                log_funnel(10, NaN, NaN, 0, NaN, NaN, vt_id);  % [DIAG] 漏斗: VT已知但无有效匹配→重复建节点
                 NUM_EXPS = NUM_EXPS + 1;
                 create_new_exp(CUR_EXP_ID, NUM_EXPS, vt_id, xGc, yGc, zGc, curYawHdc, curHeight);
                 matched_exp_id = NUM_EXPS;
@@ -431,6 +432,8 @@ function exp_map_iteration(vt_id, transV, yawRotV, heightV, xGc, yGc, zGc, curYa
         ACCUM_DELTA_YAW = EXPERIENCES(CUR_EXP_ID).yaw_exp_rad;
 %         ACCUM_DELTA_HEIGHT = EXPERIENCES(CUR_EXP_ID).height_hdc;
 
+    else
+        log_funnel(9, delta_em, 0, CUR_EXP_ID, 0, 0, vt_id);  % [DIAG] 漏斗: VT不变静默停留(不评估闭环)
     end
 
     global EXP_CORRECTION;
@@ -554,34 +557,39 @@ function log_exp_match(ce_val, to_id)
     global EXPERIENCES;
     global EXP_HISTORY;
     if isempty(DIAG_MATCH_LOG), DIAG_MATCH_LOG = zeros(0, 9); end
-    if isempty(EXP_HISTORY), cur_frame = 1; else, cur_frame = EXP_HISTORY(end); end
+    % frame号=EXP_HISTORY已追加帧数+1(本帧在函数末尾才追加); EXP_HISTORY(end)是活跃经验ID, 不是帧号
+    if isempty(EXP_HISTORY), cur_frame = 1; else, cur_frame = length(EXP_HISTORY) + 1; end
     row = [cur_frame, CUR_EXP_ID, to_id, CUR_EXP_ID - to_id, ...
            EXPERIENCES(CUR_EXP_ID).x_exp, EXPERIENCES(CUR_EXP_ID).y_exp, ...
            EXPERIENCES(to_id).x_exp, EXPERIENCES(to_id).y_exp, ce_val];
     DIAG_MATCH_LOG(end+1, :) = row;
 end
 
-%% [DIAG] 闭环漏斗日志: 记录每个VT决策点, 定位真闭环episode死在哪一级
-%  行: [frame branch min_delta ratio match_id ce age d_xy vt_id]
+%% [DIAG] 闭环漏斗日志: 逐帧记录每个VT决策点, 定位真闭环episode死在哪一级
+%  行: [frame branch min_delta ratio match_id ce age d_xy vt_id num_exp]
 %  branch: 0=VT新建 1=位姿漂移新建 2=多候选ratio拒 3=多候选CE拒
 %          4=多候选闭环接受 5=无阈值内候选 6=单候选CE拒 7=单候选闭环接受 8=朝向门拒
+%          9=VT不变静默停留(不评估闭环) 10=VT已知但无有效匹配→重复建节点
 %  global FUNNEL_LOG_PATH 非空时追加写文件(默认关, 零开销)
 function log_funnel(branch, min_delta, ratio, match_id, ce_val, d_xy, vt_id)
     global DIAG_FUNNEL_LOG;
     global CUR_EXP_ID;
     global EXP_HISTORY;
     global FUNNEL_LOG_PATH;
-    if isempty(DIAG_FUNNEL_LOG), DIAG_FUNNEL_LOG = zeros(0, 9); end
-    if isempty(EXP_HISTORY), cur_frame = 1; else, cur_frame = EXP_HISTORY(end); end
+    global VT;
+    if isempty(DIAG_FUNNEL_LOG), DIAG_FUNNEL_LOG = zeros(0, 10); end
+    % frame号=EXP_HISTORY已追加帧数+1(本帧在函数末尾才追加); EXP_HISTORY(end)是活跃经验ID, 不是帧号
+    if isempty(EXP_HISTORY), cur_frame = 1; else, cur_frame = length(EXP_HISTORY) + 1; end
     age = 0;
     if match_id > 0, age = CUR_EXP_ID - match_id; end
-    row = [cur_frame, branch, min_delta, ratio, match_id, ce_val, age, d_xy, vt_id];
+    num_exp = VT(vt_id).numExp;
+    row = [cur_frame, branch, min_delta, ratio, match_id, ce_val, age, d_xy, vt_id, num_exp];
     DIAG_FUNNEL_LOG(end+1, :) = row;
     if ~isempty(FUNNEL_LOG_PATH) && ~isempty(FUNNEL_LOG_PATH{1})
         try
             fid = fopen(FUNNEL_LOG_PATH{1}, 'a');
             if fid > 0
-                fprintf(fid, '%d %d %.4f %.4f %d %.3f %d %.3f %d\n', row);
+                fprintf(fid, '%d %d %.4f %.4f %d %.3f %d %.3f %d %d\n', row);
                 fclose(fid);
             end
         catch
