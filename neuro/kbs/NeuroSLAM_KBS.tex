@@ -24,10 +24,13 @@
 \usepackage{xspace}
 
 % 紧凑排版: 收紧图表与正文之间的浮动间距
-\setlength{\textfloatsep}{6pt plus 2pt minus 2pt}   % 浮动体与正文之间(默认 ~20pt)
-\setlength{\floatsep}{4pt plus 1pt minus 1pt}       % 相邻浮动体之间
-\setlength{\intextsep}{5pt plus 2pt minus 2pt}      % 文中浮动体
-\setlength{\abovecaptionskip}{4pt}
+% 注意: 全文图表均为 figure*/table* (双栏), 真正生效的是 dbl* 参数
+\setlength{\dbltextfloatsep}{1.4\baselineskip plus 0.1\baselineskip minus 0.2\baselineskip} % 双栏图/表 与正文之间(含caption下边界, 可见≈2行)
+\setlength{\dblfloatsep}{1.4\baselineskip plus 0.1\baselineskip minus 0.2\baselineskip}     % 相邻双栏浮动体之间(可见≈2行)
+\setlength{\textfloatsep}{1\baselineskip plus 0.2\baselineskip minus 0.4\baselineskip}    % 单栏图/表 与正文之间
+\setlength{\floatsep}{1\baselineskip plus 0.1\baselineskip minus 0.2\baselineskip}        % 相邻单栏浮动体之间
+\setlength{\intextsep}{1\baselineskip plus 0.2\baselineskip minus 0.2\baselineskip}       % 文中浮动体
+\setlength{\abovecaptionskip}{3pt}
 \setlength{\belowcaptionskip}{2pt}
 \renewcommand{\topfraction}{0.92}
 \renewcommand{\bottomfraction}{0.7}
