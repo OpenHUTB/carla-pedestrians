@@ -23,6 +23,17 @@
 \usepackage{microtype}
 \usepackage{xspace}
 
+% 紧凑排版: 收紧图表与正文之间的浮动间距
+\setlength{\textfloatsep}{6pt plus 2pt minus 2pt}   % 浮动体与正文之间(默认 ~20pt)
+\setlength{\floatsep}{4pt plus 1pt minus 1pt}       % 相邻浮动体之间
+\setlength{\intextsep}{5pt plus 2pt minus 2pt}      % 文中浮动体
+\setlength{\abovecaptionskip}{4pt}
+\setlength{\belowcaptionskip}{2pt}
+\renewcommand{\topfraction}{0.92}
+\renewcommand{\bottomfraction}{0.7}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.85}
+
 % 定义自定义颜色（仅作图使用，表格无彩色可删除此行）
 \definecolor{darkgreen}{rgb}{0,0.6,0}
 

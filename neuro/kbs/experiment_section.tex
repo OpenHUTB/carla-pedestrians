@@ -1,7 +1,4 @@
-% Adjust float placement parameters to prevent figures from appearing alone on pages
-\renewcommand{\topfraction}{0.85}       % Allow up to 85% of page top for floats
-\renewcommand{\textfraction}{0.10}      % Require at least 10% text on text pages
-\renewcommand{\floatpagefraction}{0.75} % Float pages must be at least 75% full
+% 浮动定位参数统一在 NeuroSLAM_KBS.tex 中定义(紧凑排版)
 
 \section{Experiments and Results}
 \label{sec:experiments}
@@ -147,7 +144,7 @@ Results on the EuRoC datasets reveal \textbf{accuracy on par with the EKF baseli
 
 \begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.82\textwidth]{fig/representative_performance.pdf}
+    \includegraphics[trim=55pt 238pt 58pt 259pt, clip, width=0.82\textwidth]{fig/representative_performance.pdf}
     \caption{Representative per\-for\-mance for Town01 (517~m) and MH\_03 (127~m). Top row: per-method RMSE, drift, RPE (and template/loop counts for Town01); bottom row: aligned per-frame position error. On Town01 NeuroLocMap (16.63~m) is within 4.3\% of the EKF (15.94~m) and 54.4\% better than VO (36.46~m); on MH\_03 all three methods converge to 3.3--3.4~m.}
     \label{fig:representative_performance}
 \end{figure*}
@@ -196,7 +193,7 @@ To quantify the con\-tri\-bu\-tion of each component in our bio-inspired framewo
     \centering
 
     % [V2] .eps→.pdf：兼容 XeLaTeX/texpage，图内容相同
-    \includegraphics[width=0.82\textwidth]{fig/ablation_unified.pdf}%
+    \includegraphics[trim=54pt 295pt 58pt 307pt, clip, width=0.82\textwidth]{fig/ablation_unified.pdf}%
     \caption{Ablation analysis.
         (a) RMSE comparison across configurations on Town01: full framework (16.63~m) vs
         w/o IMU (= VO, 36.46~m) and w/o ExpMap (= EKF, 15.94~m). See Table~\ref{tab:ablation} for details.
@@ -225,7 +222,7 @@ Both temporal components operate on all sequences in Table~\ref{tab:results}; th
 \begin{figure*}[!htbp]
     \centering
     % [V2] .eps→.pdf：兼容 XeLaTeX/texpage，图内容相同
-    \includegraphics[width=0.85\textwidth]{fig/performance_summary.pdf}
+    \includegraphics[trim=62pt 331pt 66pt 339pt, clip, width=0.85\textwidth]{fig/performance_summary.pdf}
     \caption{Performance summary across 7 datasets.
         (a) RMSE comparison for NeuroLocMap, EKF, and VO baselines.
         (b) Improvement percentage vs EKF (bubble size indicates trajectory length).
@@ -286,7 +283,7 @@ This visualization demonstrates the framework's core functionality: transforming
 
 \begin{figure*}[!htbp]
     \centering
-    \includegraphics[width=0.95\textwidth]{fig/KITTI_07_input_output_visualization.pdf}
+    \includegraphics[trim=9pt 248pt 25pt 267pt, clip, width=0.95\textwidth]{fig/KITTI_07_input_output_visualization.pdf}
     \caption{Input-output visualization for KITTI~07 highway sequence (692~m, 1101 frames).
         (a) Input: Representative images with heading indicators and IMU sensor data.
         (b) Output: trajectory comparison (ground truth vs NeuroLocMap) and experience map topology with 1029 nodes and the 2 detected loop closure edges. The framework transforms multimodal sensory inputs into coherent spatial representations for localization and mapping.}
