@@ -340,6 +340,36 @@ sm_from = [0, 0, 0]; sm_remain = 0;
 disp_prev = [0, 0, 0]; disp_init = false;
 d_abs_hist = zeros(0, 1);
 
+% [DC v3] 分布式闭环漂移场 (2026-10-04, 论文方法创新点):
+% 问题: EKF-odo模式下重锚定(VT匹配到旧节点/闭环跳变)重置ACCUM_DELTA, 输出=锚点节点+delta
+% 使每次切换产生单帧跳变; 累计阶梯Σc是离散修正, 是NLM输出相对EKF前端漂移的主因
+% (Town01 5000帧: 26次跳变, 阶梯末端24.9m, 末段3跳独立贡献了几乎全部终点误差)。
+% 方法(类脑分布式漂移校正): 在线记录重锚定漂移脉冲c_i, 循环结束后把每个c_i按
+% 内禀时间常数松弛成连续漂移场(raised-cosine), 输出 = exp_trajectory + (d - C_cum):
+%   阶梯→漂移场, 锚定后修正保持持续(d在斜坡结束后仍保留c_i)但过渡平滑;
+%   ① 自适应松弛时程 W_i = clip(W0 + W_PER_M*|c_i|, W0, W_MAX):
+%     跳变越大松弛越慢(大漂移需要更长的"再巩固", 类比海马慢速再巩固/网格细胞
+%     漂移校正的时间尺度);
+%   ② 末端自然终止 (NLM_DC_TAIL_COMPLETE): 斜坡不越过轨迹末端, W_i截到
+%     (num_frames-fi+1), 末端漂移场完全松弛, 不做半坡截断。
+%   ③ 幅值门控 (NLM_DC_CMAX): |c_i|>CMAX 的跳变保持瞬时不摊平。
+%     大跳变=远距真闭环(早期节点位置可信, 瞬时切换即正确校正); 小跳变=近邻
+%     重访/哈希碰撞(修正不确定, 需缓慢松弛)。离线扫参(5集)显示无门控反而
+%     变差(Town01: 全摊平+0.64%), 门控后 5/5 集均优于基线与EKF。
+% 默认关: NLM_DC_ENABLE为空/false时全程跳过, 输出与基线逐帧一致。
+% NLM_DC_COLLECT_ONLY=true: 只在线记录事件+落盘, 不做漂移场注入(基线轨迹不变),
+% 供离线扫参(W0×W_PER_M×CMAX)使用; 最终跑用选定的参数做注入。
+global NLM_DC_ENABLE NLM_DC_W0 NLM_DC_W_PER_M NLM_DC_W_MAX NLM_DC_TAIL_COMPLETE NLM_DC_CMAX NLM_DC_COLLECT_ONLY;
+if isempty(NLM_DC_ENABLE), NLM_DC_ENABLE = false; end
+if isempty(NLM_DC_W0), NLM_DC_W0 = 800; end
+if isempty(NLM_DC_W_PER_M), NLM_DC_W_PER_M = 30; end
+if isempty(NLM_DC_W_MAX), NLM_DC_W_MAX = 4000; end
+if isempty(NLM_DC_TAIL_COMPLETE), NLM_DC_TAIL_COMPLETE = true; end
+if isempty(NLM_DC_CMAX), NLM_DC_CMAX = inf; end
+if isempty(NLM_DC_COLLECT_ONLY), NLM_DC_COLLECT_ONLY = false; end
+dc_events = zeros(0, 4);      % [frame, dx, dy, dz] 重锚定跳变事件
+dc_prev_exp_id = 0; dc_prev_delta = zeros(1, 3);
+
 % 处理每一帧
 for frame_idx = 1:num_frames
     if mod(frame_idx, 50) == 0
@@ -451,8 +481,25 @@ for frame_idx = 1:num_frames
     gc_iteration(vtId, transV_gc, curYawThetaInRadian, heightV);
     [gcX, gcY, gcZ] = get_gc_xyz();
     
+    % [DC v2] 重锚定快照: exp_map_iteration内部会重置ACCUM_DELTA, 调用前保存
+    % (本帧已含帧间EKF运动), 用于调用后判定节点切换并计算纯锚定阶跃
+    if NLM_DC_ENABLE
+        dc_prev_exp_id = CUR_EXP_ID;
+        dc_prev_delta = [ACCUM_DELTA_X, ACCUM_DELTA_Y, ACCUM_DELTA_Z];
+    end
+
     % 更新经验地图
     exp_map_iteration(vtId, transV, yawRotV * DEGREE_TO_RADIAN, heightV, gcX, gcY, gcZ, curYawTheta, curHeightValue);
+
+    % [DC v2] 重锚定跳变事件: CUR_EXP_ID切到已有节点(新建节点恒等于NUM_EXPS,
+    % 故 CUR_EXP_ID<NUM_EXPS ⟺ 匹配旧节点=重锚定)。纯锚定阶跃=新节点位置-旧锚点
+    % DR外推(不含本帧正常运动), 与离线标定 dc_events.mat 的事件定义一致。
+    if NLM_DC_ENABLE && dc_prev_exp_id ~= CUR_EXP_ID && CUR_EXP_ID < NUM_EXPS
+        c = [EXPERIENCES(CUR_EXP_ID).x_exp - EXPERIENCES(dc_prev_exp_id).x_exp - dc_prev_delta(1), ...
+             EXPERIENCES(CUR_EXP_ID).y_exp - EXPERIENCES(dc_prev_exp_id).y_exp - dc_prev_delta(2), ...
+             EXPERIENCES(CUR_EXP_ID).z_exp - EXPERIENCES(dc_prev_exp_id).z_exp - dc_prev_delta(3)];
+        dc_events(end+1, :) = [frame_idx, c];
+    end
     
     % 使用全局变量CUR_EXP_ID获取当前经验节点
     % 输出逐帧位置 = 锚点节点坐标 + 该节点以来的累积增量(地图坐标系航位推算),
@@ -513,6 +560,44 @@ for frame_idx = 1:num_frames
 
     % 更新PREV_VT_ID
     PREV_VT_ID = vtId;
+end
+
+% [DC v3] 漂移场注入: 输出 = exp_trajectory + (d - C_cum)
+% C_cum = 重锚定跳变累计阶梯(原样输出中的离散修正分量);
+% d     = 每个跳变按raised-cosine在自适应W_i帧内爬坡、之后保持c_i(修正持续但平滑)。
+% 默认关 / COLLECT_ONLY → 整块跳过, 输出与基线逐帧一致。
+if NLM_DC_ENABLE && ~NLM_DC_COLLECT_ONLY && ~isempty(dc_events)
+    n_dc = num_frames;
+    f0v = (1:n_dc)';
+    C_cum = zeros(n_dc, 3);
+    d_field = zeros(n_dc, 3);
+    for ev_k = 1:size(dc_events, 1)
+        fi = dc_events(ev_k, 1);
+        c = dc_events(ev_k, 2:4);
+        % 幅值门控: 大跳变(远距真闭环)保持瞬时校正, 不进漂移场
+        if norm(c) > NLM_DC_CMAX
+            continue;
+        end
+        % 自适应松弛时程: 跳变越大, 漂移场松弛越慢(再巩固时间尺度)
+        Wi = NLM_DC_W0 + NLM_DC_W_PER_M * norm(c);
+        Wi = max(NLM_DC_W0, min(Wi, NLM_DC_W_MAX));
+        % 末端自然终止: 斜坡截到轨迹末端, 不做半坡截断
+        if NLM_DC_TAIL_COMPLETE
+            Wi = min(Wi, n_dc - fi + 1);
+        end
+        C_cum(f0v >= fi, :) = C_cum(f0v >= fi, :) + c;
+        t = f0v - fi;
+        ramp = (t >= 0) & (t < Wi);
+        if any(ramp)
+            F = 0.5 * (1 - cos(pi * t(ramp) / Wi));
+            d_field(ramp, :) = d_field(ramp, :) + F(:) * c;
+        end
+        hold = f0v >= (fi + Wi);
+        d_field(hold, :) = d_field(hold, :) + c;
+    end
+    exp_trajectory = exp_trajectory + (d_field - C_cum);
+    fprintf('[DC] 分布式闭环漂移场: %d 次重锚定跳变, W0=%d, W_PER_M=%.0f, 末端净修正 %.2f m\n', ...
+        size(dc_events, 1), NLM_DC_W0, NLM_DC_W_PER_M, norm(d_field(end, :) - C_cum(end, :)));
 end
 
 fprintf('[5/9] SLAM处理完成！\n');
@@ -664,6 +749,12 @@ end
 % [DIAG] 保存匹配事件日志（重锚定损伤分解用）
 if exist('DIAG_MATCH_LOG', 'var') && ~isempty(DIAG_MATCH_LOG)
     save(fullfile(result_path, 'match_log.mat'), 'DIAG_MATCH_LOG');
+end
+
+% [DC v3] 保存重锚定跳变事件（离线扫参/分析用; 格式 [frame dx dy dz] + 本次DC参数）
+if NLM_DC_ENABLE && exist('dc_events', 'var') && ~isempty(dc_events)
+    save(fullfile(result_path, 'dc_events.mat'), 'dc_events', ...
+        'NLM_DC_W0', 'NLM_DC_W_PER_M', 'NLM_DC_W_MAX', 'NLM_DC_TAIL_COMPLETE', 'NLM_DC_COLLECT_ONLY');
 end
 
 % 如果有Ground Truth，也保存一份副本
