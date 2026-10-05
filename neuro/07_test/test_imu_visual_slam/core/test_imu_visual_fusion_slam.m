@@ -597,7 +597,7 @@ if NLM_DC_ENABLE && ~NLM_DC_COLLECT_ONLY && ~isempty(dc_events)
     end
     exp_trajectory = exp_trajectory + (d_field - C_cum);
     fprintf('[DC] 分布式闭环漂移场: %d 次重锚定跳变, W0=%d, W_PER_M=%.0f, 末端净修正 %.2f m\n', ...
-        size(dc_events, 1), NLM_DC_W0, NLM_DC_W_PER_M, norm(d_field(end, :) - C_cum(end, :)));
+            size(dc_events, 1), NLM_DC_W0, NLM_DC_W_PER_M, norm(d_field(end, :) - C_cum(end, :)));
 end
 
 fprintf('[5/9] SLAM处理完成！\n');
