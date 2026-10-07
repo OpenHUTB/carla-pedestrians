@@ -38,8 +38,9 @@ SERVER_PROC_PAT = 'CarlaUE4-Linux-Shipping'
 HANG_GRACE_SECONDS = 240
 
 
-def data_dir(map_name):
-    return os.path.normpath(os.path.join(HERE, '..', 'data', f'{map_name}Data_IMU_Fusion'))
+def data_dir(map_name, turnaround=False):
+    suffix = 'Turnaround_IMU_Fusion' if turnaround else 'Data_IMU_Fusion'
+    return os.path.normpath(os.path.join(HERE, '..', 'data', f'{map_name}{suffix}'))
 
 
 def count_frames(out_dir):
@@ -157,18 +158,29 @@ def kill_proc_tree(proc):
             pass
 
 
-def run_attempt(attempt, host, port, out_dir, attempt_log, fresh=False):
+def run_attempt(attempt, host, port, out_dir, attempt_log, fresh=False,
+                turnaround=False, map_name=None, bidir_start=None):
     """运行一轮采集子进程，带"数据无增长"挂起看门狗。
 
     返回 (状态, 退出码)：状态 ∈ {'done','crash','hang'}
     fresh=True 时采集器加 --fresh（备份旧数据后全新采集）
+    turnaround=True 时采集器加 --turnaround（折返路线, 输出独立目录）
+    bidir_start='X,Y' 时采集器加 --bidir-start（双向定点折返, 真闭环路线）
+    map_name 必须透传：采集器不带 --map 时回退默认地图(Town05),
+    会把别的地图的采集误写到 Town05 目录(2026-10-06 事故根因)
     """
     attempt_log.write(f'\n===== attempt {attempt} start {time.strftime("%F %T")} =====\n')
     attempt_log.flush()
     cmd = [sys.executable, COLLECTOR, '--headless',
            '--host', host, '--port', str(port)]
+    if map_name:
+        cmd += ['--map', map_name]
     if fresh:
         cmd.append('--fresh')
+    if turnaround:
+        cmd.append('--turnaround')
+    if bidir_start:
+        cmd += ['--bidir-start', bidir_start]
     proc = subprocess.Popen(
         cmd, cwd=HERE, stdout=attempt_log, stderr=subprocess.STDOUT,
         start_new_session=True)
@@ -201,9 +213,16 @@ def main():
     parser.add_argument('--fresh', action='store_true',
                         help='首轮全新采集（备份并清空旧输出目录）；'
                              '默认自动断点续采')
+    parser.add_argument('--turnaround', action='store_true',
+                        help='折返路线采集（透传给采集器, 输出到 '
+                             '{map}Turnaround_IMU_Fusion 独立目录）')
+    parser.add_argument('--bidir-start', type=str, default=None,
+                        metavar='X,Y',
+                        help='双向折返起点(如 "106,133"), 透传给采集器: '
+                             '定点投放到该双向路段, 去程后掉头原路返回(真闭环)')
     args = parser.parse_args()
 
-    out_dir = data_dir(args.map)
+    out_dir = data_dir(args.map, turnaround=args.turnaround)
     os.makedirs(out_dir, exist_ok=True)
     server_log = open('/tmp/carla_server_supervisor.log', 'a', encoding='utf-8')
     attempt_log = open('/tmp/collect_supervisor.log', 'a', encoding='utf-8')
@@ -228,12 +247,18 @@ def main():
 
         # 2) 运行采集（断点续采自动从 done_frames 继续；--fresh 时首轮全新）
         status, rc = run_attempt(attempts, args.host, args.port, out_dir,
-                                 attempt_log, fresh=(args.fresh and attempts == 1))
+                                 attempt_log, fresh=(args.fresh and attempts == 1),
+                                 turnaround=args.turnaround, map_name=args.map,
+                                 bidir_start=args.bidir_start)
         now_frames = count_frames(out_dir)
         print(f'[RUN {attempts}] 结束: status={status}, rc={rc}, 进度 {now_frames}/{MAX_FRAMES}')
 
         if now_frames >= MAX_FRAMES:
             print(f'[OK] 第 {attempts} 轮跑满 {MAX_FRAMES} 帧，监督结束')
+            break
+        if args.turnaround and rc == 0 and now_frames > done_frames:
+            # 折返路线走完全程(采集器 rc=0): 数据即完整, 不得重启(重启会清空目录)
+            print(f'[OK] 第 {attempts} 轮折返路线采集完成 (rc=0, {now_frames} 帧)，监督结束')
             break
         if now_frames == done_frames:
             print(f'[WARN] 第 {attempts} 轮零进展（进度仍为 {now_frames}），重启服务器后续采')
