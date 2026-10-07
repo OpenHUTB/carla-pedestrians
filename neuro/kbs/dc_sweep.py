@@ -54,22 +54,38 @@ def dc_inject(base, ev, n, W0, WP, WMAX, tail=True, cmax=np.inf):
     return base + (d - C)
 
 
-def score(gt, est):
-    r, t, s = metrics(gt, est)  # 7-DoF 全轨迹
-    d = np.abs(np.diff(est, axis=0)).mean(1)
-    rpe = float(d.mean())
-    return r, t, rpe, s
+def frame_err(caliber, gt, est):
+    """逐帧对齐后误差。caliber='simple': 起点对齐原点+路径长度缩放、无旋转
+    (报告口径 align_trajectories.m 'simple'; 项目全部基线数字同口径, 如
+    RERUN_TOWN01 EKF=74.16、10-04 CARLA EKF 基准)。'7dof': 全轨迹7-DoF
+    Procrustes (regen_table 口径, 对航向漂移宽容, 仅参照)。"""
+    n = min(len(gt), len(est)); gt = gt[:n]; est = est[:n]
+    if caliber == '7dof':
+        e, _ = procrustes_7dof(gt, est)
+        return e
+    g = gt - gt[0]; e0 = est - est[0]
+    lg = np.linalg.norm(np.diff(g, axis=0), axis=1).sum()
+    le = np.linalg.norm(np.diff(e0, axis=0), axis=1).sum()
+    s = lg / le if le > 0 else 1.0
+    return np.linalg.norm(e0 * s - g, axis=1)
 
 
-def run_one(ds_dir, key, W0s, WPs):
+def score(gt, est, caliber='simple'):
+    d = frame_err(caliber, gt, est)
+    r, t = float(np.sqrt((d ** 2).mean())), float(d[-1])
+    rpe = float(np.abs(np.diff(est, axis=0)).mean(1).mean())
+    return r, t, rpe, 1.0
+
+
+def run_one(ds_dir, key, W0s, WPs, caliber='simple'):
     gt = load_pos(f'{ROOT}/{ds_dir}/ground_truth.txt')
     base = load_pos(f'{ROOT}/{ds_dir}/slam_results/exp_trajectory.txt')
     ekf = load_pos(f'{ROOT}/{ds_dir}/fusion_pose.txt')
     ev = load_events(ds_dir)
     n = len(base)
-    rb, tb, rpeb, sb = score(gt, base)
-    re, te, rpee, se = score(gt, ekf)
-    print(f'=== {key}  n={n} 事件={0 if ev is None else len(ev)}  '
+    rb, tb, rpeb, sb = score(gt, base, caliber)
+    re, te, rpee, se = score(gt, ekf, caliber)
+    print(f'=== {key}  caliber={caliber}  n={n} 事件={0 if ev is None else len(ev)}  '
           f'基线ATE={rb:.2f} (终点{tb:.2f} RPE{rpeb:.3f})  EKF={re:.2f}')
     if ev is None:
         print('  ⚠ 无 dc_pass1/dc_events.mat, 跳过扫参')
@@ -80,7 +96,7 @@ def run_one(ds_dir, key, W0s, WPs):
         for WP in WPs:
             for cm in CMAXS:
                 out = dc_inject(base, ev, n, W0, WP, 4000, tail=True, cmax=cm)
-                r, t, rpe, s = score(gt, out)
+                r, t, rpe, s = score(gt, out, caliber)
                 rows.append((r, W0, WP, cm, t, rpe))
     rows.sort()
     print(f'  {"W0":>5} {"WP":>4} {"Cmax":>5}  {"ATE":>7} {"终点":>7} {"RPE":>7}  ΔATE%')
@@ -93,8 +109,8 @@ def run_one(ds_dir, key, W0s, WPs):
           f'vs EKF {re:.2f} → {"胜出" if best[0] < re else "未胜"}')
     # 最优配置逐帧误差曲线落盘(procrustes_7dof 返回逐帧误差数组)
     out = dc_inject(base, ev, n, best[1], best[2], 4000, tail=True, cmax=best[3])
-    en, _ = procrustes_7dof(gt, out)
-    ee, _ = procrustes_7dof(gt, ekf)
+    en = frame_err(caliber, gt, out)
+    ee = frame_err(caliber, gt, ekf)
     nn = min(len(en), len(ee))
     np.savez(f'/tmp/dc_{key}.npz', frame=np.arange(nn), nlm=en[:nn], ekf=ee[:nn])
     return {'ds': key, 'base': rb, 'best_ate': best[0], 'W0': best[1], 'WP': best[2],
@@ -108,6 +124,10 @@ if __name__ == '__main__':
         i = args.index('--W0'); single_W0 = int(args[i+1]); args = args[:i] + args[i+2:]
     if '--WP' in args:
         i = args.index('--WP'); single_WP = int(args[i+1]); args = args[:i] + args[i+2:]
+    if '--caliber' in args:
+        i = args.index('--caliber'); caliber = args[i+1]; args = args[:i] + args[i+2:]
+    else:
+        caliber = 'simple'   # 默认报告口径(项目基线统一 simple 对齐)
     which = args[0] if args else 'all'
     if single_W0 is not None:
         W0s, WPs = [single_W0], [single_WP or 0]
@@ -117,12 +137,12 @@ if __name__ == '__main__':
     results = []
     if which == 'all':
         for ds_dir, key, _ in DSS:
-            r = run_one(ds_dir, key, W0s, WPs)
+            r = run_one(ds_dir, key, W0s, WPs, caliber)
             if r: results.append(r)
     else:
         for ds_dir, key, _ in DSS:
             if key == which:
-                r = run_one(ds_dir, key, W0s, WPs)
+                r = run_one(ds_dir, key, W0s, WPs, caliber)
                 if r: results.append(r)
     if results:
         print('\n=== 汇总 ===')

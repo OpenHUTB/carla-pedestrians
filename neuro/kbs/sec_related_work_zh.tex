@@ -21,7 +21,7 @@ Milford 等人开创了 RatSLAM~\cite{milford2004ratslam, milford2008mapping}，
 \subsection{基于学习的视觉处理}
 \label{sec:related_learning}
 
-深度学习为视觉地点识别提供了强有力工具。Arandjelovic 等人提出了 NetVLAD~\cite{Arandjelovic2016}，引入可微 VLAD 层实现端到端地点识别训练。Goodale 与 Milner~\cite{Goodale1992} 及 Mishkin 等人~\cite{Mishkin1983} 建立了生物视觉双流理论：腹侧通路（V1$\rightarrow$V4$\rightarrow$IT）处理物体身份与场景识别，而背侧通路（V1$\rightarrow$MT$\rightarrow$MST）处理空间关系与运动~\cite{DiCarlo2012, Duffy1998}。Vaswani 等人提出了 Transformer 架构~\cite{Vaswani2017}，通过自注意力机制捕获长程依赖，使序列任务的有效时序建模成为可能。然而，基于学习的方法面临部署挑战：NetVLAD 需要大规模训练数据集（如含数百万图像的 Google Street View），且难以在无需重训的情况下泛化到新环境；标准 Transformer 的全自注意力对序列长度呈二次复杂度 $\mathcal{O}(N^2)$，限制了实时应用；学习得到的表征缺乏显式空间结构，妨碍可解释性与度量建图的集成。为克服这些局限，我们采用一种无训练方案，结合受生物腹侧/背侧通路启发的双流视觉处理与轻量特征增强机制——后者通过统计调制而非完整注意力矩阵捕获全局-局部交互。该设计将视觉模板判别力从5（RatSLAM）提升到195（提升39倍），同时保持实时性能（约31 FPS）与零样本部署能力。
+深度学习为视觉地点识别提供了强有力工具。Arandjelovic 等人提出了 NetVLAD~\cite{Arandjelovic2016}，引入可微 VLAD 层实现端到端地点识别训练。Goodale 与 Milner~\cite{Goodale1992} 及 Mishkin 等人~\cite{Mishkin1983} 建立了生物视觉双流理论：腹侧通路（V1$\rightarrow$V4$\rightarrow$IT）处理物体身份与场景识别，而背侧通路（V1$\rightarrow$MT$\rightarrow$MST）处理空间关系与运动~\cite{DiCarlo2012, Duffy1998}。Vaswani 等人提出了 Transformer 架构~\cite{Vaswani2017}，通过自注意力机制捕获长程依赖，使序列任务的有效时序建模成为可能。然而，基于学习的方法面临部署挑战：NetVLAD 需要大规模训练数据集（如含数百万图像的 Google Street View），且难以在无需重训的情况下泛化到新环境；标准 Transformer 的全自注意力对序列长度呈二次复杂度 $\mathcal{O}(N^2)$，限制了实时应用；学习得到的表征缺乏显式空间结构，妨碍可解释性与度量建图的集成。为克服这些局限，我们采用一种无训练方案，结合受生物腹侧/背侧通路启发的双流视觉处理与轻量特征增强机制——后者通过统计调制而非完整注意力矩阵捕获全局-局部交互。该设计将视觉模板判别力从5（RatSLAM）提升到929以上（提升186倍），同时保持实时性能（约31 FPS）与零样本部署能力。
 
 \subsection{对比分析}
 \label{sec:related_compare}

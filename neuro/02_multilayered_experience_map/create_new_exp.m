@@ -50,6 +50,11 @@ function create_new_exp(curExpId, newExpId, vt_id, xGc, yGc, zGc, curYawHdc, cur
     EXPERIENCES(curExpId).links(EXPERIENCES(curExpId).numlinks).facing_yaw_exp_rad = ... % facing is the direction of each exp
         get_signed_delta_radian(EXPERIENCES(curExpId).yaw_exp_rad, ACCUM_DELTA_YAW);
     
+    % [A-fix] 记录节点创建帧(闭环约束区间衰减用; 驱动脚本逐帧注入 NLM_FRAME_IDX)
+    global NLM_FRAME_IDX;
+    if isempty(NLM_FRAME_IDX), NLM_FRAME_IDX = 0; end
+    EXPERIENCES(newExpId).born_frame = NLM_FRAME_IDX;
+
     % create the new experience which will have no links to being with
     % associate with 3d gc
     EXPERIENCES(newExpId).x_gc = xGc;

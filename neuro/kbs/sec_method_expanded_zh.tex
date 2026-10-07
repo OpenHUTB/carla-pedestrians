@@ -385,3 +385,23 @@ LSTM按序处理融合后的背侧-腹侧特征，跨时间步维持隐藏状态
 \textbf{第5步：重新锚定空间细胞.} 将校正后的位姿 $(\hat{x}, \hat{y}, \hat{z}, \hat{\psi})_{corr}$ 通过在校正位置处重新初始化活动凸起，重新注入空间细胞网络。这从校正后的参考点“重置”路径积分，防止后续运行中误差累积。
 
 该松弛过程迭代运行直至收敛或达到最大迭代次数，确保经验地图保持全局一致，同时保留局部度量精度。
+
+\textbf{分布式闭环漂移场.} 每次重锚定事件（闭环或匹配到已有节点）都会重置增量航位推算状态，使原始输出轨迹在帧 $f_i$ 处包含一个幅值为 $\mathbf{c}_i$ 的离散校正阶跃。这些阶跃累积成阶梯函数 $\mathbf{C}_{\mathrm{cum}}(f)$，其离散跳变是经验地图校正输出与滤波前端之间逐帧不一致的主要来源。受海马-内嗅系统中空间记忆慢速再巩固的启发，我们将每个阶跃松弛为连续漂移场。对每个幅值 $\lVert\mathbf{c}_i\rVert \le C_{\max}$ 的重锚定脉冲，施加持续 $W_i$ 帧的升余弦斜坡：
+\begin{equation}
+    F_i(f) =
+    \begin{cases}
+        \tfrac{1}{2}\bigl(1-\cos(\pi (f-f_i)/W_i)\bigr), & f_i \le f < f_i + W_i \\
+        1, & f \ge f_i + W_i
+    \end{cases}
+\end{equation}
+校正后的轨迹为
+\begin{equation}
+    \hat{\mathbf{p}}(f) = \mathbf{p}_{\mathrm{exp}}(f) + \Bigl(\sum_i F_i(f)\,\mathbf{c}_i \;-\; \sum_{i:\,f_i \le f}\mathbf{c}_i\Bigr),
+\end{equation}
+即每次校正在斜坡结束后仍以保持值 $\mathbf{c}_i$ 持续生效，但其起始过程在 $W_i$ 帧内被平滑，阶梯 $\mathbf{C}_{\mathrm{cum}}$ 被连续场精确替代。三个经五个户外序列离线扫参验证的设计选择塑造该场：
+\begin{itemize}
+    \item \textbf{自适应松弛时程.} $W_i = \mathrm{clip}(W_0 + W_{\perp}\,\lVert\mathbf{c}_i\rVert,\; W_0,\; W_{\max})$：跳变越大松弛越慢，类比更强的空间记忆更慢的再巩固，以及网格细胞漂移校正的更长时间常数。
+    \item \textbf{末端自然终止.} 每个斜坡截断于轨迹末端（$W_i \leftarrow \min(W_i, f_{\mathrm{end}}-f_i+1)$），使漂移场在末帧完全松弛，避免半松弛斜坡残留的末端偏置。
+    \item \textbf{幅值门控.} $\lVert\mathbf{c}_i\rVert > C_{\max}$ 的跳变瞬时施加、不进入漂移场：大校正对应远距真闭环（早期节点位置可信），小校正（近邻重访、哈希碰撞）不确定而受益于缓慢松弛。扫参显示把\emph{所有}阶跃摊平反而降低精度（如 Town01：RMSE +0.64\%），而门控后在全部五个序列上同时优于未松弛基线与EKF前端。
+\end{itemize}
+在EKF里程计模式（$\mathrm{NLM\_USE\_EKF\_ODO}$）下，经验地图以融合后的EKF轨迹作为运动源（帧间位移与航向增量），新经验节点钉扎在EKF地图坐标上，使网格细胞路径积分器与经验图运行于同一套受约束的度量地基之上；漂移场随后仅校正其上残余的重锚定阶跃。

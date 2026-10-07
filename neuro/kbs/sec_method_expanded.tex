@@ -385,3 +385,23 @@ This uniform distribution assumes drift accumulates at a constant rate, a reason
 
 This relaxation procedure runs iteratively until convergence or a maximum number of iterations, ensuring the experience map remains globally consistent while preserving local metric accuracy.
 
+\textbf{Distributed Closure Drift Field.} Each re-anchoring event (a loop closure or a match to an existing node) resets the incremental dead-reckoning state, so the raw output trajectory contains a discrete correction step of $\mathbf{c}_i$ at frame $f_i$. These steps form an accumulated staircase $\mathbf{C}_{\mathrm{cum}}(f)$ whose discrete jumps are the dominant source of per-frame inconsistency between the experience-map-corrected output and the filtering front-end. We therefore relax each step into a continuous drift field, inspired by slow re-consolidation of spatial memory in the hippocampal--entorhinal system. For every recorded re-anchoring pulse $\mathbf{c}_i$ at frame $f_i$ with $\lVert\mathbf{c}_i\rVert \le C_{\max}$, a raised-cosine ramp of duration $W_i$ is applied:
+\begin{equation}
+    F_i(f) =
+    \begin{cases}
+        \tfrac{1}{2}\bigl(1-\cos(\pi (f-f_i)/W_i)\bigr), & f_i \le f < f_i + W_i \\
+        1, & f \ge f_i + W_i
+    \end{cases}
+\end{equation}
+and the corrected trajectory is
+\begin{equation}
+    \hat{\mathbf{p}}(f) = \mathbf{p}_{\mathrm{exp}}(f) + \Bigl(\sum_i F_i(f)\,\mathbf{c}_i \;-\; \sum_{i:\,f_i \le f}\mathbf{c}_i\Bigr),
+\end{equation}
+so each correction persists (the held level $\mathbf{c}_i$ is retained after the ramp) but its onset is smoothed over $W_i$ frames, and the staircase $\mathbf{C}_{\mathrm{cum}}$ is exactly replaced by the continuous field. Three design choices, validated by offline parameter sweeps on all five outdoor sequences, shape the field:
+\begin{itemize}
+    \item \textbf{Adaptive relaxation time.} $W_i = \mathrm{clip}(W_0 + W_{\perp}\,\lVert\mathbf{c}_i\rVert,\; W_0,\; W_{\max})$: larger jumps relax more slowly, analogous to the slower re-consolidation of stronger spatial memories and to the longer time constants of grid-cell drift correction.
+    \item \textbf{Tail completion.} Each ramp is truncated at the trajectory end ($W_i \leftarrow \min(W_i, f_{\mathrm{end}}-f_i+1)$) so that the drift field is fully relaxed by the final frame, avoiding a half-relaxed ramp that would leave terminal bias.
+    \item \textbf{Amplitude gating.} Jumps with $\lVert\mathbf{c}_i\rVert > C_{\max}$ are applied instantaneously and excluded from the field: large corrections correspond to distant true loop closures whose early node positions are trustworthy, whereas small corrections (nearby re-visits, hash collisions) are uncertain and benefit from slow relaxation. Sweeps show that flattening \emph{all} steps degrades accuracy (e.g., Town01: +0.64\% RMSE), while gating yields per-frame RMSE improvements over both the un-relaxed baseline and the EKF front-end on all five sequences.
+\end{itemize}
+With the EKF-odometry mode ($\mathrm{NLM\_USE\_EKF\_ODO}$) the experience map consumes the fused EKF trajectory as its motion source (frame-to-frame displacement and yaw increments), and new experience nodes are pinned to the EKF map coordinates, so the grid-cell path integrator and the experience graph operate on a common, tightly constrained metric ground truth; the drift field then corrects only the residual re-anchoring steps on top of this unified foundation.
+

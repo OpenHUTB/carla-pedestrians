@@ -370,8 +370,23 @@ if isempty(NLM_DC_COLLECT_ONLY), NLM_DC_COLLECT_ONLY = false; end
 dc_events = zeros(0, 4);      % [frame, dx, dy, dz] 重锚定跳变事件
 dc_prev_exp_id = 0; dc_prev_delta = zeros(1, 3);
 
+% [A-fix] 闭环约束漂移场 (2026-10-06, 设计见 neuro/kbs/NLM_LOOP_DESIGN.md):
+% NLM_LOOP_CONSTRAINT=1 时 exp_map_iteration 只记录闭环约束事件(不动节点/
+% NLM_LOOP_CORR, 零地图反馈), 轨迹结束后在本脚本输出层注入约束漂移场:
+% [t_old, t_now] 区间预校正消除 t_now 处重锚定阶梯, 之后保持修正(类DC v3结构)。
+global NLM_LOOP_CONSTRAINT NLM_LOOP_EVENTS NLM_FRAME_IDX;
+if isempty(NLM_LOOP_CONSTRAINT), NLM_LOOP_CONSTRAINT = false; end
+NLM_LOOP_EVENTS = zeros(0, 5);   % [t_now, t_old, dx, dy, dz] 逐run重置(防同会话多集串扰)
+NLM_FRAME_IDX = 0;
+% 事件落盘用的B-fix参数(在nl_apply_loop_fix内才声明, 此处兜底供[8/9]save)
+global NLM_LOOP_BETA NLM_LOOP_CE_MIN NLM_LOOP_STEP_MAX;
+if isempty(NLM_LOOP_BETA), NLM_LOOP_BETA = 1.0; end
+if isempty(NLM_LOOP_CE_MIN), NLM_LOOP_CE_MIN = 3; end
+if isempty(NLM_LOOP_STEP_MAX), NLM_LOOP_STEP_MAX = 25; end
+
 % 处理每一帧
 for frame_idx = 1:num_frames
+    NLM_FRAME_IDX = frame_idx;   % [A-fix] 供 create_new_exp/nl_apply_loop_fix 记录 born_frame/事件帧
     if mod(frame_idx, 50) == 0
         fprintf('处理进度: %d/%d (%.1f%%)\n', frame_idx, num_frames, ...
             frame_idx/num_frames*100);
@@ -495,10 +510,19 @@ for frame_idx = 1:num_frames
     % 故 CUR_EXP_ID<NUM_EXPS ⟺ 匹配旧节点=重锚定)。纯锚定阶跃=新节点位置-旧锚点
     % DR外推(不含本帧正常运动), 与离线标定 dc_events.mat 的事件定义一致。
     if NLM_DC_ENABLE && dc_prev_exp_id ~= CUR_EXP_ID && CUR_EXP_ID < NUM_EXPS
-        c = [EXPERIENCES(CUR_EXP_ID).x_exp - EXPERIENCES(dc_prev_exp_id).x_exp - dc_prev_delta(1), ...
-             EXPERIENCES(CUR_EXP_ID).y_exp - EXPERIENCES(dc_prev_exp_id).y_exp - dc_prev_delta(2), ...
-             EXPERIENCES(CUR_EXP_ID).z_exp - EXPERIENCES(dc_prev_exp_id).z_exp - dc_prev_delta(3)];
-        dc_events(end+1, :) = [frame_idx, c];
+        % [A-fix] 防双重校正: 约束模式下本帧若已是闭环约束事件(其跳变由约束场
+        % 接管), 不进 DC v3 跳变事件集; 非闭环跳变仍按原路径摊平
+        lc_this_frame = false;
+        if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS) && ...
+                NLM_LOOP_EVENTS(end, 1) == frame_idx
+            lc_this_frame = true;
+        end
+        if ~lc_this_frame
+            c = [EXPERIENCES(CUR_EXP_ID).x_exp - EXPERIENCES(dc_prev_exp_id).x_exp - dc_prev_delta(1), ...
+                 EXPERIENCES(CUR_EXP_ID).y_exp - EXPERIENCES(dc_prev_exp_id).y_exp - dc_prev_delta(2), ...
+                 EXPERIENCES(CUR_EXP_ID).z_exp - EXPERIENCES(dc_prev_exp_id).z_exp - dc_prev_delta(3)];
+            dc_events(end+1, :) = [frame_idx, c];
+        end
     end
     
     % 使用全局变量CUR_EXP_ID获取当前经验节点
@@ -597,7 +621,39 @@ if NLM_DC_ENABLE && ~NLM_DC_COLLECT_ONLY && ~isempty(dc_events)
     end
     exp_trajectory = exp_trajectory + (d_field - C_cum);
     fprintf('[DC] 分布式闭环漂移场: %d 次重锚定跳变, W0=%d, W_PER_M=%.0f, 末端净修正 %.2f m\n', ...
-        size(dc_events, 1), NLM_DC_W0, NLM_DC_W_PER_M, norm(d_field(end, :) - C_cum(end, :)));
+            size(dc_events, 1), NLM_DC_W0, NLM_DC_W_PER_M, norm(d_field(end, :) - C_cum(end, :)));
+end
+
+% [A-fix] 闭环约束漂移场注入 (设计见 neuro/kbs/NLM_LOOP_DESIGN.md):
+% 约束事件 (t_now, t_old, c=-β·clamp(r)): 区间 [t_old, t_now) 输出从0爬坡到c,
+% t_now 处重锚定后原始轨迹已锚到matched节点(残差消失), 之后 L=0。
+% 净效果: t_now 处阶梯被预校正抵消, 且 t_now 之后不引入 -r 持续偏差。
+% 零地图反馈: 只改输出轨迹; CMAX门控在记录处(必注入), 事件与DC v3跳变集不相交。
+if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
+    n_lc = num_frames;
+    f0v = (1:n_lc)';
+    L_field = zeros(n_lc, 3);
+    for ev_k = 1:size(NLM_LOOP_EVENTS, 1)
+        t_now = NLM_LOOP_EVENTS(ev_k, 1);
+        t_old = NLM_LOOP_EVENTS(ev_k, 2);
+        c = NLM_LOOP_EVENTS(ev_k, 3:5);
+        if t_old >= t_now || t_old < 1
+            % 无born_frame或区间退化: 单帧脉冲(跳变帧-1处瞬时c, 抵消当帧阶梯)
+            if t_now > 1
+                L_field(t_now - 1, :) = L_field(t_now - 1, :) + c;
+            end
+            continue;
+        end
+        seg = f0v >= t_old & f0v < t_now;
+        if any(seg)
+            t = f0v(seg) - t_old;
+            F = 0.5 * (1 - cos(pi * t / (t_now - t_old)));
+            L_field(seg, :) = L_field(seg, :) + F(:) * c;
+        end
+    end
+    exp_trajectory = exp_trajectory + L_field;
+    fprintf('[A-fix] 闭环约束漂移场: %d 事件注入, 最大区间修正 %.2f m\n', ...
+            size(NLM_LOOP_EVENTS, 1), max(sum(L_field.^2, 2)) ^ 0.5);
 end
 
 fprintf('[5/9] SLAM处理完成！\n');
@@ -755,6 +811,12 @@ end
 if NLM_DC_ENABLE && exist('dc_events', 'var') && ~isempty(dc_events)
     save(fullfile(result_path, 'dc_events.mat'), 'dc_events', ...
         'NLM_DC_W0', 'NLM_DC_W_PER_M', 'NLM_DC_W_MAX', 'NLM_DC_TAIL_COMPLETE', 'NLM_DC_COLLECT_ONLY');
+end
+
+% [A-fix] 保存闭环约束事件（离线分析/消融用; 格式 [t_now t_old dx dy dz]）
+if NLM_LOOP_CONSTRAINT && exist('NLM_LOOP_EVENTS', 'var') && ~isempty(NLM_LOOP_EVENTS)
+    save(fullfile(result_path, 'loop_constraint_events.mat'), 'NLM_LOOP_EVENTS', ...
+        'NLM_LOOP_BETA', 'NLM_LOOP_CE_MIN', 'NLM_LOOP_STEP_MAX');
 end
 
 % 如果有Ground Truth，也保存一份副本

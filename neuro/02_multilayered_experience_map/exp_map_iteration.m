@@ -543,8 +543,34 @@ function out_id = nl_apply_loop_fix(matched_exp_id, ce_tmp)
         return;
     end
     step = -NLM_LOOP_BETA * min(1, NLM_LOOP_STEP_MAX / norm_r) * r;
-    % 累计修正量(后缀平移量): 后续新节点经create_new_exp继承
-    NLM_LOOP_CORR = NLM_LOOP_CORR + step;
+    % [A-fix] 约束模式: 只记录事件, 不动NLM_LOOP_CORR/节点(零地图反馈, 避免B-fix式
+    % 错误闭环放大); 轨迹结束后核心脚本把事件松弛成闭环约束漂移场注入输出。
+    % 非约束模式: 原B-fix后缀平移(NLM_LOOP_CORR), 保留作A/B基线。
+    global NLM_LOOP_CONSTRAINT NLM_LOOP_EVENTS;
+    if ~isempty(NLM_LOOP_CONSTRAINT) && NLM_LOOP_CONSTRAINT
+        % 注意: 不加NLM_DC_CMAX幅值门 — 此处 norm_r ≡ ce_tmp(与CE门同一公式),
+        % CE门已把残差限到 ≤EXP_MAX_LOOP_CE; 而DC逐集CMAX(2~6m)是跳变幅值门,
+        % 套在闭环残差上会误杀所有真闭环(残差=区间累积漂移, 可达10~80m)。
+        if isempty(NLM_LOOP_EVENTS), NLM_LOOP_EVENTS = zeros(0, 5); end
+        t_old = 0;
+        if isfield(EXPERIENCES(matched_exp_id), 'born_frame')
+            t_old = EXPERIENCES(matched_exp_id).born_frame;
+        end
+        global NLM_FRAME_IDX;
+        if isempty(NLM_FRAME_IDX), NLM_FRAME_IDX = 0; end
+        % [A-fix去抖] MIN_GAP门: 真闭环=长间隔重访(绕一圈回来, 间隔数千帧);
+        % 近邻/中程重访(gap<MIN_GAP)是路线自交/抖动误检(开放路线上全是这类假
+        % 闭环), 不记约束事件 → 开放路线上约束模式回退中性(=基线), 真闭环路线
+        % (折返/绕环)间隔≫MIN_GAP 正常记录。Town05实测假闭环间隔均<286帧。
+        global NLM_LOOP_MIN_GAP;
+        if isempty(NLM_LOOP_MIN_GAP), NLM_LOOP_MIN_GAP = 300; end
+        if (NLM_FRAME_IDX - t_old) >= NLM_LOOP_MIN_GAP
+            NLM_LOOP_EVENTS(end+1, :) = [NLM_FRAME_IDX, t_old, step(1), step(2), step(3)];
+        end
+    else
+        % 累计修正量(后缀平移量): 后续新节点经create_new_exp继承
+        NLM_LOOP_CORR = NLM_LOOP_CORR + step;
+    end
     DIAG_LOOP_ACCEPT = DIAG_LOOP_ACCEPT + 1;
 end
 
