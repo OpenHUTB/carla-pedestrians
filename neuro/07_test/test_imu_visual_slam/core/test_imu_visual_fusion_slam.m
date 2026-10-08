@@ -383,6 +383,8 @@ global NLM_LOOP_BETA NLM_LOOP_CE_MIN NLM_LOOP_STEP_MAX;
 if isempty(NLM_LOOP_BETA), NLM_LOOP_BETA = 1.0; end
 if isempty(NLM_LOOP_CE_MIN), NLM_LOOP_CE_MIN = 3; end
 if isempty(NLM_LOOP_STEP_MAX), NLM_LOOP_STEP_MAX = 25; end
+global NLM_SIM3_REANCHOR;   % S2: 闭环时全Sim(3)重锚 (默认关; 设计见 NLM_LOOP_DESIGN.md §9)
+if isempty(NLM_SIM3_REANCHOR), NLM_SIM3_REANCHOR = false; end
 
 % 处理每一帧
 for frame_idx = 1:num_frames
@@ -629,6 +631,10 @@ end
 % t_now 处重锚定后原始轨迹已锚到matched节点(残差消失), 之后 L=0。
 % 净效果: t_now 处阶梯被预校正抵消, 且 t_now 之后不引入 -r 持续偏差。
 % 零地图反馈: 只改输出轨迹; CMAX门控在记录处(必注入), 事件与DC v3跳变集不相交。
+% S2(NLM_SIM3_REANCHOR=1)时本块照常执行: 离线验证的形态是 "A-fix爬坡 + S2重锚"
+% 叠加(爬坡先抵消 t_now 阶梯, 保证 S2 的400帧拟合窗口无阶梯污染); 单独S2会
+% 因阶梯污染拟合窗口而大量事件被尺度门拒绝(实测 4/16 事件, 103.9m), 劣于叠加
+% (10/16 事件, 61.6m, 见 NLM_LOOP_DESIGN.md §9)。
 if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
     n_lc = num_frames;
     f0v = (1:n_lc)';
@@ -654,6 +660,20 @@ if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
     exp_trajectory = exp_trajectory + L_field;
     fprintf('[A-fix] 闭环约束漂移场: %d 事件注入, 最大区间修正 %.2f m\n', ...
             size(NLM_LOOP_EVENTS, 1), max(sum(L_field.^2, 2)) ^ 0.5);
+end
+
+% [S2] 闭环全Sim(3)重锚 (创新核心升级, 设计见 neuro/kbs/NLM_LOOP_DESIGN.md §9):
+% 当前A-fix只注入平移, 吸收不了长程累积的尺度/旋转漂移(首100帧锚定Sim3口径下
+% 平移A-fix反而 755→861m)。S2在每次闭环把"当前帧之后到下一闭环"整段用
+% 全Sim(3)变换(尺度+旋转+平移, procrustes拟合)拉回首锚坐标系: 消除节点坐标
+% 随GC积分漂移产生的全局尺度/旋转失真。零地图反馈: 只改输出轨迹。
+% 离线验证(Turnaround 16事件): 版本A口径 861.5→123.8m, simple口径 172.1→61.6m,
+% per-lap oracle不变(增益纯来自全局Sim3移除, 无GT泄漏/局部畸变); 尺度是主导
+% DOF(去掉尺度退回496.8m), 钳位无增益(123.8≈123.8) → 用裸Sim(3)最简形式。
+% 开放路线0事件 → exp_trajectory不变, 严格中性(同A-fix性质, 论文H4成立)。
+if NLM_LOOP_CONSTRAINT && NLM_SIM3_REANCHOR && ~isempty(NLM_LOOP_EVENTS)
+    exp_trajectory_preS2 = exp_trajectory;   % S2输入轨迹(离线扫参/复现用, 仅S2开时存在)
+    exp_trajectory = nlm_sim3_reanchor(exp_trajectory, NLM_LOOP_EVENTS, 400);
 end
 
 fprintf('[5/9] SLAM处理完成！\n');
@@ -796,6 +816,11 @@ dlmwrite(fullfile(result_path, 'imu_aided_trajectory.txt'), imu_aided_traj, 'pre
 
 % 保存经验地图轨迹
 dlmwrite(fullfile(result_path, 'exp_trajectory.txt'), exp_trajectory, 'precision', 6);
+
+% [S2] 保存 S2 输入轨迹(闭环全Sim(3)重锚前的逐帧轨迹, 离线win扫参/复现用)
+if exist('exp_trajectory_preS2', 'var')
+    dlmwrite(fullfile(result_path, 'exp_trajectory_preS2.txt'), exp_trajectory_preS2, 'precision', 6);
+end
 
 % 保存经验地图结构（闭环/链接事后诊断用）
 if exist('EXPERIENCES', 'var') && ~isempty(EXPERIENCES)
@@ -956,3 +981,50 @@ if has_comparison_report
     fprintf('  5. 综合对比报告: %s/comprehensive_comparison.png\n', result_path);
 end
 fprintf('========================================\n');
+
+function traj = nlm_sim3_reanchor(traj, events, win)
+% NLM_SIM3_REANCHOR 闭环全Sim(3)重锚 (S2): 把每次闭环之后的轨迹段用全Sim(3)
+% 拉回首锚坐标系, 消除长程累积的尺度/旋转/平移全局漂移。
+%   traj   - [N x 3] 输出轨迹(逐帧, 锚点+ACCUM_DELTA)
+%   events - [t_now, t_old, cx, cy, cz] (A-fix事件, 仅用 t_now 列)
+%   win    - 当前lap拟合窗口帧数(默认400, 与离线标定一致)
+% 锚点窗口 = 首段运动帧(自动跳过静止前导); 段 = 事件帧+1 : 下一事件帧-1。
+% 退化保护: 当前窗口<30帧或段<2帧跳过; 拟合尺度落在[0.05,20]之外跳过
+% (对应离线: 16事件中6个窗口退化跳过, 10个有效, 结果123.8m)。
+% 行向量约定与MATLAB procrustes一致: anchor ≈ s*(cur*R) + t。
+% 关键: 拟合与映射都基于【S2输入轨迹 base】(非链式) —— 各段独立拉回首锚坐标
+% 系, 前一事件的重锚不污染后一事件的拟合窗口。链式(读已改轨迹)会使相邻事件
+% 窗口被上一段变换污染, 3/10 事件被尺度门误拒 (实测 7/16→86.6m, 劣于非链式
+% 10/16→61.6m, 与离线 kbs/tar_reanchor_variants.m 一致)。
+    n = size(traj, 1);
+    base = traj;
+    d0 = sqrt(sum((base - base(1, :)).^2, 2));
+    sra = find(d0 > 1, 1, 'first');
+    if isempty(sra), sra = 1; end
+    aWin = base(sra : min(sra + win - 1, n), :);
+    ca = mean(aWin, 1);
+    evs = sortrows(events, 1);
+    n_app = 0;
+    for k = 1:size(evs, 1)
+        t_now = evs(k, 1);
+        if k < size(evs, 1), t_next = evs(k + 1, 1); else, t_next = n + 1; end
+        cWin = base(max(t_now - win + 1, 1) : min(t_now, t_next - 1), :);
+        seg  = (t_now + 1) : (t_next - 1);
+        % 行数门: 相邻事件过近时 cWin 短于 aWin, procrustes 会因维度不匹配崩溃
+        % (win=400 下所有事件行数一致, 此门为 no-op; win>=600 时生效, 仅跳过会崩溃的拟合)
+        if numel(cWin) < 30 || numel(seg) < 2 || size(aWin, 1) ~= size(cWin, 1)
+            continue;
+        end
+        [~, ~, T] = procrustes(aWin, cWin, 'Scaling', true);
+        if T.b < 0.05 || T.b > 20
+            continue;
+        end
+        Rmat = T.T;
+        cc = mean(cWin, 1);
+        tvec = ca - T.b * (cc * Rmat);
+        traj(seg, :) = T.b * (base(seg, :) * Rmat) + tvec;
+        n_app = n_app + 1;
+    end
+    fprintf('[S2] 闭环全Sim(3)重锚: %d/%d 事件生效 (win=%d, 锚点窗=[%d:%d])\n', ...
+            n_app, size(evs, 1), win, sra, min(sra + win - 1, n));
+end
