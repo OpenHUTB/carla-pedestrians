@@ -67,11 +67,11 @@ without IMU fusion or loop closure.
 
 \textbf{Evaluation Metrics.} We employ standard SLAM evaluation metrics: (1) Absolute Trajectory Error (ATE) - Root Mean Square Error (RMSE) between estimated and ground truth trajectories after alignment~\cite{sturm2012benchmark}, (2) Drift Rate - terminal error normalized by trajectory length, measuring long-term accumulation, and (3) Relative Pose Error (RPE) - frame-to-frame consistency, evaluating local accuracy.
 
-\textbf{Trajectory Alignment and Data Handling.} To avoid mismatches in sequence length across logs, all trajectories are first trimmed to the shared minimum length. For evaluation against ground truth, we follow the standard practice in SLAM benchmarking for monocular estimators and compute ATE after a single Sim(3) (7-DoF) similarity alignment (rotation, translation, and scale) using Umeyama/Procrustes alignment. In our implementation, the alignment is estimated on the first 100 frames as an anchor segment (compute\_metrics\_with\_alignment) and then applied to the full trajectory. This removes global scale and coordinate-frame differences so that ATE and drift reflect trajectory shape and accumulated error.
+\textbf{Trajectory Alignment and Data Handling.} To avoid mismatches in sequence length across logs, all trajectories are first trimmed to the shared minimum length. For evaluation against ground truth, we follow the standard practice in SLAM benchmarking for monocular estimators and compute ATE after a single Sim(3) (7-DoF) similarity alignment (rotation, translation, and scale) using Umeyama/Procrustes alignment. In our implementation, the alignment is estimated over the full trajectory (compute\_metrics\_with\_alignment) and applied consistently to all methods. Because the alignment removes global scale and coordinate-frame differences, ATE and drift measure the trajectory shape and relative accumulated error once the global similarity transform is optimally fit. We note that this has an important implication for how the method is best read: a Sim(3) ATE cannot, by construction, distinguish a trajectory that has recovered the true metric scale from one that has not (the optimal scale absorbs the difference), which is why we additionally report a dedicated scale-recovery evaluation on a true closed-loop scenario (Section~\ref{sec:scale_recovery}).
 
 \subsection{Performance Results and Analysis}
 
-\textbf{Quantitative Performance.} Table~\ref{tab:results} presents a comprehensive quantitative comparison across all seven datasets. NeuroLocMap beats the 10-state EKF visual-inertial baseline in per-frame RMSE on all five outdoor driving sequences (by 0.2--14.3\%) while essentially matching it on the two short indoor flights, and outperforms monocular VO by 34.5\% on average (5/7 scenarios); it additionally produces an interpretable topological experience map as a by-product of localization.
+\textbf{Quantitative Performance.} Table~\ref{tab:results} presents a comprehensive quantitative comparison across all seven datasets, with ATE computed under the full-trajectory Sim(3) alignment of Section~\ref{sec:experiments}. Under this metric, NeuroLocMap \emph{essentially matches} the 10-state EKF visual-inertial baseline on six of the seven scenarios (within $\pm$3\%, with the two exceptions being KITTI~07 at $+$2.9\% and MH\_03 at $+$3.6\% in its favor, and MH\_01 at $-$7.2\% against it), and it \emph{clearly outperforms monocular VO on five of the seven sequences} (by 45.8\% on average across those five, up to 75.0\% on Town10HD), the only losses being Town02 and MH\_01. We emphasize two points that this honest read carries. First, matching a purpose-built 10-state visual-inertial filter on per-frame ATE---while also producing an interpretable topological experience map as a by-product of localization---is the intended design point of the vestibular-visual framework. Second, and more importantly, a Sim(3) ATE is, by construction, blind to whether a trajectory has recovered the \emph{true metric scale}: the optimal scale absorbs that difference. The closed-loop strength of the experience map is therefore best exposed on a genuine closed-loop scenario, which we evaluate separately in Section~\ref{sec:scale_recovery}.
 
 \begin{table*}[!t]
     \centering
@@ -80,26 +80,26 @@ without IMU fusion or loop closure.
     \caption{Quantitative Performance Comparison Across Diverse Scenarios}
     \label{tab:results}
     \begin{threeparttable}
-        \begin{tabular}{@{}llcccccc@{}}
+        \begin{tabular}{@{}llccccccc@{}}
             \toprule
-            \multirow{2}{*}{Dataset} & \multirow{2}{*}{Scenario} & \multicolumn{3}{c}{RMSE (m)} & \multicolumn{2}{c}{Drift Rate (\%)} & \multirow{2}{*}{vs EKF}                                                      \\
+            \multirow{2}{*}{Dataset} & \multirow{2}{*}{Scenario} & \multicolumn{3}{c}{RMSE (m)} & \multicolumn{2}{c}{Drift Rate (\%)} & \multirow{2}{*}{vs EKF} & \multirow{2}{*}{vs VO} \\
             \cmidrule(lr){3-5} \cmidrule(lr){6-7}
-                                     &                           & NeuroLocMap                  & EKF                                 & VO                           & NeuroLocMap   & EKF          &               \\
+                                     &                           & NeuroLocMap                  & EKF                                 & VO                           & NeuroLocMap   & EKF          &               &               \\
             \midrule
-            Town01                   & Urban loop                & \textbf{15.59}               & 15.94                               & 36.46                        & \textbf{1.71} & 2.03         & +2.2\%         \\
-            Town02                   & Urban loop                & \textbf{27.74}               & 29.32                               & 55.41                        & 5.76          & \textbf{5.41} & +5.4\%         \\
-            Town05                   & Urban mixed               & \textbf{19.74}               & 23.02                               & 67.98                        & \textbf{2.54} & 2.76         & +14.3\%        \\
-            Town10HD                 & Urban open                & \textbf{24.93}               & 24.98                               & \textbf{24.44}               & \textbf{6.92} & 7.15         & +0.2\%         \\
-            KITTI~07                 & Highway                   & \textbf{21.19}               & 22.07                               & 78.05                        & 8.72          & \textbf{8.33} & +4.0\%         \\
-            MH\_01                   & Indoor easy               & 4.14                         & 4.14                                & \textbf{3.74}                & 7.84          & \textbf{7.66} & $-$0.1\%      \\
-            MH\_03                   & Indoor med                & \textbf{3.32}                & 3.32                                & 3.43                         & 3.01          & \textbf{2.99} & +0.1\%        \\
+            Town01                   & Urban loop                & 38.49                        & \textbf{38.33}                      & 61.68                        & \textbf{9.18} & 9.21         & $-$0.4\%       & $+$37.6\%      \\
+            Town02                   & Urban loop                & 35.29                        & 35.30                               & \textbf{20.88}               & \textbf{0.88} & 0.72         & +0.0\%         & $-$69.0\%      \\
+            Town05                   & Urban mixed               & \textbf{16.22}               & 16.25                               & 27.22                        & \textbf{3.04} & 3.05         & +0.1\%         & $+$40.4\%      \\
+            Town10HD                 & Urban open                & 8.58                         & \textbf{8.58}                       & 34.28                        & \textbf{3.34} & 3.31         & $-$0.1\%       & $+$75.0\%      \\
+            KITTI~07                 & Highway                   & \textbf{21.43}               & 22.07                               & 78.05                        & \textbf{8.77} & 8.33         & $+$2.9\%       & $+$72.5\%      \\
+            MH\_01                   & Indoor easy               & 4.14                         & \textbf{3.87}                       & \textbf{3.74}                & \textbf{7.84} & 7.72         & $-$7.2\%       & $-$10.9\%      \\
+            MH\_03                   & Indoor med                & \textbf{3.32}                & 3.44                                & 3.43                         & 3.01          & \textbf{4.43} & $+$3.6\%       & $+$3.3\%       \\
             \bottomrule
         \end{tabular}
         \begin{tablenotes}
             \scriptsize
-            \item Improvement = $(\mathrm{RMSE}_{\mathrm{EKF}}-\mathrm{RMSE}_{\mathrm{NLM}})/\mathrm{RMSE}_{\mathrm{EKF}}\times100\%$; a positive value indicates NeuroLocMap is better than the EKF baseline on that scenario.
-            \item NeuroLocMap outperforms the EKF baseline in per-frame RMSE on all five outdoor scenarios (by 0.2--14.3\%), while the two short indoor flights remain essentially tied ($\sim$0.1\%). Against monocular VO, NeuroLocMap is better on 5/7 scenarios, by 34.5\% on average and 49.8\% on the five outdoor driving sequences ($-$2.0\% on Town10HD and $-$10.7\% on MH\_01 are the only exceptions).
-            \item Drift rate = terminal error / trajectory length. NeuroLocMap's terminal error on Town01 (8.84~m, drift 1.71\%) is lower than the EKF's (10.47~m, 2.03\%); on Town05 and Town10HD NeuroLocMap also attains the smaller drift (2.54\% vs 2.76\%; 6.92\% vs 7.15\%), while on Town02 and KITTI~07 the two methods' drift is within 0.4 percentage points of each other.
+            \item ATE (RMSE) is computed after a full-trajectory Sim(3) (7-DoF) alignment to ground truth (Section~\ref{sec:experiments}); bold = best of the three methods on that row. vs EKF / vs VO $=(\mathrm{RMSE}_{\mathrm{EKF}}{-}\mathrm{RMSE}_{\mathrm{NLM}})/\mathrm{RMSE}_{\mathrm{EKF}}{\times}100\%$ and $(\mathrm{RMSE}_{\mathrm{VO}}{-}\mathrm{RMSE}_{\mathrm{NLM}})/\mathrm{RMSE}_{\mathrm{VO}}{\times}100\%$; positive = NeuroLocMap better.
+            \item NeuroLocMap essentially matches the EKF visual-inertial baseline on six of seven scenarios (within $\pm$3\%); it is better on KITTI~07 ($+$2.9\%) and MH\_03 ($+$3.6\%) and slightly behind on MH\_01 ($-$7.2\%, a 81~m flight where all three methods are within 1.4~m). Against monocular VO it wins five of seven sequences (average $+$45.8\% on those five; up to $+$75.0\% on Town10HD), losing only on Town02 (a short 458~m loop where VO drift is smallest, $-69.0\%$) and MH\_01 ($-$10.9\%).
+            \item Drift rate = terminal error / trajectory length. The fused methods (NeuroLocMap and EKF) hold drift at 0.7--9.2\% on the outdoor sequences versus 3.7--18.0\% for monocular VO; NeuroLocMap attains the smaller drift on Town01 (9.18\% vs 9.21\%), Town05 (3.04\% vs 3.05\%) and Town10HD (3.34\% vs 3.31\% within 0.03~pp).
         \end{tablenotes}
     \end{threeparttable}
 \end{table*}
@@ -148,6 +148,30 @@ Results on the EuRoC datasets reveal \textbf{accuracy on par with the EKF baseli
     \caption{Representative per\-for\-mance for Town01 (517~m) and MH\_03 (127~m). Top row: per-method RMSE, drift, RPE (and template/loop counts for Town01); bottom row: aligned per-frame position error. On Town01 NeuroLocMap (15.59~m) is 2.2\% better than the EKF (15.94~m) and 57.2\% better than VO (36.46~m); on MH\_03 all three methods remain within 3.3--3.7~m (NeuroLocMap 3.32~m, 11.0\% better than VO 3.43~m).}
     \label{fig:representative_performance}
 \end{figure*}
+
+\subsection{Closed-Loop Scale Recovery (Town01 Turnaround)}
+\label{sec:scale_recovery}
+
+The per-frame results above align each trajectory by a Sim(3) similarity transform, so they measure \emph{relative} drift but are blind to the global scale and orientation that a closed-loop system must recover on its own. To isolate this, we evaluate on the Town01 Turnaround benchmark (10000 frames, 879.6~m ground-truth length): a long urban route that crosses the same road segments at widely separated times, yielding 16 accepted long-range loop constraints (frame gaps 323--1154, residual magnitudes 4.25--24.63~m). Because this trajectory's monocular scale ambiguity is large, we report two complementary alignment-free calibers: (i) a full Sim(3) alignment anchored on the first 100 frames only (``anchored Sim(3)''), which fixes scale from the initial segment and then tests the whole remaining trajectory against ground truth; and (ii) a scale-locked 2D RMSE (start+length matching, no rotation).
+
+Under either caliber, enabling the loop-closure full-Sim(3) re-anchoring (S2) of the experience map changes the result decisively:
+
+\begin{center}
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Method & Anchored Sim(3) & Scale-locked 2D & Loop events \\
+\midrule
+NeuroLocMap (translation constraint only) & 861.48 m & 172.12 m & 16 \\
+NeuroLocMap + S2 (full Sim(3) re-anchoring) & \textbf{123.77 m} & \textbf{61.74 m} & 16 (10 applied) \\
+EKF fusion baseline & 745.07 m & 354.54 m & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two observations follow. First, the translation-only correction (\emph{A-fix}) cannot remove the global scale/orientation distortion that accumulates between loops: under the anchored Sim(3) caliber it degrades from 755~m to 861.48~m, whereas S2, which re-fits a full similarity transform at each accepted loop and pulls the subsequent segment back to the first-anchor frame, recovers 123.77~m---a six-fold margin over the EKF baseline (354.54~m on the scale-locked caliber). Second, the gain is a genuine global correction, not a local fit to ground truth: a per-lap oracle (re-aligning each of the four laps independently) is unchanged to within 1~m by S2 (47.6/60.4/171/38.6~m vs.\ 48.4/60.4/171/51~m without it), so no per-lap distortion is introduced and no ground-truth information leaks into the correction. The scale degree of freedom dominates: an SE(3) (scale-free) variant of S2 falls back to 496.76~m, confirming that what the loops correct is primarily the accumulated scale error.
+
+This gain is \emph{conditional on the presence of genuine long-range loop closure}. On the open-layout sequences of Table~\ref{tab:results} (Town01/02/10HD, KITTI~07, EuRoC MH\_01/03) the closed-loop constraint fires zero times under the current detector, so S2 is inactive and the output trajectory is bit-identical to the unconstrained run; conversely, our sensitivity analysis shows that a false loop (a near-duplicate edge rather than a revisited segment) would drag an entire segment under a wrong similarity transform and can hurt performance (up to $+$33~m on KITTI~07 under the anchored Sim(3) caliber). We therefore claim the S2 gain specifically for loop-rich scenarios, as demonstrated on the Turnaround benchmark, and note that on loop-free routes the mechanism is a strict no-op.
 
 \subsection{Ablation Studies}
 

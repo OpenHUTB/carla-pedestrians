@@ -32,6 +32,10 @@ NLM_LOOP_CONSTRAINT = true;
 NLM_LOOP_FIX_ENABLE = true;
 NLM_LOOP_CORR = [0, 0, 0];
 
+% [S2] 闭环全Sim(3)重锚: 开启 (替代A-fix平移爬坡; 设计见 NLM_LOOP_DESIGN.md §9)
+global NLM_SIM3_REANCHOR;
+NLM_SIM3_REANCHOR = true;
+
 global RESULT_SUBDIR;
 RESULT_SUBDIR = 'a_final';
 
