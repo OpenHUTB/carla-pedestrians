@@ -110,11 +110,11 @@
         "s2_scale": 1.711
       },
       "NLM_AFIX_S2": {
-        "fullSim3": 30.41,
-        "drift": 3.67,
-        "anchoredSim3_100": 113.11,
-        "scaleLocked2D": 58.65,
-        "s2_scale": 1.319
+        "fullSim3": 30.45,
+        "drift": 3.85,
+        "anchoredSim3_100": 44.24,
+        "scaleLocked2D": 46.63,
+        "s2_scale": 1.927
       },
       "EKF": {
         "fullSim3": 30.43,
@@ -153,10 +153,10 @@
         9.1,
         6.1,
         0.6,
-        0.3,
-        8.7,
-        2.0,
-        24.1,
+        0.2,
+        9.6,
+        2.1,
+        25.5,
         30.8
       ]
     }
