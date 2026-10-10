@@ -17,6 +17,19 @@
     生成后未再改动 (10-09 恢复只动 CARLA 的 IMU_Vision_Fusion_EKF.py),
     重生成 EKF 与磁盘文件 md5 逐字节一致; NLM 按当前 core 重跑 (MATLAB
     RUN_SLAM_MH03 / RERUN_KITTI07), ATE 与重跑前一致 (复现性验证通过)。
+注: 2026-10-09 曾尝试把 CARLA #100 形态 (EKF_VIO 10维 log尺度状态 +
+    转弯运动学尺度观测 s_obs=median(a_cen/(w·v_vo_rec)), 等权中值/无步限钳位)
+    移植进两独立生成器 (ekf_standalone.py / euroc_ekf_fusion.py EKF_VIO_MAV),
+    重生成两集 EKF 实测均有害, 已回滚 (生成器回 7f9bbb1 版本, EKF 文件
+    md5 复现原状, 本图数据源不变):
+      KITTI07  EKF ATE 22.09 → 32.84m (尺度状态收敛 0.53, 偏离真值≈0.81,
+               前段尺度滞后拉歪轨迹形状)
+      MH_03    尺度先验 0.029 → 在线 0.237 (路径 127m→2239m 发散; 3D 机动
+               经 roll/pitch 转弯, 垂直轴偏航率系统性低估转弯率, 运动学
+               观测恒高估≈6×: s_obs 中值 0.175 vs 真值 0.029)
+    原理结论: #100 运动学尺度观测仅对平面车辆成立 (转弯≈纯偏航 + 机体y轴
+    天然横向), 不适用于 3D 飞行; 两独立生成器的离线/外部尺度机制本身正确,
+    不应再向 #100 对齐。
 """
 import numpy as np
 import pandas as pd
