@@ -1,0 +1,164 @@
+{
+  "table1": {
+    "Town01Data_IMU_Fusion": {
+      "gt_len_m": 669.9,
+      "frames": 5000,
+      "nlm": {
+        "rmse": 16.63,
+        "drift": 4.38
+      },
+      "ekf": {
+        "rmse": 14.3,
+        "drift": 4.67
+      },
+      "vo": {
+        "rmse": 82.38,
+        "drift": 13.95
+      },
+      "exp_nodes": 75,
+      "templates": 75,
+      "loop_edges": 7
+    },
+    "Town02Data_IMU_Fusion": {
+      "gt_len_m": 519.8,
+      "frames": 5000,
+      "nlm": {
+        "rmse": 13.1,
+        "drift": 2.82
+      },
+      "ekf": {
+        "rmse": 13.13,
+        "drift": 2.83
+      },
+      "vo": {
+        "rmse": 42.94,
+        "drift": 18.37
+      },
+      "exp_nodes": 341,
+      "templates": 341,
+      "loop_edges": 9
+    },
+    "Town05Data_IMU_Fusion": {
+      "gt_len_m": 730.0,
+      "frames": 5000,
+      "nlm": {
+        "rmse": 26.57,
+        "drift": 16.36
+      },
+      "ekf": {
+        "rmse": 26.25,
+        "drift": 16.45
+      },
+      "vo": {
+        "rmse": 63.62,
+        "drift": 24.47
+      },
+      "exp_nodes": 239,
+      "templates": 239,
+      "loop_edges": 22
+    },
+    "Town10HDData_IMU_Fusion": {
+      "gt_len_m": 522.8,
+      "frames": 5000,
+      "nlm": {
+        "rmse": 13.28,
+        "drift": 3.36
+      },
+      "ekf": {
+        "rmse": 13.37,
+        "drift": 3.31
+      },
+      "vo": {
+        "rmse": 54.6,
+        "drift": 17.39
+      },
+      "exp_nodes": 358,
+      "templates": 358,
+      "loop_edges": 5
+    },
+    "KITTI07Data_IMU_Fusion": {
+      "gt_len_m": 692.1,
+      "frames": 1101,
+      "nlm": {
+        "rmse": 21.45,
+        "drift": 8.77
+      },
+      "ekf": {
+        "rmse": 22.09,
+        "drift": 8.33
+      },
+      "vo": null,
+      "exp_nodes": 964,
+      "templates": 964,
+      "loop_edges": 10
+    }
+  },
+  "turnaround": {
+    "variants": {
+      "NLM_DC": {
+        "fullSim3": 30.41,
+        "drift": 3.73,
+        "anchoredSim3_100": 321.25,
+        "scaleLocked2D": 239.57,
+        "s2_scale": 2.089
+      },
+      "NLM_AFIX": {
+        "fullSim3": 30.38,
+        "drift": 3.67,
+        "anchoredSim3_100": 323.48,
+        "scaleLocked2D": 191.08,
+        "s2_scale": 1.711
+      },
+      "NLM_AFIX_S2": {
+        "fullSim3": 30.41,
+        "drift": 3.67,
+        "anchoredSim3_100": 113.11,
+        "scaleLocked2D": 58.65,
+        "s2_scale": 1.319
+      },
+      "EKF": {
+        "fullSim3": 30.43,
+        "drift": 3.78,
+        "anchoredSim3_100": 398.05,
+        "scaleLocked2D": 422.31,
+        "s2_scale": 3.488
+      },
+      "VO": {
+        "fullSim3": 30.43,
+        "drift": 3.78,
+        "anchoredSim3_100": 392.96,
+        "scaleLocked2D": 313.22,
+        "s2_scale": 2.746
+      }
+    },
+    "events": {
+      "n": 10,
+      "gap_min": 345,
+      "gap_max": 930,
+      "resid_min_m": 4.41,
+      "resid_max_m": 14.2
+    },
+    "oracle": {
+      "noS2": [
+        9.1,
+        6.2,
+        0.6,
+        0.2,
+        6.9,
+        1.5,
+        23.3,
+        30.8
+      ],
+      "withS2": [
+        9.1,
+        6.1,
+        0.6,
+        0.3,
+        8.7,
+        2.0,
+        24.1,
+        30.8
+      ]
+    }
+  }
+}
