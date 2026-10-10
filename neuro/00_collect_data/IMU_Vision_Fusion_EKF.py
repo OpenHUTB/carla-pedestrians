@@ -17,7 +17,16 @@ from collections import deque
 
 import numpy as np
 import cv2
-import carla
+
+# ─── 离线模式 (EKF_OFFLINE=1): --replay 只读 CSV 复算, 不依赖 carla C 扩展 ───
+_EKF_OFFLINE = os.environ.get('EKF_OFFLINE', '') == '1'
+if _EKF_OFFLINE:
+    import types as _types
+    _carla_stub = _types.ModuleType('carla')
+    sys.modules.setdefault('carla', _carla_stub)
+    carla = _carla_stub
+else:
+    import carla
 from scipy.spatial.transform import Rotation as R
 from scipy import stats as _scipy_stats
 import matplotlib
@@ -95,14 +104,16 @@ if _carla_agents_dir:
         sys.path.insert(0, _carla_agents_dir)
     _carla_agents_found = True
 
-if not _carla_agents_found:
+if _EKF_OFFLINE:
+    # 离线复算不需要 agents (仅采集主循环使用 BehaviorAgent)
+    BehaviorAgent = None
+elif not _carla_agents_found:
     raise ImportError(
         "未找到 CARLA agents 模块。请确保 CARLA 已安装，且 PythonAPI/carla/agents/ 目录存在。\n"
         "通常位于: <CARLA_ROOT>\\PythonAPI\\carla\\agents\\\n"
         "可通过设置环境变量 CARLA_ROOT 指定 CARLA 安装目录"
     )
-
-from agents.navigation.behavior_agent import BehaviorAgent  # noqa: E402
+    from agents.navigation.behavior_agent import BehaviorAgent  # noqa: E402
 
 # 导入视觉里程计
 from visual_odometry_opencv import VisualOdometry, ScaleEstimator  # noqa: E402
