@@ -12,7 +12,11 @@
   KITTI07  GT/fusion_pose + ../KITTI_07/visual_odometry_ekf.txt(有头 vo_x/y/z)
            + slam_results/trajectories.mat:exp_trajectory
   Town10HD 同 Town01
-注: MH_03/KITTI07 的 EKF 轨迹仍为恢复EKF前的旧地基 (10-03/09-30), 重跑后需重跑本脚本。
+注: 2026-10-10 复跑确认——两集 EKF 生成器 (euroc_ekf_fusion.py 内含独立
+    EKF_VIO_MAV / kitti_ekf_fusion.py+ekf_standalone.py) 在 09-30/10-03 文件
+    生成后未再改动 (10-09 恢复只动 CARLA 的 IMU_Vision_Fusion_EKF.py),
+    重生成 EKF 与磁盘文件 md5 逐字节一致; NLM 按当前 core 重跑 (MATLAB
+    RUN_SLAM_MH03 / RERUN_KITTI07), ATE 与重跑前一致 (复现性验证通过)。
 """
 import numpy as np
 import pandas as pd
