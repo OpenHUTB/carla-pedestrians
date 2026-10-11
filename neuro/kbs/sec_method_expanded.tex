@@ -252,7 +252,6 @@ The network's topology implements periodic boundary conditions with toroidal wra
 
 \begin{figure*}[!t]
     \centering
-    % [V2] 3D_→3d_：与磁盘实际文件名一致（大小写敏感）
     \includegraphics[trim=30pt 60pt 12pt 137pt, clip, width=\textwidth]{fig/3d_grid_cell_fcc_lattice.pdf}
     \caption{3D Grid Cell Network with FCC lattice structure. (a) 3D activity packet representing position $(x,y,z)$ through distributed population code. (b) FCC lattice structure showing hexagonal grid pattern with three height layers for dense 3D packing. (c) 4-DoF encoding scheme combining position and heading representations.}
     \label{fig:3D_grid_cell_fcc}
@@ -404,4 +403,14 @@ so each correction persists (the held level $\mathbf{c}_i$ is retained after the
     \item \textbf{Amplitude gating.} Jumps with $\lVert\mathbf{c}_i\rVert > C_{\max}$ are applied instantaneously and excluded from the field: large corrections correspond to distant true loop closures whose early node positions are trustworthy, whereas small corrections (nearby re-visits, hash collisions) are uncertain and benefit from slow relaxation. Sweeps show that flattening \emph{all} steps degrades accuracy (e.g., Town01: +0.64\% RMSE), while gating yields per-frame RMSE improvements over both the un-relaxed baseline and the EKF front-end on all five sequences.
 \end{itemize}
 With the EKF-odometry mode ($\mathrm{NLM\_USE\_EKF\_ODO}$) the experience map consumes the fused EKF trajectory as its motion source (frame-to-frame displacement and yaw increments), and new experience nodes are pinned to the EKF map coordinates, so the grid-cell path integrator and the experience graph operate on a common, tightly constrained metric ground truth; the drift field then corrects only the residual re-anchoring steps on top of this unified foundation.
+
+\textbf{Closed-Loop Full-Sim(3) Re-Anchoring.} Each re-anchoring pulse above translates the subsequent trajectory but does not change its global scale or orientation, so the monocular scale ambiguity keeps accumulating between loops. We therefore complement it with a loop-triggered operator: at every accepted loop-closure event at frame $t_{\mathrm{now}}$, a full similarity transform is fitted between the \emph{anchor window} $\mathbf{A}$ (the first $\mathrm{win}$ moving frames of the trajectory, after the static prelude) and the \emph{current window} $\mathbf{C}$ (the $\mathrm{win}$ frames ending at $t_{\mathrm{now}}$, capped by the next event) by a Procrustes fit
+\begin{equation}
+    \mathbf{A} \approx s\,(\mathbf{C}\mathbf{R}) + \mathbf{t}, \qquad s \in [0.05,\,20],
+\end{equation}
+with $\mathrm{win} = 250$ frames (self-calibrated by an offline window sweep) and the scale gate rejecting degenerate fits. The entire segment after $t_{\mathrm{now}}$ (up to the next event) is then pulled back into the anchor frame,
+\begin{equation}
+    \hat{\mathbf{p}}(f) = s\,(\mathbf{p}(f)\mathbf{R}) + \mathbf{t}, \qquad t_{\mathrm{now}} < f < t_{\mathrm{next}},
+\end{equation}
+applied independently per event on the pre-correction trajectory (non-chained, so one event's refit is not polluted by its predecessor's transform). Because each accepted loop is a genuine re-visit of the same physical location, the re-anchoring is a global consistency correction that uses no ground-truth information; on loop-free routes it is a strict no-op. Its effect is quantified on the closed-loop Turnaround benchmark (Section~\ref{sec:scale_recovery}).
 

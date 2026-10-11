@@ -405,3 +405,13 @@ LSTM按序处理融合后的背侧-腹侧特征，跨时间步维持隐藏状态
     \item \textbf{幅值门控.} $\lVert\mathbf{c}_i\rVert > C_{\max}$ 的跳变瞬时施加、不进入漂移场：大校正对应远距真闭环（早期节点位置可信），小校正（近邻重访、哈希碰撞）不确定而受益于缓慢松弛。扫参显示把\emph{所有}阶跃摊平反而降低精度（如 Town01：RMSE +0.64\%），而门控后在全部五个序列上同时优于未松弛基线与EKF前端。
 \end{itemize}
 在EKF里程计模式（$\mathrm{NLM\_USE\_EKF\_ODO}$）下，经验地图以融合后的EKF轨迹作为运动源（帧间位移与航向增量），新经验节点钉扎在EKF地图坐标上，使网格细胞路径积分器与经验图运行于同一套受约束的度量地基之上；漂移场随后仅校正其上残余的重锚定阶跃。
+
+\textbf{闭环全Sim(3)重锚定.} 上述每个重锚定脉冲只平移其后轨迹，不改变其全局尺度与朝向，故单目尺度模糊在闭环之间持续累积。我们因此补充一个闭环触发的算子：在每次被接受的闭环事件的帧 $t_{\mathrm{now}}$ 处，对\emph{锚点窗} $\mathbf{A}$（轨迹前 $\mathrm{win}$ 个运动帧，自动跳过静止前导）与\emph{当前窗} $\mathbf{C}$（截至 $t_{\mathrm{now}}$ 的 $\mathrm{win}$ 帧，以下一事件为界）做 Procrustes 全相似拟合
+\begin{equation}
+    \mathbf{A} \approx s\,(\mathbf{C}\mathbf{R}) + \mathbf{t}, \qquad s \in [0.05,\,20],
+\end{equation}
+其中 $\mathrm{win} = 250$ 帧（离线窗口扫参自校准），尺度门剔除退化拟合。$t_{\mathrm{now}}$ 之后（至下一事件）的整段轨迹随之被拉回首锚坐标系：
+\begin{equation}
+    \hat{\mathbf{p}}(f) = s\,(\mathbf{p}(f)\mathbf{R}) + \mathbf{t}, \qquad t_{\mathrm{now}} < f < t_{\mathrm{next}},
+\end{equation}
+且各事件独立地基于校正前轨迹施加（非链式，故前一事件的重拟合不会污染后一事件的窗口）。由于每条被接受的闭环都是同一物理地点的真重访，该重锚定是无真值信息的全局一致性校正；在无闭环路线上是严格空操作。其效果在闭环Turnaround基准上量化（第~\ref{sec:scale_recovery}节）。
