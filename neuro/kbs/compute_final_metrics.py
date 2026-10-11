@@ -72,6 +72,12 @@ for d in ['Town01Data_IMU_Fusion', 'Town02Data_IMU_Fusion', 'Town05Data_IMU_Fusi
     nlm = loadmat(d, 'exp_trajectory')
     fu = loadcsv(d, 'fusion_pose.txt', ['pos_x', 'pos_y', 'pos_z'])
     vo = loadcsv(d, 'visual_odometry.txt', ['vo_x', 'vo_y', 'vo_z'])
+    if vo is None:   # KITTI07: VO 文件在 raw 转换目录 neuro/data/KITTI_07 (有头 vo_x/y/z)
+        pv = D.rstrip('/') + '/../KITTI_07/visual_odometry_ekf.txt'
+        if os.path.exists(pv):
+            a2 = pd.read_csv(pv)
+            c2 = [x for x in ['vo_x', 'vo_y', 'vo_z'] if x in a2.columns]
+            vo = a2[c2].values if len(c2) == 3 else None
     L = float(np.linalg.norm(np.diff(gt, axis=0), axis=1).sum())
     row = {'gt_len_m': round(L, 1), 'frames': int(min(len(gt), len(nlm)))}
     r, dr = sim3_full(nlm, gt); row['nlm'] = {'rmse': round(r, 2), 'drift': round(dr, 2)}

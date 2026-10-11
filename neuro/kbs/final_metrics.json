@@ -87,7 +87,10 @@
         "rmse": 22.09,
         "drift": 8.33
       },
-      "vo": null,
+      "vo": {
+        "rmse": 27.84,
+        "drift": 9.86
+      },
       "exp_nodes": 964,
       "templates": 964,
       "loop_edges": 10
