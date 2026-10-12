@@ -114,7 +114,8 @@ def kill_server():
                           stderr=subprocess.DEVNULL).returncode != 0
 
 
-def start_server(carla_bin, port, server_log):
+def start_server(carla_bin, port, server_log,
+                 server_flags='-RenderOffScreen -quality-level=Low'):
     if port_open(port):
         print('[SERVER] 端口已监听，复用现有 CARLA 服务器')
         return None
@@ -123,11 +124,12 @@ def start_server(carla_bin, port, server_log):
             f'[FATAL] CARLA 启动脚本不可用: {carla_bin!r}\n'
             '        请设置环境变量 CARLA_BIN 或用 --carla-bin 指定 CarlaUE4.sh 路径，'
             '或手动启动 CARLA 服务器后再运行本脚本。')
-    print(f'[SERVER] 启动 CARLA: {carla_bin} -port={port}')
+    flag_list = server_flags.split()
+    print(f'[SERVER] 启动 CARLA: {carla_bin} {" ".join(flag_list)} -port={port}')
     server_log.write(f'\n===== server start {time.strftime("%F %T")} =====\n')
     server_log.flush()
     proc = subprocess.Popen(
-        [carla_bin, '-RenderOffScreen', '-quality-level=Low', f'-port={port}'],
+        [carla_bin] + flag_list + [f'-port={port}'],
         stdout=server_log, stderr=subprocess.STDOUT,
         start_new_session=True, cwd=HERE)
     return proc
@@ -209,6 +211,11 @@ def main():
     parser.add_argument('--port', type=int, default=2000)
     parser.add_argument('--map', default='Town05')
     parser.add_argument('--carla-bin', default=DEFAULT_CARLA_BIN)
+    parser.add_argument('--server-flags',
+                        default='-RenderOffScreen -quality-level=Low',
+                        help='服务器启动渲染参数(空格分隔字符串); '
+                             '置空字符串则用窗口模式 (2026-10-12: 该机 offscreen '
+                             '路径 SIGSEGV 时备用)')
     parser.add_argument('--max-attempts', type=int, default=10)
     parser.add_argument('--fresh', action='store_true',
                         help='首轮全新采集（备份并清空旧输出目录）；'
@@ -238,7 +245,8 @@ def main():
         # 1) 确保服务器存活
         if not port_open(args.port, args.host):
             kill_server()  # 清理可能残留的半死进程
-            start_server(args.carla_bin, args.port, server_log)
+            start_server(args.carla_bin, args.port, server_log,
+                         args.server_flags)
             if not wait_port(args.port, args.host, timeout=300):
                 print(f'[FATAL] 第 {attempts} 轮 CARLA 服务器启动失败（300s 端口未监听）')
                 time.sleep(15)
