@@ -107,12 +107,13 @@ if _carla_agents_dir:
 if _EKF_OFFLINE:
     # 离线复算不需要 agents (仅采集主循环使用 BehaviorAgent)
     BehaviorAgent = None
-elif not _carla_agents_found:
-    raise ImportError(
-        "未找到 CARLA agents 模块。请确保 CARLA 已安装，且 PythonAPI/carla/agents/ 目录存在。\n"
-        "通常位于: <CARLA_ROOT>\\PythonAPI\\carla\\agents\\\n"
-        "可通过设置环境变量 CARLA_ROOT 指定 CARLA 安装目录"
-    )
+else:
+    if not _carla_agents_found:
+        raise ImportError(
+            "未找到 CARLA agents 模块。请确保 CARLA 已安装，且 PythonAPI/carla/agents/ 目录存在。\n"
+            "通常位于: <CARLA_ROOT>\\PythonAPI\\carla\\agents\\\n"
+            "可通过设置环境变量 CARLA_ROOT 指定 CARLA 安装目录"
+        )
     from agents.navigation.behavior_agent import BehaviorAgent  # noqa: E402
 
 # 导入视觉里程计
