@@ -1,6 +1,6 @@
 % RERUN_TOWN03.m — C类同批重跑 (Town03, 全量5000帧, 独立MATLAB进程)
-% 口径: 与 RERUN_TOWN05 同参 (VT=0.040, HDC=18, loops=12, corr=0.5,
-%       IMU 0.70/0.30/0.6, GC=0.4, NLM_USE_EKF_ODO=true), 全量帧(非1000快速)
+% 口径: RERUN_TOWN05 基础 + 10-12 弱集扫参定解 (VT=0.12, CE=10, HDC=18,
+%       loops=12, corr=0.5, IMU 0.70/0.30/0.6, GC=0.4, NLM_USE_EKF_ODO=true)
 % 运行: cd quickstart && matlab -batch RERUN_TOWN03
 clear all; close all; clc;
 
@@ -17,9 +17,11 @@ FAST_TEST_FRAMES = 5000;
 global NLM_USE_EKF_ODO;
 NLM_USE_EKF_ODO = true;
 
-% Visual Template
+% Visual Template (10-12 弱集扫参定解: vt0.12/ce10 = 51.96m, 胜 EKF 51.99)
 global VT_MATCH_THRESHOLD_OVERRIDE;
-VT_MATCH_THRESHOLD_OVERRIDE = 0.040;
+VT_MATCH_THRESHOLD_OVERRIDE = 0.12;
+global EXP_MAX_LOOP_CE;
+EXP_MAX_LOOP_CE = 10;
 
 % Experience Map
 global DELTA_EXP_GC_HDC_THRESHOLD_OVERRIDE;
