@@ -58,6 +58,9 @@ def main():
     ap.add_argument('--host', default='localhost')
     ap.add_argument('--ticks', type=int, default=100)
     ap.add_argument('--port-timeout', type=int, default=300)
+    ap.add_argument('--extra-flags', nargs='*', default=[],
+                    help='附加服务器启动参数, 如 -RenderOffScreen -quality-level=Low '
+                         '(与 collect_5000.py 同口径)')
     args = ap.parse_args()
 
     carla_bin = os.environ.get('CARLA_BIN',
@@ -70,10 +73,10 @@ def main():
         return 2
 
     log_path = f'/tmp/verify_carla_{args.map}.log'
-    print(f'[SERVER] 启动: {carla_bin} -port={args.port}  (日志 {log_path})')
+    server_cmd = [carla_bin] + list(args.extra_flags) + [f'-port={args.port}']
+    print(f'[SERVER] 启动: {" ".join(server_cmd)}  (日志 {log_path})')
     with open(log_path, 'wb') as logf:
-        proc = subprocess.Popen([carla_bin, f'-port={args.port}'],
-                                stdout=logf, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(server_cmd, stdout=logf, stderr=subprocess.STDOUT)
     t0 = time.time()
     ready = False
     while time.time() - t0 < args.port_timeout:
