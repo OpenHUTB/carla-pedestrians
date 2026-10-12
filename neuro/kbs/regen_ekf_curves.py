@@ -1,35 +1,16 @@
 #!/usr/bin/env python3
-"""kbs/regen_ekf_curves.py — 重绘 4 张 EKF 曲线图 (01/03/07/10)
+"""kbs/regen_ekf_curves.py — 重绘 4 张 EKF 曲线图 (Town05/03/07/10HD, 2026-10-12 数据集换集)
 
-数据集换为 Town01 / MH_03 / KITTI07 / Town10HD。
+数据集: Town05 / Town03 / Town07 / Town10HD (全 CARLA 重采数据; MH_03/KITTI07
+曲线随 EuRoC 数据集退出论文而移除, KITTI07 改由 KITTI_07_input_output 图承担
+现实数据验证)。
 样式与旧图一致: 对齐后逐帧 3D 位置误差 vs GT 弧长, NLM红实线 / EKF蓝虚线 / VO黑点线, 图例带 ATE。
-口径: 全轨迹 7-DoF Sim(3) Umeyama 对齐 (与论文 Table 1 / compute_metrics_with_alignment 活跃版一致)。
-
-数据源 (各集已核实 10-09/在盘):
-  Town01   GT/fusion/visual_odometry + slam_results/trajectories.mat:exp_trajectory
-  MH_03    GT(EuRoC无头格式) + fusion_pose_vo_ekf.txt(无头, col1:4=xyz)
-           + euroc_trajectories.mat: pure_visual_traj / exp_trajectory
-  KITTI07  GT/fusion_pose + ../KITTI_07/visual_odometry_ekf.txt(有头 vo_x/y/z)
-           + slam_results/trajectories.mat:exp_trajectory
-  Town10HD 同 Town01
-注: 2026-10-10 复跑确认——两集 EKF 生成器 (euroc_ekf_fusion.py 内含独立
-    EKF_VIO_MAV / kitti_ekf_fusion.py+ekf_standalone.py) 在 09-30/10-03 文件
-    生成后未再改动 (10-09 恢复只动 CARLA 的 IMU_Vision_Fusion_EKF.py),
-    重生成 EKF 与磁盘文件 md5 逐字节一致; NLM 按当前 core 重跑 (MATLAB
-    RUN_SLAM_MH03 / RERUN_KITTI07), ATE 与重跑前一致 (复现性验证通过)。
-注: 2026-10-09 曾尝试把 CARLA #100 形态 (EKF_VIO 10维 log尺度状态 +
-    转弯运动学尺度观测 s_obs=median(a_cen/(w·v_vo_rec)), 等权中值/无步限钳位)
-    移植进两独立生成器 (ekf_standalone.py / euroc_ekf_fusion.py EKF_VIO_MAV),
-    重生成两集 EKF 实测均有害, 已回滚 (生成器回 7f9bbb1 版本, EKF 文件
-    md5 复现原状, 本图数据源不变):
-      KITTI07  EKF ATE 22.09 → 32.84m (尺度状态收敛 0.53, 偏离真值≈0.81,
-               前段尺度滞后拉歪轨迹形状)
-      MH_03    尺度先验 0.029 → 在线 0.237 (路径 127m→2239m 发散; 3D 机动
-               经 roll/pitch 转弯, 垂直轴偏航率系统性低估转弯率, 运动学
-               观测恒高估≈6×: s_obs 中值 0.175 vs 真值 0.029)
-    原理结论: #100 运动学尺度观测仅对平面车辆成立 (转弯≈纯偏航 + 机体y轴
-    天然横向), 不适用于 3D 飞行; 两独立生成器的离线/外部尺度机制本身正确,
-    不应再向 #100 对齐。
+口径: 全轨迹 7-DoF Sim(3) Umeyama 对齐 (与论文 Table 1 / compute_final_metrics.py 一致)。
+数据源 (各集同构):
+  TownNN   GT/fusion/visual_odometry (有头 CSV) + slam_results/trajectories.mat:exp_trajectory
+注: 2026-10-09 曾尝试把 CARLA #100 形态 (EKF_VIO 10维 log尺度状态 + 转弯运动学
+    尺度观测) 移植进独立 EKF 生成器, 重生成实测均有害, 已回滚 (生成器回
+    7f9bbb1 版本); CARLA 侧 10-09 恢复只动 IMU_Vision_Fusion_EKF.py。
 """
 import numpy as np
 import pandas as pd
@@ -89,43 +70,13 @@ def plot_set(name, title, gt, nlm, ekf, vo):
     print(f'saved {out}')
 
 def main():
-    # ── Town01 ──
-    gt = load_csv(D + '01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/ground_truth.txt',
-                  ['pos_x', 'pos_y', 'pos_z'])
-    ekf = load_csv(D + '01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/fusion_pose.txt',
-                   ['pos_x', 'pos_y', 'pos_z'])
-    vo = load_csv(D + '01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/visual_odometry.txt',
-                  ['vo_x', 'vo_y', 'vo_z'])
-    nlm = np.array(sio.loadmat(D + '01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/slam_results/trajectories.mat')['exp_trajectory'], dtype=float)
-    plot_set('Town01', 'Town01  NeuroLocMap vs EKF vs VO', gt, nlm, ekf, vo)
-
-    # ── Town10HD ──
-    gt = load_csv(D + '01_NeuroSLAM_Datasets/Town10HDData_IMU_Fusion/ground_truth.txt',
-                  ['pos_x', 'pos_y', 'pos_z'])
-    ekf = load_csv(D + '01_NeuroSLAM_Datasets/Town10HDData_IMU_Fusion/fusion_pose.txt',
-                   ['pos_x', 'pos_y', 'pos_z'])
-    vo = load_csv(D + '01_NeuroSLAM_Datasets/Town10HDData_IMU_Fusion/visual_odometry.txt',
-                  ['vo_x', 'vo_y', 'vo_z'])
-    nlm = np.array(sio.loadmat(D + '01_NeuroSLAM_Datasets/Town10HDData_IMU_Fusion/slam_results/trajectories.mat')['exp_trajectory'], dtype=float)
-    plot_set('Town10HD', 'Town10HD  NeuroLocMap vs EKF vs VO', gt, nlm, ekf, vo)
-
-    # ── MH_03 (EuRoC) ──
-    gt = np.asarray(pd.read_csv(D + '02_EuRoc_Dataset/MH_03_medium/ground_truth.txt', header=None))[:, 1:4]
-    ekf = pd.read_csv(D + '02_EuRoc_Dataset/MH_03_medium/fusion_pose_vo_ekf.txt', header=None).values
-    ekf = ekf[:, 1:4]
-    m = sio.loadmat(D + '02_EuRoc_Dataset/MH_03_medium/slam_results/euroc_trajectories.mat')
-    vo = np.array(m['pure_visual_traj'], dtype=float)
-    nlm = np.array(m['exp_trajectory'], dtype=float)
-    plot_set('MH_03', 'EuRoC MH_03  NeuroLocMap vs EKF vs VO', gt, nlm, ekf, vo)
-
-    # ── KITTI07 ──
-    gt = load_csv(D + '01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/ground_truth.txt',
-                  ['pos_x', 'pos_y', 'pos_z'])
-    ekf = load_csv(D + '01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/fusion_pose.txt',
-                   ['pos_x', 'pos_y', 'pos_z'])
-    vo = load_csv(D + 'KITTI_07/visual_odometry_ekf.txt', ['vo_x', 'vo_y', 'vo_z'])
-    nlm = np.array(sio.loadmat(D + '01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/slam_results/trajectories.mat')['exp_trajectory'], dtype=float)
-    plot_set('KITTI07', 'KITTI 07  NeuroLocMap vs EKF vs VO', gt, nlm, ekf, vo)
+    for town in ['Town05', 'Town03', 'Town07', 'Town10HD']:
+        base = D + f'01_NeuroSLAM_Datasets/{town}Data_IMU_Fusion/'
+        gt = load_csv(base + 'ground_truth.txt', ['pos_x', 'pos_y', 'pos_z'])
+        ekf = load_csv(base + 'fusion_pose.txt', ['pos_x', 'pos_y', 'pos_z'])
+        vo = load_csv(base + 'visual_odometry.txt', ['vo_x', 'vo_y', 'vo_z'])
+        nlm = np.array(sio.loadmat(base + 'slam_results/trajectories.mat')['exp_trajectory'], dtype=float)
+        plot_set(town, f'{town}  NeuroLocMap vs EKF vs VO', gt, nlm, ekf, vo)
 
     print('ALL DONE')
 

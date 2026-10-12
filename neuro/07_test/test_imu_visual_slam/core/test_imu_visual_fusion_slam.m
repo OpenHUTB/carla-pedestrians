@@ -385,6 +385,8 @@ if isempty(NLM_LOOP_CE_MIN), NLM_LOOP_CE_MIN = 3; end
 if isempty(NLM_LOOP_STEP_MAX), NLM_LOOP_STEP_MAX = 25; end
 global NLM_SIM3_REANCHOR;   % S2: 闭环时全Sim(3)重锚 (默认关; 设计见 NLM_LOOP_DESIGN.md §9)
 if isempty(NLM_SIM3_REANCHOR), NLM_SIM3_REANCHOR = false; end
+global NLM_SIM3_WIN;        % S2: 当前lap拟合窗帧数 (win=250 双口径最优, kb_s2_winsweep_v2 自校准)
+if isempty(NLM_SIM3_WIN), NLM_SIM3_WIN = 250; end
 
 % 处理每一帧
 for frame_idx = 1:num_frames
@@ -673,7 +675,7 @@ end
 % 开放路线0事件 → exp_trajectory不变, 严格中性(同A-fix性质, 论文H4成立)。
 if NLM_LOOP_CONSTRAINT && NLM_SIM3_REANCHOR && ~isempty(NLM_LOOP_EVENTS)
     exp_trajectory_preS2 = exp_trajectory;   % S2输入轨迹(离线扫参/复现用, 仅S2开时存在)
-    exp_trajectory = nlm_sim3_reanchor(exp_trajectory, NLM_LOOP_EVENTS, 400);
+    exp_trajectory = nlm_sim3_reanchor(exp_trajectory, NLM_LOOP_EVENTS, NLM_SIM3_WIN);
 end
 
 fprintf('[5/9] SLAM处理完成！\n');
@@ -987,10 +989,12 @@ function traj = nlm_sim3_reanchor(traj, events, win)
 % 拉回首锚坐标系, 消除长程累积的尺度/旋转/平移全局漂移。
 %   traj   - [N x 3] 输出轨迹(逐帧, 锚点+ACCUM_DELTA)
 %   events - [t_now, t_old, cx, cy, cz] (A-fix事件, 仅用 t_now 列)
-%   win    - 当前lap拟合窗口帧数(默认400, 与离线标定一致)
+%   win    - 当前lap拟合窗口帧数 (由全局 NLM_SIM3_WIN 传入, 默认250)
 % 锚点窗口 = 首段运动帧(自动跳过静止前导); 段 = 事件帧+1 : 下一事件帧-1。
 % 退化保护: 当前窗口<30帧或段<2帧跳过; 拟合尺度落在[0.05,20]之外跳过
-% (对应离线: 16事件中6个窗口退化跳过, 10个有效, 结果123.8m)。
+% win 选定 (kbs/kb_s2_winsweep_v2.m 自校准扫参, 10-09 代 10 事件):
+%   8/10 事件生效区内 win=250 双口径最优 (anch100 44.24 / scale2D 46.63),
+%   优于原 win=400 (113.11 / 58.66); win=200 (40.99) 仅 3/10 生效不可比。
 % 行向量约定与MATLAB procrustes一致: anchor ≈ s*(cur*R) + t。
 % 关键: 拟合与映射都基于【S2输入轨迹 base】(非链式) —— 各段独立拉回首锚坐标
 % 系, 前一事件的重锚不污染后一事件的拟合窗口。链式(读已改轨迹)会使相邻事件

@@ -1,8 +1,8 @@
-%% REGEN_PAPER_FIGURES.m — 用本地数据(dc_final/EKF-odo+DC v3)重出论文4张图
+%% REGEN_PAPER_FIGURES.m — 用本地数据重出论文4张图 (Town05/03/07/10HD + KITTI07)
 %  输出: neuro/kbs/fig/{representative_performance, performance_summary,
 %        ablation_unified, KITTI_07_input_output_visualization}.pdf
-%  口径: 7-DoF Procrustes 全轨迹对齐 (与 compute_metrics_with_alignment.m 一致)
-%  用法: matlab_batch.sh REGEN_PAPER_FIGURES.m   (无头, 输出到 neuro/kbs/fig)
+%  口径: 7-DoF Procrustes 全轨迹对齐 (与 compute_final_metrics.py 一致)
+%  用法: matlab -batch "addpath('<quickstart目录>'); REGEN_PAPER_FIGURES" (无头)
 %-----------------------------------------------------------------------------
 ROOT  = '/home/yangrb/openhutb/neuro/data';
 OUT   = '/home/yangrb/openhutb/neuro/kbs/fig';
@@ -37,69 +37,68 @@ function fig_representative()
 ROOT = '/home/yangrb/openhutb/neuro/data';
 OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
-t01 = load_ds('Town01');
-mh3 = load_euroc('MH_03_medium');
-mp  = load_map('Town01');
+ds_a = 'Town05';
+ds_b = 'Town10HD';   % 第二个代表场景 (重采数据到位后可换 Town03/Town07)
+da = load_ds(ds_a); db = load_ds(ds_b);
+mpa = load_map(ds_a); mpb = load_map(ds_b);
 fs = 8.5;
 
 fig = figure('Visible','off','Color','w','Position',[0 0 483 340]);   % 6.71x4.72in @100dpi
 ax = subplot(2,2,1);
 cats = {'RMSE/10','Drift (%)','RPE x10','VT/10','Loops'};
-v_nlm = [t01.rmse/10, t01.drift, t01.rpe*10, mp.n_templates/10, mp.n_loops];
-v_ekf = [t01.ekf_rmse/10, t01.ekf_drift, t01.ekf_rpe*10, 0, 0];
-v_vo  = [t01.vo_rmse/10, t01.vo_drift, t01.vo_rpe*10, 0, 0];
+v_nlm = [da.rmse/10, da.drift, da.rpe*10, mpa.n_templates/10, mpa.n_loops];
+v_ekf = [da.ekf_rmse/10, da.ekf_drift, da.ekf_rpe*10, 0, 0];
+v_vo  = [da.vo_rmse/10, da.vo_drift, da.vo_rpe*10, 0, 0];
 b = bar((1:5)', [v_nlm; v_ekf; v_vo]', 0.72);
 b(1).FaceColor = C_NLM; b(2).FaceColor = C_EKF; b(3).FaceColor = C_VO;
 for k=1:3, b(k).EdgeColor='k'; b(k).LineWidth=0.4; end
-ax.XTick = 1:5; ax.XTickLabel = cats; ax.XTickLabel.FontSize = fs-1.5;
+ax.XTick = 1:5; ax.XTickLabel = cats;
 ylabel(ax,'Value (scaled)','FontSize',fs);
-title(ax,'(a) Town01 Metrics (517 m, 5000 frames)','FontSize',fs+0.5);
+title(ax,sprintf('(a) %s Metrics (%.0f m, %d frames)', ds_a, da.len_m, size(da.gt,1)),'FontSize',fs+0.5);
 style_ax(ax, fs);
 
 ax = subplot(2,2,2);
-n = min(numel(t01.err), numel(t01.ekf_err), numel(t01.vo_err));
-plot(ax,(1:n)',t01.err(1:n),   'Color',C_NLM,'LineWidth',1.2); hold(ax,'on');
-plot(ax,(1:n)',t01.ekf_err(1:n),'Color',C_EKF,'LineStyle','--','LineWidth',1.2);
-plot(ax,(1:n)',t01.vo_err(1:n),'Color',C_VO,'LineStyle',':','LineWidth',0.9, ...
+n = min([numel(da.err), numel(da.ekf_err), numel(da.vo_err)]);
+plot(ax,(1:n)',da.err(1:n),   'Color',C_NLM,'LineWidth',1.2); hold(ax,'on');
+plot(ax,(1:n)',da.ekf_err(1:n),'Color',C_EKF,'LineStyle','--','LineWidth',1.2);
+plot(ax,(1:n)',da.vo_err(1:n),'Color',C_VO,'LineStyle',':','LineWidth',0.9, ...
      'Marker','.','MarkerSize',4);
 xlabel(ax,'Frame Number','FontSize',fs); ylabel(ax,'Position Error (m)','FontSize',fs);
-title(ax,'(b) Town01 Error Evolution (aligned per frame)','FontSize',fs+0.5);
+title(ax,sprintf('(b) %s Error Evolution (aligned per frame)', ds_a),'FontSize',fs+0.5);
 style_ax(ax, fs);
 lg = legend(ax,'NeuroLocMap','EKF Fusion','Visual Odometry','FontSize',fs-1.5,...
             'Location','northwest'); lg.Position = [0.03 0.80 0.22 0.15];
 
 ax = subplot(2,2,3);
-cats = {'RMSE/10','Drift (%)','RPE x10'};
-v_nlm = [mh3.nlm.rmse/10, mh3.nlm.drift, mh3.nlm.rpe*10];
-v_ekf = [mh3.ekf.rmse/10, mh3.ekf.drift, mh3.ekf.rpe*10];
-v_vo  = [mh3.vo.rmse/10,  mh3.vo.drift,  mh3.vo.rpe*10];
-b = bar((1:3)', [v_nlm; v_ekf; v_vo]', 0.72);
+v_nlm = [db.rmse/10, db.drift, db.rpe*10, mpb.n_templates/10, mpb.n_loops];
+v_ekf = [db.ekf_rmse/10, db.ekf_drift, db.ekf_rpe*10, 0, 0];
+v_vo  = [db.vo_rmse/10, db.vo_drift, db.vo_rpe*10, 0, 0];
+b = bar((1:5)', [v_nlm; v_ekf; v_vo]', 0.72);
 b(1).FaceColor = C_NLM; b(2).FaceColor = C_EKF; b(3).FaceColor = C_VO;
 for k=1:3, b(k).EdgeColor='k'; b(k).LineWidth=0.4; end
-ax.XTick = 1:3; ax.XTickLabel = cats; ax.XTickLabel.FontSize = fs-1.5;
+ax.XTick = 1:5; ax.XTickLabel = cats;
 ylabel(ax,'Value (scaled)','FontSize',fs);
-title(ax,'(c) MH_03 Metrics (127 m, 2699 frames)','FontSize',fs+0.5);
+title(ax,sprintf('(c) %s Metrics (%.0f m, %d frames)', ds_b, db.len_m, size(db.gt,1)),'FontSize',fs+0.5);
 style_ax(ax, fs);
 
 ax = subplot(2,2,4);
-n = min(numel(mh3.nlm.err), numel(mh3.ekf.err), numel(mh3.vo.err));
-plot(ax,(1:n)',mh3.nlm.err(1:n),'Color',C_NLM,'LineWidth',1.0); hold(ax,'on');
-plot(ax,(1:n)',mh3.ekf.err(1:n),'Color',C_EKF,'LineStyle','--','LineWidth',1.0);
-plot(ax,(1:n)',mh3.vo.err(1:n), 'Color',C_VO,'LineStyle',':','LineWidth',0.8, ...
+n = min([numel(db.err), numel(db.ekf_err), numel(db.vo_err)]);
+plot(ax,(1:n)',db.err(1:n),'Color',C_NLM,'LineWidth',1.0); hold(ax,'on');
+plot(ax,(1:n)',db.ekf_err(1:n),'Color',C_EKF,'LineStyle','--','LineWidth',1.0);
+plot(ax,(1:n)',db.vo_err(1:n), 'Color',C_VO,'LineStyle',':','LineWidth',0.8, ...
      'Marker','.','MarkerSize',3);
 xlabel(ax,'Frame Number','FontSize',fs); ylabel(ax,'Position Error (m)','FontSize',fs);
-title(ax,'(d) MH_03 Error Evolution (aligned per frame)','FontSize',fs+0.5);
+title(ax,sprintf('(d) %s Error Evolution (aligned per frame)', ds_b),'FontSize',fs+0.5);
 style_ax(ax, fs);
 lg = legend(ax,'NeuroLocMap','EKF Fusion','Visual Odometry','FontSize',fs-1.5);
 lg.Position = [0.03 0.80 0.22 0.15];
 
 mytight(fig);
 savefig(fig,[OUT '/representative_performance.pdf'],[482.05251/72 339.64125/72]);
-fprintf('[1/4] representative  Town01 NLM=%.2f/%.2f EKF=%.2f/%.2f VO=%.2f/%.2f n=%d vt=%d loops=%d\n', ...
-    t01.rmse,t01.drift, t01.ekf_rmse,t01.ekf_drift, t01.vo_rmse,t01.vo_drift, ...
-    mp.n, mp.n_templates, mp.n_loops);
-fprintf('      MH03 NLM=%.2f EKF=%.2f VO=%.2f (论文 3.32/3.32/3.43)\n', ...
-    mh3.nlm.rmse, mh3.ekf.rmse, mh3.vo.rmse);
+fprintf('[1/4] representative  %s NLM=%.2f/%.2f EKF=%.2f/%.2f VO=%.2f/%.2f n=%d vt=%d loops=%d | %s NLM=%.2f/%.2f n=%d vt=%d loops=%d\n', ...
+    ds_a, da.rmse,da.drift, da.ekf_rmse,da.ekf_drift, da.vo_rmse,da.vo_drift, ...
+    mpa.n, mpa.n_templates, mpa.n_loops, ...
+    ds_b, db.rmse,db.drift, mpb.n, mpb.n_templates, mpb.n_loops);
 close(fig);
 end
 
@@ -108,24 +107,25 @@ function fig_performance_summary()
 ROOT = '/home/yangrb/openhutb/neuro/data';
 OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
-ds_list = {'Town01','Town02','Town05','Town10HD','KITTI07'};
-d = cell(1,numel(ds_list));
-for i=1:numel(ds_list), d{i} = load_ds(ds_list{i}); end
+ds_list = {'Town05','Town03','Town07','Town10HD','KITTI07'};
+nd = numel(ds_list);
+d = cell(1,nd);
+for i=1:nd, d{i} = load_ds(ds_list{i}); end
 fs = 8;
-labels = {'Town01','Town02','Town05','Town10HD','KITTI 07','MH_01','MH_03'};
-nlm_v = [d{1}.rmse, d{2}.rmse, d{3}.rmse, d{4}.rmse, d{5}.rmse, 4.14, 3.32];
-ekf_v = [d{1}.ekf_rmse, d{2}.ekf_rmse, d{3}.ekf_rmse, d{4}.ekf_rmse, d{5}.ekf_rmse, 4.14, 3.32];
-vo_v  = [d{1}.vo_rmse, d{2}.vo_rmse, d{3}.vo_rmse, d{4}.vo_rmse, d{5}.vo_rmse, 3.74, 3.43];
-lens  = [d{1}.len_m, d{2}.len_m, d{3}.len_m, d{4}.len_m, d{5}.len_m, 81, 127]/1000;
+% 两行式标签 (本 R2021b 无 TickLabelRotation)
+labs = [ 'Town ' 'Town ' 'Town ' 'Town ' 'KITTI' ;
+         '05   ' '03   ' '07   ' '10HD ' '07   ' ];
+nlm_v = [d{1}.rmse, d{2}.rmse, d{3}.rmse, d{4}.rmse, d{5}.rmse];
+ekf_v = [d{1}.ekf_rmse, d{2}.ekf_rmse, d{3}.ekf_rmse, d{4}.ekf_rmse, d{5}.ekf_rmse];
+vo_v  = [d{1}.vo_rmse, d{2}.vo_rmse, d{3}.vo_rmse, d{4}.vo_rmse, d{5}.vo_rmse];
+lens  = [d{1}.len_m, d{2}.len_m, d{3}.len_m, d{4}.len_m, d{5}.len_m]/1000;
 
 fig = figure('Visible','off','Color','w','Position',[0 0 466 155]);   % 6.46x2.15in @100dpi
 ax = subplot(1,3,1);
-b = bar((1:7)', [nlm_v; ekf_v; vo_v]', 0.78);
+b = bar((1:nd)', [nlm_v; ekf_v; vo_v]', 0.78);
 b(1).FaceColor = C_NLM; b(2).FaceColor = C_EKF; b(3).FaceColor = C_VO;
 for k=1:3, b(k).EdgeColor='k'; b(k).LineWidth=0.3; end
-ax.XTick = 1:7; ax.XTickLabel = labels;
-ax.XTickLabel.FontSize = fs-1.5; ax.XTickLabel.Rotation = 40;
-ax.XTickLabel.HorizontalAlignment = 'right';
+ax.XTick = 1:nd; ax.XTickLabel = labs;
 ylabel(ax,'RMSE (m)','FontSize',fs);
 title(ax,'(a) RMSE Comparison','FontSize',fs+0.5);
 style_ax(ax, fs-0.5);
@@ -136,9 +136,10 @@ ax = subplot(1,3,2);
 imp_e = (ekf_v - nlm_v)./ekf_v*100;
 s = 120 + lens*2600;
 hold(ax,'on');
-for i=1:7
+for i=1:nd
     if imp_e(i) >= 0
-        scatter(ax,i,imp_e(i),s(i),C_NLM,'filled','EdgeColor','k','LineWidth',0.6);
+        hb = scatter(ax,i,imp_e(i),s(i),C_NLM,'filled');
+        set(hb,'MarkerEdgeColor','k','LineWidth',0.6);
         if imp_e(i) > 3
             text(ax,i,imp_e(i)*0.55,sprintf('%+.1f%%',imp_e(i)),'HorizontalAlignment','center', ...
                  'FontSize',fs-1.5,'Color','w');
@@ -147,24 +148,24 @@ for i=1:7
                  'FontSize',fs-1.5);
         end
     else
-        scatter(ax,i,imp_e(i),s(i),[0.85 0.48 0.48],'filled','EdgeColor','k','LineWidth',0.6);
+        hb = scatter(ax,i,imp_e(i),s(i),[0.85 0.48 0.48],'filled');
+        set(hb,'MarkerEdgeColor','k','LineWidth',0.6);
         text(ax,i,imp_e(i)-1.6,sprintf('%+.1f%%',imp_e(i)),'HorizontalAlignment','center', ...
              'FontSize',fs-1.5);
     end
 end
 yline(ax,0,'k--','LineWidth',0.8);
-ax.XTick = 1:7; ax.XTickLabel = labels;
-ax.XTickLabel.FontSize = fs-1.5; ax.XTickLabel.Rotation = 40;
-ax.XTickLabel.HorizontalAlignment = 'right';
+ax.XTick = 1:nd; ax.XTickLabel = labs;
 ylabel(ax,'Improvement vs EKF (%)','FontSize',fs);
 title(ax,'(b) Improvement vs EKF (bubble size $\propto$ length)','FontSize',fs+0.5);
 style_ax(ax, fs-0.5);
-ax.YLim = [-1.8 max(imp_e)*1.35];
+yle = min(imp_e) - 2; if yle > -3, yle = -3; end
+ax.YLim = [yle max(imp_e)*1.35];
 
 ax = subplot(1,3,3);
 imp_v = (vo_v - nlm_v)./vo_v*100;
 hold(ax,'on');
-for i=1:7
+for i=1:nd
     if imp_v(i) >= 0
         bar(ax,i,imp_v(i),0.6,'FaceColor',C_NLM,'EdgeColor','k','LineWidth',0.3);
         text(ax,i,imp_v(i)+1.8,sprintf('%+.1f%%',imp_v(i)),'HorizontalAlignment','center', ...
@@ -176,20 +177,19 @@ for i=1:7
     end
 end
 yline(ax,0,'k','LineWidth',0.8);
-ax.XTick = 1:7; ax.XTickLabel = labels;
-ax.XTickLabel.FontSize = fs-1.5; ax.XTickLabel.Rotation = 40;
-ax.XTickLabel.HorizontalAlignment = 'right';
+ax.XTick = 1:nd; ax.XTickLabel = labs;
 ylabel(ax,'Improvement vs VO (%)','FontSize',fs);
 title(ax,'(c) Improvement vs VO','FontSize',fs+0.5);
 style_ax(ax, fs-0.5);
-ax.YLim = [-28 max(imp_v)*1.3];
+ylv = min(imp_v) - 4; if ylv > -6, ylv = -6; end
+ax.YLim = [ylv max(imp_v)*1.3];
 
 mytight(fig);
 savefig(fig,[OUT '/performance_summary.pdf'],[465.01119/72 154.7695895566/72]);
 fprintf('[2/4] performance_summary  impE=[');
-for i=1:7, fprintf(' %+.1f',imp_e(i)); end; fprintf(']\n');
+for i=1:nd, fprintf(' %+.1f',imp_e(i)); end; fprintf(']\n');
 fprintf('      impV=[');
-for i=1:7, fprintf(' %+.1f',imp_v(i)); end; fprintf(']\n');
+for i=1:nd, fprintf(' %+.1f',imp_v(i)); end; fprintf(']\n');
 close(fig);
 end
 
@@ -198,10 +198,11 @@ function fig_ablation()
 ROOT = '/home/yangrb/openhutb/neuro/data';
 OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
-ds_list = {'Town01','Town02','Town05','Town10HD','KITTI07'};
-d = cell(1,numel(ds_list));
-mp = cell(1,numel(ds_list));
-for i=1:numel(ds_list)
+ds_list = {'Town05','Town03','Town07','Town10HD','KITTI07'};
+nd = numel(ds_list);
+d = cell(1,nd);
+mp = cell(1,nd);
+for i=1:nd
     d{i} = load_ds(ds_list{i});
     mp{i} = load_map(ds_list{i});
 end
@@ -217,12 +218,12 @@ b = bar(1:3, vals', 0.55);
 b.FaceColor = 'flat';
 b.CData = [C_NLM; C_VO; C_EKF];
 b.EdgeColor = 'k'; b.LineWidth = 0.5;
-ax.XTick = 1:3; ax.XTickLabel = cats; ax.XTickLabel.FontSize = fs;
+ax.XTick = 1:3; ax.XTickLabel = cats;
 for i=1:3
     text(ax,i,vals(i)+0.6,sprintf('%.1f m',vals(i)),'HorizontalAlignment','center','FontSize',fs);
 end
 ylabel(ax,'RMSE (m)','FontSize',fs);
-title(ax,'(a) Ablation RMSE on Town01 (517 m)','FontSize',fs+0.5);
+title(ax,sprintf('(a) Ablation RMSE on Town05 (%.0f m)', t01.len_m),'FontSize',fs+0.5);
 ax.YLim = [0 max(vals)*1.15];
 style_ax(ax, fs);
 
@@ -260,8 +261,9 @@ ROOT = '/home/yangrb/openhutb/neuro/data';
 OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
 sub = [ROOT '/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion'];
-gt  = load_pos(fullfile(sub,'ground_truth.txt'), [1 2 3]);
-nlm = load_pos(fullfile(sub,'dc_final/exp_trajectory.txt'), [1 2 3]);
+gt  = load_pos(fullfile(sub,'ground_truth.txt'), [2 3 4]);
+nm  = load(fullfile(sub,'slam_results/trajectories.mat'), 'exp_trajectory');
+nlm = nm.exp_trajectory;
 [A, s] = procrustes_7dof(gt, nlm);
 n = min(size(gt,1), size(A,1));
 gt = gt(1:n,:); A = A(1:n,:);
@@ -426,11 +428,12 @@ gt = gt(1:n,:); est = est(1:n,:);
 gs = gt - mean(gt); es = est - mean(est);
 H = gs' * es;
 [U, S, V] = svd(H);
-D = diag([1 1 sign(det(U*V))]);
-R = U * D * V';
-s = sum(diag(S)) / max(sum(es(:).^2), 1e-12);
-t = mean(gt,1) - s*(R*mean(est,1)')';
-A = (s*(R*est'))' + t;
+d = sign(det(U*V'));                 % 与 python sim3_full: det(Vt.T @ U.T) 一致
+D = diag([1 1 d]);
+R = U * D * V';                      % 列空间映射 (python: est@T, T'=R)
+s = sum(diag(S) .* [1; 1; d]) / max(sum(es(:).^2), 1e-12);
+t = mean(gt,1)' - s*(R*mean(est,1)');   % 3x1 列向量 (原双转置实际生效的是 R')
+A = (s*(R*est') + t)';
 end
 
 %=============================================================================
@@ -445,79 +448,51 @@ function ok = ds_ready(ds)
 sub = ['/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/' ds 'Data_IMU_Fusion'];
 ok = isfile(fullfile(sub, 'ground_truth.txt')) && ...
      isfile(fullfile(sub, 'fusion_pose.txt')) && ...
-     isfile(fullfile(sub, 'dc_final/exp_trajectory.txt')) && ...
-     isfile(fullfile(sub, 'dc_final/pure_visual_trajectory.txt')) && ...
-     isfile(fullfile(sub, 'dc_final/experiences.mat'));
+     isfile(fullfile(sub, 'slam_results/trajectories.mat')) && ...
+     isfile(fullfile(sub, 'visual_odometry.txt')) && ...
+     isfile(fullfile(sub, 'slam_results/experiences.mat'));
 end
 
 %=============================================================================
 function d = load_ds(ds)
 ROOT = '/home/yangrb/openhutb/neuro/data';
 sub = [ROOT '/01_NeuroSLAM_Datasets/' sprintf('%sData_IMU_Fusion', ds)];
-gt  = load_pos(fullfile(sub,'ground_truth.txt'), [1 2 3]);
-nlm = load_pos(fullfile(sub,'dc_final/exp_trajectory.txt'), [1 2 3]);
-ekf = load_pos(fullfile(sub,'fusion_pose.txt'), [1 2 3]);
-vo  = load_pos(fullfile(sub,'dc_final/pure_visual_trajectory.txt'), [1 2 3]);
+gt  = load_pos(fullfile(sub,'ground_truth.txt'), [2 3 4]);
+nm  = load(fullfile(sub,'slam_results/trajectories.mat'), 'exp_trajectory');
+nlm = nm.exp_trajectory;
+ekf = load_pos(fullfile(sub,'fusion_pose.txt'), [2 3 4]);
+vop = fullfile(sub, 'visual_odometry.txt');
+if ~isfile(vop)
+    vop = [ROOT '/KITTI_07/visual_odometry_ekf.txt'];   % KITTI07: VO 在 raw 转换目录
+end
+vo  = load_pos(vop, [2 3 4]);
 d.gt = gt;
-d.len_m = sum(sqrt(sum(diff(gt,2,1).^2,2)));
+d.len_m = sum(sqrt(sum(diff(gt,1,1).^2,2)));
 [A,s] = procrustes_7dof(gt,nlm);
 n = min(size(gt,1),size(A,1));
 d.err = sqrt(sum((A(1:n,:)-gt(1:n,:)).^2,2))';
 d.rmse = sqrt(mean(d.err.^2));
 d.drift = d.err(end)/d.len_m*100;
-d.rpe = mean(sqrt(sum((diff(A(1:n,:),1,2)-diff(gt(1:n,:),1,2)).^2,2)));
+d.rpe = mean(sqrt(sum((diff(A(1:n,:),1,1)-diff(gt(1:n,:),1,1)).^2,2)));
 d.A = A;
 [A2,~] = procrustes_7dof(gt,ekf);
 n2 = min(size(gt,1),size(A2,1));
 d.ekf_err = sqrt(sum((A2(1:n2,:)-gt(1:n2,:)).^2,2))';
 d.ekf_rmse = sqrt(mean(d.ekf_err.^2));
 d.ekf_drift = d.ekf_err(end)/d.len_m*100;
-d.ekf_rpe = mean(sqrt(sum((diff(A2(1:n2,:),1,2)-diff(gt(1:n2,:),1,2)).^2,2)));
+d.ekf_rpe = mean(sqrt(sum((diff(A2(1:n2,:),1,1)-diff(gt(1:n2,:),1,1)).^2,2)));
 [A3,~] = procrustes_7dof(gt,vo);
 n3 = min(size(gt,1),size(A3,1));
 d.vo_err = sqrt(sum((A3(1:n3,:)-gt(1:n3,:)).^2,2))';
 d.vo_rmse = sqrt(mean(d.vo_err.^2));
 d.vo_drift = d.vo_err(end)/d.len_m*100;
-d.vo_rpe = mean(sqrt(sum((diff(A3(1:n3,:),1,2)-diff(gt(1:n3,:),1,2)).^2,2)));
-end
-
-%=============================================================================
-function d = load_euroc(mh_dir)
-ROOT = '/home/yangrb/openhutb/neuro/data';
-m = load([ROOT '/02_EuRoc_Dataset' sprintf('/%s/slam_results/euroc_trajectories.mat', mh_dir)]);
-g = m.gt_data.pos;
-while iscell(g), g = g{1}; end
-g = reshape(g, 3, [])';
-d.gt = g;
-nm_list = {'nlm','ekf','vo'};
-key_list = {'exp_trajectory','fusion_data','pure_visual_traj'};
-for i=1:3
-    nm = nm_list{i};
-    key = key_list{i};
-    v = m.(key);
-    if isnumeric(v)
-        p = v;                                % exp_trajectory/pure_visual_traj 是裸 N x 3
-    else
-        p = v.pos;                            % fusion_data 是 struct 数组
-        while iscell(p), p = p{1}; end
-    end
-    p = reshape(p, 3, [])';
-    [A,~] = procrustes_7dof(g, p);
-    n = min(size(g,1), size(A,1));
-    err = sqrt(sum((A(1:n,:)-g(1:n,:)).^2,2))';
-    L = sum(sqrt(sum(diff(g,2,1).^2,2)));
-    d.(nm).err = err;
-    d.(nm).rmse = sqrt(mean(err.^2));
-    d.(nm).drift = err(end)/L*100;
-    d.(nm).rpe = mean(sqrt(sum((diff(A(1:n,:),1,2)-diff(g(1:n,:),1,2)).^2,2)));
-    d.(nm).n = n;
-end
+d.vo_rpe = mean(sqrt(sum((diff(A3(1:n3,:),1,1)-diff(gt(1:n3,:),1,1)).^2,2)));
 end
 
 %=============================================================================
 function m = load_map(ds)
 ROOT = '/home/yangrb/openhutb/neuro/data';
-p = [ROOT '/01_NeuroSLAM_Datasets' sprintf('/%sData_IMU_Fusion/dc_final/experiences.mat', ds)];
+p = [ROOT '/01_NeuroSLAM_Datasets' sprintf('/%sData_IMU_Fusion/slam_results/experiences.mat', ds)];
 E = load(p, 'EXPERIENCES');
 E = E.EXPERIENCES;
 if iscell(E), E = E{1}; end
@@ -531,29 +506,28 @@ for i = 1:n
     vt(i) = E(i).vt_id;
 end
 vt_int = round(vt);
-vt_pos = vt_int(vt_int > 0);
-vmax = max([vt_pos(:); 0]);   % 列向量拼接, 避免行向量+标量维度不一致
-seen = false(1, vmax+1);
+m.n = n; m.x = x; m.y = y;
+% json 口径 (compute_final_metrics.py): templates = vt_id>0 的 experience 计数 (非去重)
+m.n_templates = nnz(vt_int > 0);
 growth = zeros(1, n);
 for i = 1:n
-    if vt_int(i) > 0 && ~seen(vt_int(i)), seen(vt_int(i)) = true; end
-    growth(i) = nnz(seen);
+    growth(i) = nnz(vt_int(1:i) > 0);
 end
-m.n = n; m.x = x; m.y = y;
-m.n_templates = numel(unique(vt_pos));
 m.growth = growth;
-m.loops = [];
+m.loops = []; nloop = 0;
 for i = 1:n
-    nl = size(E(i).links, 2);
-    for j = 1:nl
-        t = round(E(i).links(j).exp_id) - 1;   % 1-based exp_id -> 0-based target
-        % 0-based 邻接判定(与 Python 版一致): i 是 1-based, 0-based 源 = i-1
-        if t >= 0 && t < n && t ~= i-2 && t ~= i
-            m.loops(end+1, 1:2) = [min(i, t+1), max(i, t+1)]; %#ok<AGROW>
+    % json 口径 (compute_final_metrics.py): numlinks>0 门控, python len(1×m)=1
+    % 仅计每个 experience 的首个 link, 条件 1 <= exp_id <= i-1 (不含自环)
+    nl = round(E(i).numlinks);
+    if nl > 0
+        eid = round(E(i).links(1).exp_id);   % 1-based target
+        if eid >= 1 && eid < i
+            nloop = nloop + 1;
+            m.loops(end+1, 1:2) = [min(i, eid), max(i, eid)]; %#ok<AGROW>
         end
     end
 end
-m.loops = unique(m.loops, 'rows');
-m.n_loops = size(m.loops, 1);
+m.loops = unique(m.loops, 'rows');   % 绘图去重; 计数用 nloop (与 json loop_edges 一致)
+m.n_loops = nloop;
 end
 

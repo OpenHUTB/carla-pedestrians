@@ -4,8 +4,8 @@
       "gt_len_m": 669.9,
       "frames": 5000,
       "nlm": {
-        "rmse": 16.63,
-        "drift": 4.38
+        "rmse": 13.44,
+        "drift": 3.17
       },
       "ekf": {
         "rmse": 14.3,
@@ -15,9 +15,9 @@
         "rmse": 82.38,
         "drift": 13.95
       },
-      "exp_nodes": 75,
-      "templates": 75,
-      "loop_edges": 7
+      "exp_nodes": 69,
+      "templates": 69,
+      "loop_edges": 5
     },
     "Town02Data_IMU_Fusion": {
       "gt_len_m": 519.8,
@@ -61,8 +61,8 @@
       "gt_len_m": 522.8,
       "frames": 5000,
       "nlm": {
-        "rmse": 13.28,
-        "drift": 3.36
+        "rmse": 12.74,
+        "drift": 3.19
       },
       "ekf": {
         "rmse": 13.37,
@@ -72,9 +72,9 @@
         "rmse": 54.6,
         "drift": 17.39
       },
-      "exp_nodes": 358,
-      "templates": 358,
-      "loop_edges": 5
+      "exp_nodes": 128,
+      "templates": 128,
+      "loop_edges": 18
     },
     "KITTI07Data_IMU_Fusion": {
       "gt_len_m": 692.1,
@@ -87,7 +87,10 @@
         "rmse": 22.09,
         "drift": 8.33
       },
-      "vo": null,
+      "vo": {
+        "rmse": 27.84,
+        "drift": 9.86
+      },
       "exp_nodes": 964,
       "templates": 964,
       "loop_edges": 10
@@ -110,11 +113,11 @@
         "s2_scale": 1.711
       },
       "NLM_AFIX_S2": {
-        "fullSim3": 30.41,
-        "drift": 3.67,
-        "anchoredSim3_100": 113.11,
-        "scaleLocked2D": 58.65,
-        "s2_scale": 1.319
+        "fullSim3": 30.45,
+        "drift": 3.85,
+        "anchoredSim3_100": 44.24,
+        "scaleLocked2D": 46.63,
+        "s2_scale": 1.927
       },
       "EKF": {
         "fullSim3": 30.43,
@@ -153,10 +156,10 @@
         9.1,
         6.1,
         0.6,
-        0.3,
-        8.7,
-        2.0,
-        24.1,
+        0.2,
+        9.6,
+        2.1,
+        25.5,
         30.8
       ]
     }
