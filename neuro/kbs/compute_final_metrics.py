@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""kbs/compute_final_metrics.py — 论文定稿指标全量计算 (数据集换 Town01/03/07/10HD 后, 2026-10-12)
+"""kbs/compute_final_metrics.py — 论文定稿指标全量计算 (数据集换 Town05/03/07/10HD 后, 2026-10-12)
 
 产出:
-  Table 1 五行 (CARLA 4: Town01/03/07/10HD + KITTI07 现实验证): NLM/EKF/VO 的
+  Table 1 五行 (CARLA 4: Town05/03/07/10HD + KITTI07 现实验证): NLM/EKF/VO 的
   full-Sim(3) RMSE + drift rate + 模板/节点/闭环计数 (experiences.mat)
 输出: neuro/kbs/final_metrics.json + 打印摘要
 注: 闭环计数口径 = 每 experience 首条 link (论文沿用此口径, 用户已确认)
@@ -38,7 +38,7 @@ def loadcsv(d, fn, cols):
 
 # ─────────────────── 1) Table 1 五行 ───────────────────
 t1 = {}
-for d in ['Town01Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
+for d in ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
           'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion']:
     base = d + '/'
     gt = loadcsv(d, 'ground_truth.txt', ['pos_x', 'pos_y', 'pos_z'])
@@ -102,7 +102,7 @@ with open('/home/yangrb/openhutb/neuro/kbs/final_metrics.json', 'w') as f:
     json.dump(OUT, f, indent=2, ensure_ascii=False)
 
 # ─────────────────── 打印 ───────────────────
-print('════ Table 1 (full Sim(3), Town01/03/07/10HD + KITTI07) ════')
+print('════ Table 1 (full Sim(3), Town05/03/07/10HD + KITTI07) ════')
 print(f"{'set':24s} {'NLM':>7s} {'EKF':>7s} {'VO':>7s} | {'drift NLM/EKF':>14s} | nodes/tpl/loop | GTlen")
 for d, r in t1.items():
     n = r['nlm']; e = r.get('ekf'); v = r.get('vo')

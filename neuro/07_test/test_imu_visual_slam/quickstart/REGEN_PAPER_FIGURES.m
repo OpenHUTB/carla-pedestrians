@@ -1,4 +1,4 @@
-%% REGEN_PAPER_FIGURES.m — 用本地数据重出论文4张图 (Town01/03/07/10HD + KITTI07)
+%% REGEN_PAPER_FIGURES.m — 用本地数据重出论文4张图 (Town05/03/07/10HD + KITTI07)
 %  输出: neuro/kbs/fig/{representative_performance, performance_summary,
 %        ablation_unified, KITTI_07_input_output_visualization}.pdf
 %  口径: 7-DoF Procrustes 全轨迹对齐 (与 compute_final_metrics.py 一致)
@@ -37,7 +37,7 @@ function fig_representative()
 ROOT = '/home/yangrb/openhutb/neuro/data';
 OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
-ds_a = 'Town01';
+ds_a = 'Town05';
 ds_b = 'Town10HD';   % 第二个代表场景 (重采数据到位后可换 Town03/Town07)
 da = load_ds(ds_a); db = load_ds(ds_b);
 mpa = load_map(ds_a); mpb = load_map(ds_b);
@@ -107,14 +107,14 @@ function fig_performance_summary()
 ROOT = '/home/yangrb/openhutb/neuro/data';
 OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
-ds_list = {'Town01','Town03','Town07','Town10HD','KITTI07'};
+ds_list = {'Town05','Town03','Town07','Town10HD','KITTI07'};
 nd = numel(ds_list);
 d = cell(1,nd);
 for i=1:nd, d{i} = load_ds(ds_list{i}); end
 fs = 8;
 % 两行式标签 (本 R2021b 无 TickLabelRotation)
 labs = [ 'Town ' 'Town ' 'Town ' 'Town ' 'KITTI' ;
-         '01   ' '03   ' '07   ' '10HD ' '07   ' ];
+         '05   ' '03   ' '07   ' '10HD ' '07   ' ];
 nlm_v = [d{1}.rmse, d{2}.rmse, d{3}.rmse, d{4}.rmse, d{5}.rmse];
 ekf_v = [d{1}.ekf_rmse, d{2}.ekf_rmse, d{3}.ekf_rmse, d{4}.ekf_rmse, d{5}.ekf_rmse];
 vo_v  = [d{1}.vo_rmse, d{2}.vo_rmse, d{3}.vo_rmse, d{4}.vo_rmse, d{5}.vo_rmse];
@@ -198,7 +198,7 @@ function fig_ablation()
 ROOT = '/home/yangrb/openhutb/neuro/data';
 OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
-ds_list = {'Town01','Town03','Town07','Town10HD','KITTI07'};
+ds_list = {'Town05','Town03','Town07','Town10HD','KITTI07'};
 nd = numel(ds_list);
 d = cell(1,nd);
 mp = cell(1,nd);
@@ -223,7 +223,7 @@ for i=1:3
     text(ax,i,vals(i)+0.6,sprintf('%.1f m',vals(i)),'HorizontalAlignment','center','FontSize',fs);
 end
 ylabel(ax,'RMSE (m)','FontSize',fs);
-title(ax,sprintf('(a) Ablation RMSE on Town01 (%.0f m)', t01.len_m),'FontSize',fs+0.5);
+title(ax,sprintf('(a) Ablation RMSE on Town05 (%.0f m)', t01.len_m),'FontSize',fs+0.5);
 ax.YLim = [0 max(vals)*1.15];
 style_ax(ax, fs);
 

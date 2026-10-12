@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""kbs/regen_ekf_curves.py — 重绘 4 张 EKF 曲线图 (Town01/03/07/10HD, 2026-10-12 数据集换集)
+"""kbs/regen_ekf_curves.py — 重绘 4 张 EKF 曲线图 (Town05/03/07/10HD, 2026-10-12 数据集换集)
 
-数据集: Town01 / Town03 / Town07 / Town10HD (全 CARLA 重采数据; MH_03/KITTI07
+数据集: Town05 / Town03 / Town07 / Town10HD (全 CARLA 重采数据; MH_03/KITTI07
 曲线随 EuRoC 数据集退出论文而移除, KITTI07 改由 KITTI_07_input_output 图承担
 现实数据验证)。
 样式与旧图一致: 对齐后逐帧 3D 位置误差 vs GT 弧长, NLM红实线 / EKF蓝虚线 / VO黑点线, 图例带 ATE。
@@ -70,7 +70,7 @@ def plot_set(name, title, gt, nlm, ekf, vo):
     print(f'saved {out}')
 
 def main():
-    for town in ['Town01', 'Town03', 'Town07', 'Town10HD']:
+    for town in ['Town05', 'Town03', 'Town07', 'Town10HD']:
         base = D + f'01_NeuroSLAM_Datasets/{town}Data_IMU_Fusion/'
         gt = load_csv(base + 'ground_truth.txt', ['pos_x', 'pos_y', 'pos_z'])
         ekf = load_csv(base + 'fusion_pose.txt', ['pos_x', 'pos_y', 'pos_z'])
