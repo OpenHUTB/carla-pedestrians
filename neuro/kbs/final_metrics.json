@@ -1,80 +1,80 @@
 {
   "table1": {
     "Town05Data_IMU_Fusion": {
-      "gt_len_m": 1089.9,
+      "gt_len_m": 2496.8,
       "frames": 5000,
       "nlm": {
-        "rmse": 61.61,
-        "drift": 15.47
+        "rmse": 118.93,
+        "drift": 7.83
       },
       "ekf": {
-        "rmse": 63.34,
-        "drift": 16.44
+        "rmse": 118.94,
+        "drift": 7.82
       },
       "vo": {
-        "rmse": 85.95,
-        "drift": 20.43
+        "rmse": 106.5,
+        "drift": 3.35
       },
-      "exp_nodes": 213,
-      "templates": 213,
-      "loop_edges": 30
+      "exp_nodes": 485,
+      "templates": 485,
+      "loop_edges": 1
     },
     "Town03Data_IMU_Fusion": {
-      "gt_len_m": 1085.0,
+      "gt_len_m": 473.5,
       "frames": 5000,
       "nlm": {
-        "rmse": 51.96,
-        "drift": 17.62
+        "rmse": 22.91,
+        "drift": 5.03
       },
       "ekf": {
-        "rmse": 51.99,
-        "drift": 17.6
+        "rmse": 23.36,
+        "drift": 5.14
       },
       "vo": {
-        "rmse": 71.74,
-        "drift": 14.26
+        "rmse": 49.1,
+        "drift": 17.59
       },
-      "exp_nodes": 125,
-      "templates": 125,
-      "loop_edges": 9
+      "exp_nodes": 91,
+      "templates": 91,
+      "loop_edges": 7
     },
     "Town07Data_IMU_Fusion": {
-      "gt_len_m": 492.8,
+      "gt_len_m": 747.9,
       "frames": 5000,
       "nlm": {
-        "rmse": 12.68,
-        "drift": 2.16
+        "rmse": 54.56,
+        "drift": 13.49
       },
       "ekf": {
-        "rmse": 12.99,
-        "drift": 3.12
+        "rmse": 54.57,
+        "drift": 13.49
       },
       "vo": {
-        "rmse": 50.16,
-        "drift": 19.87
+        "rmse": 74.82,
+        "drift": 10.54
       },
-      "exp_nodes": 189,
-      "templates": 189,
-      "loop_edges": 9
+      "exp_nodes": 305,
+      "templates": 305,
+      "loop_edges": 1
     },
     "Town10HDData_IMU_Fusion": {
-      "gt_len_m": 460.2,
+      "gt_len_m": 452.3,
       "frames": 5000,
       "nlm": {
-        "rmse": 4.34,
-        "drift": 1.13
+        "rmse": 18.61,
+        "drift": 1.57
       },
       "ekf": {
-        "rmse": 4.35,
-        "drift": 1.18
+        "rmse": 18.61,
+        "drift": 1.57
       },
       "vo": {
-        "rmse": 28.78,
-        "drift": 13.06
+        "rmse": 35.86,
+        "drift": 15.58
       },
-      "exp_nodes": 416,
-      "templates": 416,
-      "loop_edges": 3
+      "exp_nodes": 481,
+      "templates": 481,
+      "loop_edges": 1
     },
     "KITTI07Data_IMU_Fusion": {
       "gt_len_m": 692.1,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""regen_figures.py — 用 10-04 新 run (EKF-odo + DC v3, dc_final) 数据重绘论文 4 张图。
+"""regen_figures.py — 用 2026-10-13 车流重采 run (slam_results/) 数据重绘论文 4 张图。
 背景: MATLAB R2021b 本机不可用 (Settings 错误), 原图由 MATLAB 生成 (A4 页面+trim);
 本脚本直接生成 trim 后的内容尺寸 PDF, tex 中对应 includegraphics 的 trim 参数改为 0。
 
@@ -21,14 +21,9 @@ from scipy.io import loadmat
 ROOT = '/home/yangrb/openhutb/neuro/data'
 FIG = '/home/yangrb/openhutb/neuro/kbs/fig'
 
-# ---------------- 论文现值 (Table 1, EKF/VO 列不变) ----------------
-EKF_RMSE = {'Town01': 15.94, 'Town02': 29.32, 'Town05': 23.02, 'Town10HD': 24.98, 'KITTI07': 22.07}
-VO_RMSE  = {'Town01': 36.46, 'Town02': 55.41, 'Town05': 67.98, 'Town10HD': 24.44, 'KITTI07': 78.05}
-EKF_DRIFT = {'Town01': 2.03, 'Town02': 5.41, 'Town05': 2.76, 'Town10HD': 7.15, 'KITTI07': 8.33}
-MH = {  # EuRoC (mat 内已对齐数组, 数值与论文一致)
-    'MH_01': {'NLM': 4.14, 'EKF': 4.14, 'VO': 3.74, 'NLM_drift': 7.84, 'EKF_drift': 7.66, 'L': 81.0, 'frames': 3681},
-    'MH_03': {'NLM': 3.32, 'EKF': 3.32, 'VO': 3.43, 'NLM_drift': 3.01, 'EKF_drift': 2.99, 'L': 127.0, 'frames': 2699},
-}
+# ---------------- 论文现值 (Table 1, 2026-10-13 车流重采 final_metrics.json) ----------------
+EKF_RMSE = {'Town05': 118.94, 'Town03': 23.36, 'Town07': 54.57, 'Town10HD': 18.61, 'KITTI07': 22.09}
+VO_RMSE  = {'Town05': 106.50, 'Town03': 49.10, 'Town07': 74.82, 'Town10HD': 35.86, 'KITTI07': 27.84}
 
 # 配色 (与原图一致: NLM 蓝 / EKF 浅橙 / VO 浅绿)
 C_NLM, C_EKF, C_VO = '#4490C2', '#F4A582', '#92C59B'
@@ -49,25 +44,39 @@ def load_pos(path, poscols=None):
     return a[:, list(cols)]
 
 
+def _result_file(sub, name, required=True):
+    """结果文件路径: 优先 slam_results/ (RERUN 新 run), 回退 dc_final/ (论文期 run)。"""
+    for d in ('slam_results', 'dc_final'):
+        p = f'{sub}/{d}/{name}'
+        if os.path.exists(p):
+            return p
+    if required:
+        raise FileNotFoundError(name)
+    return None
+
+
 def procrustes_7dof(gt, est):
-    n = min(len(gt), len(est)); gt = gt[:n].astype(float); est = est[:n].astype(float)
-    gs = gt - gt.mean(0); es = est - est.mean(0)
-    H = gs.T @ es
-    U, S, Vt = np.linalg.svd(H)
-    D = np.diag([1, 1, np.sign(np.linalg.det(U @ Vt))]); R = U @ D @ Vt
-    s = S.sum() / max(np.sum(es**2), 1e-12)
-    t = gt.mean(0) - (s * R) @ est.mean(0)
-    return (s * (R @ est.T)).T + t, s
+    """full Sim(3) 对齐 — 与 compute_final_metrics.sim3_full 同式 (Table 1 口径)。"""
+    n = min(len(gt), len(est)); gt, est = gt[:n].astype(float), est[:n].astype(float)
+    ec, gc = est - est.mean(0), gt - gt.mean(0)
+    U, S, Vt = np.linalg.svd(gc.T @ ec)
+    d = np.linalg.det(Vt.T @ U.T)
+    T = Vt.T @ np.diag([1, 1, d]) @ U.T
+    s = (S @ np.array([1, 1, d])) / max((ec ** 2).sum(), 1e-12)
+    ea = s * (est @ T) + (gt.mean(0) - s * (est.mean(0) @ T))
+    return ea, s
 
 
 def load_ds(ds):
     sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
-    nlm = load_pos(f'{sub}/dc_final/exp_trajectory.txt')
+    nlm = load_pos(_result_file(sub, 'exp_trajectory.txt'))
     ekf = load_pos(f'{sub}/fusion_pose.txt')
     out = {'gt': gt, 'nlm': nlm, 'ekf': ekf, 'len_m': float(np.linalg.norm(np.diff(gt, axis=0), axis=1).sum())}
-    # VO 口径 = MATLAB 流水线内纯视觉分支 pure_visual_trajectory.txt (与论文 Table1 VO 列一致: 36.46/55.41/67.98/24.44/78.05)
-    vo_p = f'{sub}/dc_final/pure_visual_trajectory.txt'
+    # VO 口径 = visual_odometry.txt (vo_x/vo_y/vo_z), 与 Table 1 同源 (compute_final_metrics)
+    vo_p = f'{sub}/visual_odometry.txt'
+    if ds == 'KITTI07' and not os.path.exists(vo_p):
+        vo_p = f'{ROOT}/KITTI_07/visual_odometry_ekf.txt'  # VO 文件在 raw 转换目录
     out['vo'] = load_pos(vo_p) if os.path.exists(vo_p) else None
     for name in ('nlm', 'ekf', 'vo'):
         T = out[name]
@@ -110,14 +119,24 @@ def load_euroc(mh_dir):
     return out
 
 
+def _mat_field(E, name):
+    """展开 struct 字段 (1x1 标量数组的 object 数组) 为 float 向量
+    (MATLAB struct array 经 scipy loadmat 的加载形态)。"""
+    v = np.asarray(E[name])
+    if v.dtype == object:
+        return np.concatenate([np.asarray(x, dtype=float).ravel() for x in v.ravel()])
+    return np.asarray(v, dtype=float).ravel()
+
+
 def load_map(ds):
-    m = loadmat(f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion/dc_final/experiences.mat')
+    sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
+    m = loadmat(_result_file(sub, 'experiences.mat'))
     E = m['EXPERIENCES']
     E = E[0] if E.ndim > 1 else E
     n = len(E)
-    x = np.asarray(E['x_exp'], dtype=float).ravel()
-    y = np.asarray(E['y_exp'], dtype=float).ravel()
-    vt = np.asarray(E['vt_id'], dtype=float).ravel()
+    x = _mat_field(E, 'x_exp')
+    y = _mat_field(E, 'y_exp')
+    vt = _mat_field(E, 'vt_id')
     vt_int = np.array([int(v) for v in vt])
     n_templates = int(len(np.unique(vt_int[vt_int > 0])))
     # 顺序创建曲线: 到第 i 个节点为止出现过的不同模板数
@@ -126,17 +145,30 @@ def load_map(ds):
         if vt_int[i] > 0:
             seen.add(vt_int[i])
         growth[i] = len(seen)
-    # 非相邻 (闭环/重锚定) 边, 无向
-    loops = set()
-    for i in range(n):
-        l = E['links'][i]
-        if l is None:
+    # 闭环计数 = Table 1 口径 (compute_final_metrics): 每条 link 满足 1 <= eid <= k (k 0-based)
+    loops = []
+    for k in range(n):
+        try:
+            nl = int(float(np.atleast_1d(E['numlinks'][k]).ravel()[0]))
+        except Exception:
             continue
-        for tup in np.asarray(l).ravel():
-            t = int(np.asarray(tup[0]).ravel()[0]) - 1
-            if 0 <= t < n and t not in (i - 1, i + 1):
-                loops.add((min(i, t), max(i, t)))
-    return {'n': n, 'x': x, 'y': y, 'n_templates': n_templates, 'growth': growth, 'loops': sorted(loops)}
+        if nl <= 0:
+            continue
+        lnks = E['links'][k]
+        if lnks.shape != ():
+            lnks = np.atleast_1d(lnks)
+        for j in range(len(lnks)):
+            lid = lnks[j]
+            if lid.shape != ():
+                lid = lid.ravel()[0]
+            try:
+                eid = int(float(np.atleast_1d(lid['exp_id']).ravel()[0]))
+            except Exception:
+                continue
+            if 1 <= eid <= k:
+                loops.append((k, eid - 1))
+    return {'n': n, 'x': x, 'y': y, 'n_templates': n_templates, 'growth': growth,
+            'loops': sorted(set(loops)), 'n_loops': len(loops)}
 
 
 def style_ax(ax, fs=9):
@@ -149,94 +181,70 @@ def style_ax(ax, fs=9):
 
 # ---------------- 图1: representative_performance (482 x 345 pt) ----------------
 def fig_representative():
-    t01 = load_ds('Town01')
-    mh03 = load_euroc('MH_03_medium')
-    mp = load_map('Town01')
+    names = ['Town05', 'Town10HD']
+    ds_all = {nm: load_ds(nm) for nm in names}
+    mp_all = {nm: load_map(nm) for nm in names}
 
     fig, axes = plt.subplots(2, 2, figsize=(482 / 72, 345 / 72), dpi=300)
     fs = 8.5
 
-    # (a) Town01 Metrics 柱状图
-    ax = axes[0, 0]
-    cats = ['RMSE/10', 'Drift (%)', 'RPE x10', 'VT/10', 'Loops']
-    v_nlm = [t01['nlm_rmse'] / 10, t01['nlm_drift'], t01['nlm_rpe'] * 10, mp['n_templates'] / 10, len(mp['loops'])]
-    v_ekf = [t01['ekf_rmse'] / 10, t01['ekf_drift'], t01['ekf_rpe'] * 10, 0, 0]
-    v_vo = [t01['vo_rmse'] / 10, t01['vo_drift'] if t01['vo'] is not None else 0, t01['vo_rpe'] * 10 if t01['vo'] is not None else 0, 0, 0]
-    x = np.arange(len(cats)); w = 0.26
-    ax.bar(x - w, v_nlm, w, color=C_NLM, label='NeuroLocMap', edgecolor='k', linewidth=0.4)
-    ax.bar(x, v_ekf, w, color=C_EKF, label='EKF Fusion', edgecolor='k', linewidth=0.4)
-    ax.bar(x + w, v_vo, w, color=C_VO, label='Visual Odometry', edgecolor='k', linewidth=0.4)
-    ax.set_xticks(x); ax.set_xticklabels(cats, fontsize=fs - 1.5)
-    ax.set_ylabel('Value (scaled)', fontsize=fs)
-    ax.set_title('(a) Town01 Metrics (517 m, 5000 frames)', fontsize=fs + 0.5)
-    style_ax(ax, fs)
-
-    # (b) Town01 Error Evolution (x = frame number)
-    ax = axes[0, 1]
-    n = min(len(t01['nlm_err']), len(t01['ekf_err']), len(t01['vo_err']))
-    fr = np.arange(n)
-    ax.plot(fr, t01['nlm_err'][:n], color=C_NLM, lw=1.2, label='NeuroLocMap')
-    ax.plot(fr, t01['ekf_err'][:n], color=C_EKF, lw=1.2, ls='--', label='EKF Fusion')
-    ax.plot(fr, t01['vo_err'][:n], color=C_VO, lw=0.9, ls=':', marker='.', ms=2.2, label='Visual Odometry')
-    ax.set_xlabel('Frame Number', fontsize=fs)
-    ax.set_ylabel('Position Error (m)', fontsize=fs)
-    ax.set_title('(b) Town01 Error Evolution (aligned per frame)', fontsize=fs + 0.5)
-    style_ax(ax, fs)
-    ax.legend(fontsize=fs - 1.5, frameon=True)
-
-    # (c) MH_03 Metrics 柱状图
-    ax = axes[1, 0]
-    cats = ['RMSE/10', 'Drift (%)', 'RPE x10']
-    v_nlm = [mh03['nlm_rmse'] / 10, mh03['nlm_drift'], mh03['nlm_rpe'] * 10]
-    v_ekf = [mh03['ekf_rmse'] / 10, mh03['ekf_drift'], mh03['ekf_rpe'] * 10]
-    v_vo = [mh03['vo_rmse'] / 10, mh03['vo_drift'], mh03['vo_rpe'] * 10]
-    x = np.arange(len(cats)); w = 0.26
-    ax.bar(x - w, v_nlm, w, color=C_NLM, edgecolor='k', linewidth=0.4)
-    ax.bar(x, v_ekf, w, color=C_EKF, edgecolor='k', linewidth=0.4)
-    ax.bar(x + w, v_vo, w, color=C_VO, edgecolor='k', linewidth=0.4)
-    ax.set_xticks(x); ax.set_xticklabels(cats, fontsize=fs)
-    ax.set_ylabel('Value (scaled)', fontsize=fs)
-    ax.set_title('(c) MH_03 Metrics (127 m, 2699 frames)', fontsize=fs + 0.5)
-    style_ax(ax, fs)
-
-    # (d) MH_03 Error Evolution
-    ax = axes[1, 1]
-    n = min(len(mh03['nlm_err']), len(mh03['ekf_err']), len(mh03['vo_err']))
-    fr = np.arange(n)
-    ax.plot(fr, mh03['nlm_err'], color=C_NLM, lw=1.0, label='NeuroLocMap')
-    ax.plot(fr, mh03['ekf_err'], color=C_EKF, lw=1.0, ls='--', label='EKF Fusion')
-    ax.plot(fr, mh03['vo_err'], color=C_VO, lw=0.8, ls=':', marker='.', ms=1.8, label='Visual Odometry')
-    ax.set_xlabel('Frame Number', fontsize=fs)
-    ax.set_ylabel('Position Error (m)', fontsize=fs)
-    ax.set_title('(d) MH_03 Error Evolution (aligned per frame)', fontsize=fs + 0.5)
-    style_ax(ax, fs)
-    ax.legend(fontsize=fs - 1.5, frameon=True)
+    for row, nm in enumerate(names):
+        d, mp = ds_all[nm], mp_all[nm]
+        # Metrics 柱状图
+        ax = axes[row, 0]
+        cats = ['RMSE/10', 'Drift (%)', 'RPE x10', 'VT/10', 'Loops']
+        v_nlm = [d['nlm_rmse'] / 10, d['nlm_drift'], d['nlm_rpe'] * 10, mp['n_templates'] / 10, mp['n_loops']]
+        v_ekf = [d['ekf_rmse'] / 10, d['ekf_drift'], d['ekf_rpe'] * 10, 0, 0]
+        v_vo = [d['vo_rmse'] / 10, d['vo_drift'] if d['vo'] is not None else 0,
+                d['vo_rpe'] * 10 if d['vo'] is not None else 0, 0, 0]
+        x = np.arange(len(cats)); w = 0.26
+        ax.bar(x - w, v_nlm, w, color=C_NLM, label='NeuroLocMap', edgecolor='k', linewidth=0.4)
+        ax.bar(x, v_ekf, w, color=C_EKF, label='EKF Fusion', edgecolor='k', linewidth=0.4)
+        ax.bar(x + w, v_vo, w, color=C_VO, label='Visual Odometry', edgecolor='k', linewidth=0.4)
+        ax.set_xticks(x); ax.set_xticklabels(cats, fontsize=fs - 1.5)
+        ax.set_ylabel('Value (scaled)', fontsize=fs)
+        ax.set_title(f'({"abcd"[row]}) {nm} Metrics ({d["len_m"]:.0f} m, 5000 frames)', fontsize=fs + 0.5)
+        style_ax(ax, fs)
+        # Error Evolution (x = frame number)
+        ax = axes[row, 1]
+        n = min(len(d['nlm_err']), len(d['ekf_err']), len(d['vo_err']))
+        fr = np.arange(n)
+        ax.plot(fr, d['nlm_err'][:n], color=C_NLM, lw=1.2, label='NeuroLocMap')
+        ax.plot(fr, d['ekf_err'][:n], color=C_EKF, lw=1.2, ls='--', label='EKF Fusion')
+        ax.plot(fr, d['vo_err'][:n], color=C_VO, lw=0.9, ls=':', marker='.', ms=2.2, label='Visual Odometry')
+        ax.set_xlabel('Frame Number', fontsize=fs)
+        ax.set_ylabel('Position Error (m)', fontsize=fs)
+        ax.set_title(f'({"abcd"[row + 2]}) {nm} Error Evolution (aligned per frame)', fontsize=fs + 0.5)
+        style_ax(ax, fs)
+        ax.legend(fontsize=fs - 1.5, frameon=True)
 
     fig.tight_layout(pad=1.0)
     fig.savefig(f'{FIG}/representative_performance.pdf', bbox_inches='tight')
     plt.close(fig)
+    ta, tb = ds_all['Town05'], ds_all['Town10HD']
+    pa, pb = mp_all['Town05'], mp_all['Town10HD']
     print('[1/4] representative_performance.pdf  OK  '
-          f'Town01: NLM {t01["nlm_rmse"]:.2f}/{t01["nlm_drift"]:.2f}% EKF {t01["ekf_rmse"]:.2f}/{t01["ekf_drift"]:.2f}% '
-          f'VO {t01["vo_rmse"]:.2f}/{t01["vo_drift"]:.2f}%  map n={mp["n"]} vt={mp["n_templates"]} loops={len(mp["loops"])}')
-    print(f'      MH03: NLM {mh03["nlm_rmse"]:.2f} EKF {mh03["ekf_rmse"]:.2f} VO {mh03["vo_rmse"]:.2f} (论文 3.32/3.32/3.43)')
-    return t01, mh03, mp
+          f'Town05: NLM {ta["nlm_rmse"]:.2f}/{ta["nlm_drift"]:.2f}% EKF {ta["ekf_rmse"]:.2f}/{ta["ekf_drift"]:.2f}% '
+          f'VO {ta["vo_rmse"]:.2f}/{ta["vo_drift"]:.2f}%  map n={pa["n"]} vt={pa["n_templates"]} loops={pa["n_loops"]}')
+    print(f'      Town10HD: NLM {tb["nlm_rmse"]:.2f}/{tb["nlm_drift"]:.2f}% EKF {tb["ekf_rmse"]:.2f}/{tb["ekf_drift"]:.2f}% '
+          f'VO {tb["vo_rmse"]:.2f}/{tb["vo_drift"]:.2f}%  map n={pb["n"]} vt={pb["n_templates"]} loops={pb["n_loops"]}')
+    return ta, tb, pa
 
 
 # ---------------- 图2: performance_summary (467 x 172 pt) ----------------
-def fig_performance_summary(t01, mh03, mp01):
-    ds_list = ['Town01', 'Town02', 'Town05', 'Town10HD', 'KITTI07']
+def fig_performance_summary(ta, tb, mpa):
+    ds_list = ['Town05', 'Town03', 'Town07', 'Town10HD', 'KITTI07']
     data = {}
     for ds in ds_list:
         data[ds] = load_ds(ds)
-    t01 = data['Town01']
 
     fig, axes = plt.subplots(1, 3, figsize=(467 / 72, 172 / 72), dpi=300)
     fs = 8
 
-    labels = ['Town01', 'Town02', 'Town05', 'Town10HD', 'KITTI~07', 'MH_01', 'MH_03']
-    nlm_v = [data[d]['nlm_rmse'] for d in ds_list] + [MH['MH_01']['NLM'], MH['MH_03']['NLM']]
-    ekf_v = [data[d]['ekf_rmse'] for d in ds_list] + [MH['MH_01']['EKF'], MH['MH_03']['EKF']]
-    vo_v = [data[d]['vo_rmse'] if data[d]['vo'] is not None else np.nan for d in ds_list] + [MH['MH_01']['VO'], MH['MH_03']['VO']]
+    labels = ['Town~05', 'Town~03', 'Town~07', 'Town~10HD', 'KITTI~07']
+    nlm_v = [data[d]['nlm_rmse'] for d in ds_list]
+    ekf_v = [data[d]['ekf_rmse'] for d in ds_list]
+    vo_v = [data[d]['vo_rmse'] if data[d]['vo'] is not None else np.nan for d in ds_list]
 
     # (a) RMSE Comparison
     ax = axes[0]
@@ -253,7 +261,7 @@ def fig_performance_summary(t01, mh03, mp01):
 
     # (b) Improvement vs EKF (bubble, size ~ length)
     ax = axes[1]
-    lens = [data[d]['len_m'] / 1000 for d in ds_list] + [MH['MH_01']['L'] / 1000, MH['MH_03']['L'] / 1000]
+    lens = [data[d]['len_m'] / 1000 for d in ds_list]
     imp_e = [(e - r) / e * 100 for r, e in zip(nlm_v, ekf_v)]
     for i, (lab, v, L) in enumerate(zip(labels, imp_e, lens)):
         c = C_NLM if v >= 0 else '#D97B7B'
@@ -269,7 +277,7 @@ def fig_performance_summary(t01, mh03, mp01):
 
     # (c) Improvement vs VO
     ax = axes[2]
-    vo_all = [data[d]['vo_rmse'] if data[d]['vo'] is not None else np.nan for d in ds_list] + [MH['MH_01']['VO'], MH['MH_03']['VO']]
+    vo_all = [data[d]['vo_rmse'] if data[d]['vo'] is not None else np.nan for d in ds_list]
     imp_v = [(v - r) / v * 100 if not np.isnan(v) else np.nan for r, v in zip(nlm_v, vo_all)]
     for i, (v, L) in enumerate(zip(imp_v, lens)):
         if np.isnan(v):
@@ -294,37 +302,38 @@ def fig_performance_summary(t01, mh03, mp01):
     vo_ok = [v for v in imp_v if not np.isnan(v)]
     print(f'[2/4] performance_summary.pdf  OK  impE={["%+.1f" % v for v in imp_e]}  '
           f'impV={["%+.1f" % v if not np.isnan(v) else "na" for v in imp_v]}')
-    print(f'      Pearson: gap-vs-len r={r_len:.2f}   mean impE={np.mean(imp_e):.2f}% mean impV(outdoor5)={np.mean(imp_v[:5]):.2f}%')
+    print(f'      Pearson: gap-vs-len r={r_len:.2f}   mean impE={np.mean(imp_e):.2f}% '
+          f'mean impV(5集)={np.mean([v for v in imp_v if not np.isnan(v)]):.2f}%')
 
 
 # ---------------- 图3: ablation_unified (483 x 240 pt) ----------------
-def fig_ablation(t01, mp01):
-    ds_list = ['Town01', 'Town02', 'Town05', 'Town10HD', 'KITTI07']
+def fig_ablation(ta, tb, mpa):
+    ds_list = ['Town05', 'Town03', 'Town07', 'Town10HD', 'KITTI07']
     maps = {ds: load_map(ds) for ds in ds_list}
     data_len = {ds: load_ds(ds)['len_m'] for ds in ds_list}
 
     fig, axes = plt.subplots(1, 2, figsize=(483 / 72, 240 / 72), dpi=300)
     fs = 8.5
 
-    # (a) Ablation bars on Town01
+    # (a) Ablation bars on Town05
     ax = axes[0]
     cats = ['Full', 'w/o IMU', 'w/o ExpMap']
-    vals = [t01['nlm_rmse'], t01['vo_rmse'], t01['ekf_rmse']]
+    vals = [ta['nlm_rmse'], ta['vo_rmse'], ta['ekf_rmse']]
     cols = [C_NLM, C_VO, C_EKF]
     bars = ax.bar(cats, vals, color=cols, edgecolor='k', linewidth=0.5, width=0.55)
     for b, v in zip(bars, vals):
         ax.text(b.get_x() + b.get_width() / 2, v + 0.6, f'{v:.1f} m', ha='center', fontsize=fs)
     ax.set_ylabel('RMSE (m)', fontsize=fs)
-    ax.set_title('(a) Ablation RMSE on Town01 (517 m)', fontsize=fs + 0.5)
+    ax.set_title(f'(a) Ablation RMSE on Town05 ({ta["len_m"]:.0f} m)', fontsize=fs + 0.5)
     ax.set_ylim(0, max(vals) * 1.15)
     style_ax(ax, fs)
 
     # (b) VT growth
     ax = axes[1]
     style_cfg = {
-        'Town01': dict(color=C_NLM, ls='-'),
-        'Town02': dict(color='#D97B7B', ls='--'),
-        'Town05': dict(color=C_VO, ls='-.', ),
+        'Town05': dict(color=C_NLM, ls='-'),
+        'Town03': dict(color='#D97B7B', ls='--'),
+        'Town07': dict(color=C_VO, ls='-.', ),
         'Town10HD': dict(color='#8B5FBF', ls=':', marker='.', ms=2),
         'KITTI07': dict(color='#E8A33D', ls='-'),
     }
@@ -346,14 +355,14 @@ def fig_ablation(t01, mp01):
     fig.tight_layout(pad=1.0)
     fig.savefig(f'{FIG}/ablation_unified.pdf', bbox_inches='tight')
     plt.close(fig)
-    print(f'[3/4] ablation_unified.pdf  OK  Full={t01["nlm_rmse"]:.2f} VO={t01["vo_rmse"]:.2f} EKF={t01["ekf_rmse"]:.2f}')
+    print(f'[3/4] ablation_unified.pdf  OK  Full={ta["nlm_rmse"]:.2f} VO={ta["vo_rmse"]:.2f} EKF={ta["ekf_rmse"]:.2f}')
 
 
 # ---------------- 图4: KITTI_07_input_output (561 x 327 pt) ----------------
 def fig_kitti_io():
     sub = f'{ROOT}/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
-    nlm = load_pos(f'{sub}/dc_final/exp_trajectory.txt')
+    nlm = load_pos(_result_file(sub, 'exp_trajectory.txt'))
     A, s = procrustes_7dof(gt, nlm)
     n = min(len(gt), len(A))
     gt, A = gt[:n], A[:n]
@@ -427,7 +436,7 @@ def fig_kitti_io():
         ax.scatter([x[li], x[lj]], [y[li], y[lj]], s=28, marker='*', color='#C0392B',
                    edgecolor='k', linewidths=0.5, zorder=5, label='Loop closure edge')
     ax.set_xlabel('X (m)', fontsize=fs); ax.set_ylabel('Y (m)', fontsize=fs)
-    ax.set_title(f'Experience Map Topology ({mp["n"]} nodes, {len(mp["loops"])} loop edges)', fontsize=fs + 0.5)
+    ax.set_title(f'Experience Map Topology ({mp["n"]} nodes, {mp["n_loops"]} loop edges)', fontsize=fs + 0.5)
     ax.legend(fontsize=fs - 1.5, loc='upper right', frameon=True)
     style_ax(ax, fs)
 
@@ -457,8 +466,8 @@ def fig_kitti_io():
 
 
 if __name__ == '__main__':
-    t01, mh03, mp01 = fig_representative()
-    fig_performance_summary(t01, mh03, mp01)
-    fig_ablation(t01, mp01)
+    ta, tb, mpa = fig_representative()
+    fig_performance_summary(ta, tb, mpa)
+    fig_ablation(ta, tb, mpa)
     fig_kitti_io()
     print('DONE')
