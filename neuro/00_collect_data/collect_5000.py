@@ -161,7 +161,8 @@ def kill_proc_tree(proc):
 
 
 def run_attempt(attempt, host, port, out_dir, attempt_log, fresh=False,
-                turnaround=False, map_name=None, bidir_start=None):
+                turnaround=False, map_name=None, bidir_start=None,
+                traffic_vehicles=0, pedestrians=0):
     """运行一轮采集子进程，带"数据无增长"挂起看门狗。
 
     返回 (状态, 退出码)：状态 ∈ {'done','crash','hang'}
@@ -183,6 +184,10 @@ def run_attempt(attempt, host, port, out_dir, attempt_log, fresh=False,
         cmd.append('--turnaround')
     if bidir_start:
         cmd += ['--bidir-start', bidir_start]
+    if traffic_vehicles:
+        cmd += ['--traffic-vehicles', str(traffic_vehicles)]
+    if pedestrians:
+        cmd += ['--pedestrians', str(pedestrians)]
     proc = subprocess.Popen(
         cmd, cwd=HERE, stdout=attempt_log, stderr=subprocess.STDOUT,
         start_new_session=True)
@@ -227,6 +232,10 @@ def main():
                         metavar='X,Y',
                         help='双向折返起点(如 "106,133"), 透传给采集器: '
                              '定点投放到该双向路段, 去程后掉头原路返回(真闭环)')
+    parser.add_argument('--traffic-vehicles', type=int, default=0,
+                        help='背景车辆数 (透传采集器, 0 = 空城与旧数据同口径)')
+    parser.add_argument('--pedestrians', type=int, default=0,
+                        help='背景行人数 (透传采集器, 0 = 空城与旧数据同口径)')
     args = parser.parse_args()
 
     out_dir = data_dir(args.map, turnaround=args.turnaround)
@@ -257,7 +266,9 @@ def main():
         status, rc = run_attempt(attempts, args.host, args.port, out_dir,
                                  attempt_log, fresh=(args.fresh and attempts == 1),
                                  turnaround=args.turnaround, map_name=args.map,
-                                 bidir_start=args.bidir_start)
+                                 bidir_start=args.bidir_start,
+                                 traffic_vehicles=args.traffic_vehicles,
+                                 pedestrians=args.pedestrians)
         now_frames = count_frames(out_dir)
         print(f'[RUN {attempts}] 结束: status={status}, rc={rc}, 进度 {now_frames}/{MAX_FRAMES}')
 

@@ -142,6 +142,11 @@ AGENT_MAX_SPEED = 12                # km/h，Town02 密集城市需降速避免�
 AGENT_SAFE_DISTANCE = 6.0           # 米，空旷道路避免误触发避险刹车
 COLLISION_RESET_THRESHOLD = 3       # 碰撞次数阈值
 
+# 背景车流/行人密度 (0 = 空城, 与旧数据口径一致)
+TRAFFIC_VEHICLES = 0                # 背景车辆数 (TM 自动驾驶)
+TRAFFIC_PEDESTRIANS = 0             # 背景行人数 (TM 自动驾驶)
+TM_PORT = 8000                      # Traffic Manager 端口 (与 get_trafficmanager 默认端口一致)
+
 # 消融开关：True = R 恒取基准值（关闭自适应缩放），用于隔离验证噪声模型影响
 FIXED_R = False
 
@@ -786,6 +791,67 @@ def safe_spawn_vehicle(world, bp_lib, max_attempts=10):
     raise RuntimeError(f"连续{max_attempts}次生成失败！")
 
 
+def spawn_background_traffic(world, bp_lib, spawn_points, n_vehicles=None,
+                             n_pedestrians=None, tm_port=TM_PORT):
+    """生成背景车流/行人（全部由 TM 自动驾驶控制）。
+
+    n_vehicles/n_pedestrians 默认 None = 调用时读 TRAFFIC_* 全局
+    （避免默认参数在定义时固化, 使 __main__ 的 CLI 覆盖生效）。
+    本函数自身不清场（调用方保证已清场）：
+      - init 路径: clear_all_actors 之后、ego 生成之前调用
+        （ego 的 try_spawn 会自动避开被占用的出生点）;
+      - 重连路径: clear_all_actors + _reset_vehicle 之后调用
+        （服务器重启会清掉全部 actor）。
+    返回实际生成的 (n_vehicles, n_pedestrians)。
+    """
+    if n_vehicles is None:
+        n_vehicles = TRAFFIC_VEHICLES
+    if n_pedestrians is None:
+        n_pedestrians = TRAFFIC_PEDESTRIANS
+    if n_vehicles <= 0 and n_pedestrians <= 0:
+        return 0, 0
+    if not spawn_points:
+        print(f"[TRAFFIC] 无出生点, 无法生成背景车流/行人")
+        return 0, 0
+    veh_bps = [bp for bp in bp_lib.filter('vehicle.*')
+               if 'bike' not in bp.id and 'bicycle' not in bp.id
+               and 'yacht' not in bp.id]
+    ped_bps = list(bp_lib.filter('walker.pedestrian.*'))
+    try:
+        ctrl_bp = bp_lib.find('controller.pedestrian')
+    except Exception:
+        ctrl_bp = None
+    nv = npd = 0
+    for _ in range(max(0, n_vehicles)):
+        try:
+            veh = world.try_spawn_actor(random.choice(veh_bps),
+                                        random.choice(spawn_points))
+            if veh is not None:
+                veh.set_autopilot(True, tm_port)
+                nv += 1
+        except Exception:
+            continue
+    for _ in range(max(0, n_pedestrians)):
+        try:
+            if ctrl_bp is None or not ped_bps:
+                break
+            walker = world.try_spawn_actor(random.choice(ped_bps),
+                                           random.choice(spawn_points))
+            if walker is not None:
+                ctrl = world.try_spawn_actor(ctrl_bp, carla.Transform(),
+                                             attach_to=walker)
+                if ctrl is not None:
+                    ctrl.set_autopilot(True, tm_port)
+                    npd += 1
+                else:
+                    walker.destroy()
+        except Exception:
+            continue
+    print(f"[TRAFFIC] 背景车流/行人: 车辆 {nv}/{n_vehicles}, "
+          f"行人 {npd}/{n_pedestrians} (TM port={tm_port})")
+    return nv, npd
+
+
 def _spawn_agent_for_vehicle(world, bp_lib, vehicle, spawn_points):
     """为车辆初始化智能体：限速、PID、安全距离、目标点（初始化与重置共用）
 
@@ -995,6 +1061,11 @@ def init_carla_environment(host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
     # 6) 生成车辆
     bp_lib = world.get_blueprint_library()
+    # 6a) 背景车流/行人 (TM 自动驾驶; 先生成, ego 挑空闲出生点)
+    try:
+        spawn_background_traffic(world, bp_lib, world.get_map().get_spawn_points())
+    except Exception as e:
+        print(f"[WARN] 背景车流/行人生成失败: {e}")
     try:
         vehicle, spawn_points = safe_spawn_vehicle(world, bp_lib)
     except Exception as e:
@@ -2292,6 +2363,17 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                     vehicle, agent, camera, cam_transform, imu, collision_sensor = \
                         _reset_vehicle(world, bp_lib, vehicle, spawn_points,
                                        sensor_queue, camera, imu, collision_sensor)
+                    # 服务器重启清掉全部 actor, 背景车流/行人需重新生成
+                    try:
+                        if TRAFFIC_VEHICLES > 0 or TRAFFIC_PEDESTRIANS > 0:
+                            _rc = carla.Client(host, port)
+                            _rc.set_timeout(10.0)
+                            _rtm = _rc.get_trafficmanager(TM_PORT)
+                            _rtm.set_synchronous_mode(True)
+                            spawn_background_traffic(world, bp_lib, spawn_points,
+                                                     tm_port=TM_PORT)
+                    except Exception as _te:
+                        print(f"[WARN] 背景车流/行人重生失败: {_te}")
                     aligner = TimeAligner(time_threshold=0.02)
                     stagnant_count = 0
                     prev_throttle = 0.0
@@ -2951,6 +3033,8 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 f.write(f"total_images={img_idx}\n")
                 f.write(f"max_speed_kmh={AGENT_MAX_SPEED}\n")
                 f.write(f"behavior={AGENT_BEHAVIOR}\n")
+                f.write(f"traffic_vehicles={TRAFFIC_VEHICLES}\n")
+                f.write(f"traffic_pedestrians={TRAFFIC_PEDESTRIANS}\n")
                 f.write(f"imu_rate_hz={IMU_SAMPLE_RATE}\n")
                 f.write(f"camera_rate_hz={CAMERA_SAMPLE_RATE}\n")
         except Exception as e:
@@ -3174,6 +3258,10 @@ if __name__ == "__main__":
     _parser.add_argument('--fresh', action='store_true',
                          help='全新采集（监督器首轮透传）。注: 本采集器无断点续采, '
                               '每次启动都从第0帧重采, 旧目录在 step 11 备份后清空重跑')
+    _parser.add_argument('--traffic-vehicles', type=int, default=0,
+                         help='背景车辆数 (0 = 空城, 与旧数据同口径)')
+    _parser.add_argument('--pedestrians', type=int, default=0,
+                         help='背景行人数 (0 = 空城, 与旧数据同口径)')
     _args = _parser.parse_args()
 
     if _args.replay:
@@ -3182,6 +3270,8 @@ if __name__ == "__main__":
     # 根据命令行参数覆盖地图和输出目录
     TARGET_MAP = _args.map
     TURNAROUND_ACTIVE = _args.turnaround
+    TRAFFIC_VEHICLES = _args.traffic_vehicles
+    TRAFFIC_PEDESTRIANS = _args.pedestrians
     if _args.bidir_start:
         try:
             _bx, _by = _args.bidir_start.split(',')
