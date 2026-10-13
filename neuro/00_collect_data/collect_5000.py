@@ -240,6 +240,14 @@ def main():
 
     out_dir = data_dir(args.map, turnaround=args.turnaround)
     os.makedirs(out_dir, exist_ok=True)
+    # --fresh: 若旧数据已跑满, 下方预检会直接退出 (fresh 只在 run_attempt
+    # 首轮生效), 故备份清空必须发生在循环之前 (2026-10-13: Town03/07/10HD
+    # 空城旧数据已跑满 5000 帧, 被预检跳过, 车流重采未执行)
+    if args.fresh and count_frames(out_dir) >= MAX_FRAMES:
+        bak = out_dir + '_backup_' + time.strftime('%Y%m%d_%H%M%S')
+        print(f'[FRESH] 旧数据已跑满, 备份至 {bak} 并清空后重采')
+        os.rename(out_dir, bak)
+        os.makedirs(out_dir, exist_ok=True)
     server_log = open('/tmp/carla_server_supervisor.log', 'a', encoding='utf-8')
     attempt_log = open('/tmp/collect_supervisor.log', 'a', encoding='utf-8')
 
