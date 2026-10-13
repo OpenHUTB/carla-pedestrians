@@ -144,8 +144,13 @@ COLLISION_RESET_THRESHOLD = 3       # 碰撞次数阈值
 
 # 背景车流/行人密度 (0 = 空城, 与旧数据口径一致)
 TRAFFIC_VEHICLES = 0                # 背景车辆数 (TM 自动驾驶)
-TRAFFIC_PEDESTRIANS = 0             # 背景行人数 (TM 自动驾驶)
+TRAFFIC_PEDESTRIANS = 0             # 背景行人数 (TM 运动学直驱)
 TM_PORT = 8000                      # Traffic Manager 端口 (与 get_trafficmanager 默认端口一致)
+# 背景行人运行态: [walker, 路点, 速度(m/s), 重定向计数]。
+# 0.9.16 的 Walker 无 set_autopilot, set_target_velocity 行为异常 (实测速度
+# ~50x 放大且可致服务器 SIGSEGV), 故用 set_transform 运动学直驱
+# (见 update_background_pedestrians)。
+BG_PEDESTRIANS = []
 
 # 消融开关：True = R 恒取基准值（关闭自适应缩放），用于隔离验证噪声模型影响
 FIXED_R = False
@@ -808,7 +813,8 @@ def spawn_background_traffic(world, bp_lib, spawn_points, n_vehicles=None,
         （ego 的 try_spawn 会自动避开被占用的出生点）;
       - 重连路径: clear_all_actors + _reset_vehicle 之后调用
         （服务器重启会清掉全部 actor）。
-    返回实际生成的 (n_vehicles, n_pedestrians)。
+    返回实际生成的 (n_vehicles, n_pedestrians, peds); peds 同时写入全局
+    BG_PEDESTRIANS 供主循环每帧推进。
     """
     if n_vehicles is None:
         n_vehicles = TRAFFIC_VEHICLES
@@ -823,11 +829,8 @@ def spawn_background_traffic(world, bp_lib, spawn_points, n_vehicles=None,
                if 'bike' not in bp.id and 'bicycle' not in bp.id
                and 'yacht' not in bp.id]
     ped_bps = list(bp_lib.filter('walker.pedestrian.*'))
-    try:
-        ctrl_bp = bp_lib.find('controller.pedestrian')
-    except Exception:
-        ctrl_bp = None
     nv = npd = 0
+    peds = []
     for _ in range(max(0, n_vehicles)):
         try:
             veh = world.try_spawn_actor(random.choice(veh_bps),
@@ -837,25 +840,89 @@ def spawn_background_traffic(world, bp_lib, spawn_points, n_vehicles=None,
                 nv += 1
         except Exception:
             continue
+    # 行人: 0.9.16 的 Walker 无 set_autopilot, set_target_velocity 行为异常
+    # (实测速度 ~50x 放大且可致服务器 SIGSEGV) → 只负责生成 + 记录路点,
+    # 由主循环每帧 set_transform 运动学直驱 (update_background_pedestrians)。
+    # 横向偏移 2.5m 避免生成在车道正中央 (t=0 与 ego/背景车碰撞);
+    # 出生点被占用时最多重试 5 次
+    m = world.get_map()
     for _ in range(max(0, n_pedestrians)):
-        try:
-            if ctrl_bp is None or not ped_bps:
-                break
-            walker = world.try_spawn_actor(random.choice(ped_bps),
-                                           random.choice(spawn_points))
+        if not ped_bps:
+            break
+        walker = None
+        for _ in range(5):
+            sp = random.choice(spawn_points)
+            off_x = 2.5 * math.cos(math.radians(sp.rotation.yaw + 90.0))
+            off_y = 2.5 * math.sin(math.radians(sp.rotation.yaw + 90.0))
+            ped_tf = carla.Transform(
+                carla.Location(x=sp.location.x + off_x,
+                               y=sp.location.y + off_y, z=sp.location.z),
+                carla.Rotation(0, 0, sp.rotation.yaw))
+            try:
+                walker = world.try_spawn_actor(random.choice(ped_bps), ped_tf)
+            except Exception:
+                walker = None
             if walker is not None:
-                ctrl = world.try_spawn_actor(ctrl_bp, carla.Transform(),
-                                             attach_to=walker)
-                if ctrl is not None:
-                    ctrl.set_autopilot(True, tm_port)
-                    npd += 1
-                else:
-                    walker.destroy()
-        except Exception:
+                break
+        if walker is None:
             continue
+        wp = m.get_waypoint(walker.get_location(), project_to_road=True)
+        peds.append([walker, wp, random.uniform(1.0, 1.5), 0])
+        npd += 1
+    BG_PEDESTRIANS[:] = peds
     print(f"[TRAFFIC] 背景车流/行人: 车辆 {nv}/{n_vehicles}, "
           f"行人 {npd}/{n_pedestrians} (TM port={tm_port})")
-    return nv, npd
+    return nv, npd, peds
+
+
+def update_background_pedestrians(world, dt=0.05):
+    """每帧推进背景行人: set_transform 运动学直驱 + 地图路点导向。
+
+    每帧朝当前路点走 speed*dt (1.0-1.5 m/s 步行速), 每 8 帧重选下一路点;
+    掉出道路 (get_waypoint 为 None) 的行人重投放到随机出生点; 异常 actor 移除。
+    """
+    if not BG_PEDESTRIANS:
+        return
+    m = world.get_map()
+    alive = []
+    for ped in BG_PEDESTRIANS:
+        w, wp, speed, cnt = ped[0], ped[1], ped[2], ped[3]
+        try:
+            loc = w.get_location()
+            if cnt % 8 == 0:
+                if m.get_waypoint(loc, project_to_road=True) is None:
+                    sp = random.choice(m.get_spawn_points())
+                    w.set_transform(carla.Transform(
+                        carla.Location(x=sp.location.x, y=sp.location.y,
+                                       z=sp.location.z),
+                        carla.Rotation(0, 0, sp.rotation.yaw)))
+                    loc = sp.location
+                nxt = wp.next(5.0) if wp is not None else None
+                if nxt:
+                    wp = nxt[0]
+                elif wp is None:
+                    wp = m.get_waypoint(loc, project_to_road=True)
+                ped[1] = wp
+            ped[3] += 1
+            if wp is not None:
+                tgt = wp.transform.location
+                dx, dy = tgt.x - loc.x, tgt.y - loc.y
+                dl = math.sqrt(dx * dx + dy * dy)
+                if dl > 1e-4:
+                    step = speed * dt
+                    w.set_transform(carla.Transform(
+                        carla.Location(x=loc.x + dx / dl * step,
+                                       y=loc.y + dy / dl * step,
+                                       z=tgt.z),
+                        carla.Rotation(0, 0,
+                                       math.degrees(math.atan2(dy, dx)))))
+            alive.append(ped)
+        except Exception:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+    BG_PEDESTRIANS[:] = alive
 
 
 def _spawn_agent_for_vehicle(world, bp_lib, vehicle, spawn_points):
@@ -2431,6 +2498,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             try:
                 world.tick()
                 tick_errors = 0
+                if BG_PEDESTRIANS:
+                    try:
+                        update_background_pedestrians(world)
+                    except Exception:
+                        pass
             except Exception as e:
                 tick_errors += 1
                 print(f"[WARN] world.tick() 失败 ({tick_errors}): {e}")
