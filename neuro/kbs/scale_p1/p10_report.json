@@ -1,0 +1,98 @@
+{
+  "Town05": {
+    "n_frames": 5000,
+    "win": 50,
+    "s_star": 2.2836330428588822,
+    "gt_perframe_median": 4.880054362689773,
+    "scale_drift_spread": 0.3485419973393453,
+    "kinematics_perframe": {
+      "n_valid": 614,
+      "bias": 0.23092640463244396,
+      "bias_mean": 0.49767439346689346,
+      "consistency": 1.7341030818774017,
+      "degenerate": 0.8771754350870173
+    },
+    "kinematics_windowed": {
+      "n_valid": 4999,
+      "bias": 1.518605846877466,
+      "bias_mean": 3.86354263739521,
+      "consistency": 6.073527519517831,
+      "degenerate": 0.0
+    },
+    "davn2_perframe": {
+      "n_valid": 2685,
+      "bias": 0.2365746808956335,
+      "bias_mean": 0.35341150076825545,
+      "consistency": 0.9982819681164885,
+      "degenerate": 0.4628925785157031,
+      "n_ok": 2800
+    },
+    "davn2_windowed": {
+      "n_valid": 4999,
+      "bias": 0.19759229294088643,
+      "bias_mean": 0.4647696451231542,
+      "consistency": 1.2855564703668516,
+      "degenerate": 0.0
+    }
+  },
+  "KITTI07": {
+    "n_frames": 1101,
+    "win": 50,
+    "s_star": 0.76681234484786,
+    "gt_perframe_median": 0.7287730591105599,
+    "scale_drift_spread": 0.39065435224218475,
+    "kinematics_perframe": null,
+    "kinematics_windowed": null,
+    "davn2_perframe": {
+      "n_valid": 1014,
+      "bias": 0.19755672428459525,
+      "bias_mean": 0.22979842235073566,
+      "consistency": 0.37133013770016465,
+      "degenerate": 0.07818181818181813,
+      "n_ok": 1028
+    },
+    "davn2_windowed": {
+      "n_valid": 1100,
+      "bias": 0.1922712272696876,
+      "bias_mean": 0.15270820783002903,
+      "consistency": 0.29526686259704893,
+      "degenerate": 0.0
+    }
+  },
+  "Town10HD": {
+    "n_frames": 5000,
+    "win": 50,
+    "s_star": 2.1758620458959146,
+    "gt_perframe_median": 2.5686040460570734,
+    "scale_drift_spread": 0.39081050748258706,
+    "kinematics_perframe": {
+      "n_valid": 326,
+      "bias": 0.38176694270424116,
+      "bias_mean": 0.6421677541678676,
+      "consistency": 1.2814341737729216,
+      "degenerate": 0.9347869573914783
+    },
+    "kinematics_windowed": {
+      "n_valid": 4999,
+      "bias": 5.240282899112769,
+      "bias_mean": 6.838406138723805,
+      "consistency": 6.325732970576578,
+      "degenerate": 0.0
+    },
+    "davn2_perframe": {
+      "n_valid": 1894,
+      "bias": 0.13970084800358107,
+      "bias_mean": 0.2764790720477863,
+      "consistency": 0.8459546669060444,
+      "degenerate": 0.621124224844969,
+      "n_ok": 2014
+    },
+    "davn2_windowed": {
+      "n_valid": 4999,
+      "bias": 0.0787973149539718,
+      "bias_mean": 0.3930456652766454,
+      "consistency": 0.9158270024155297,
+      "degenerate": 0.0
+    }
+  }
+}

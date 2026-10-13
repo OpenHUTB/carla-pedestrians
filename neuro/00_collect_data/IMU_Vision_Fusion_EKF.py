@@ -191,6 +191,12 @@ HEADING_MAX_STEP = 0.26      # 航向观测硬门限: |残差|>15° 直接拒
 TURN_SPEED_WIN = 30          # 转弯判定速度窗口(帧)
 SCALE_WIN = 60               # 尺度观测窗口(帧, 3s@20Hz)
 SCALE_R_BASE = 0.02          # 尺度观测噪声(log 域, ~2%)
+DEPTH_SCALE_PERIOD = 5       # 深度尺度观测更新周期(帧, 与运动学支路同节奏)
+DEPTH_SCALE_MIN_SAMPLES = 5  # 深度尺度窗内最少有效样本(不足则冻结)
+DEPTH_SCALE_R = 0.05         # 深度尺度观测噪声(log 域; 逐帧比运动学更噪, 放宽)
+DEPTH_SCALE_VMIN = 0.3       # 深度样本速度门(记录单位/s, 与运动学同口径; 慢帧 |dVO|→0 比值发散, 弃)
+DEPTH_SCALE_DEADBAND = 0.35  # 死区(log, ≈1.42x): 状态偏离深度中值超过此值才纠偏, 否则冻结
+                             # (漂移校正器语义: 短稳序列自洽尺度已优, 纠偏反扰动 → 免扰动)
 SCALE_MIN_DISP = 0.5         # 窗口内最小 VO 记录位移(0.10 尺度单位)
 SCALE_VMIN = 0.2             # 窗口内最小平均速度(记录单位 ≈2 m/s 真实)
 # 尺度稳健性: 步限钳位 + 协方差下限, 防 P 初值大时首窗一步跳变后 P 塌缩冻结(10HD 失效修复)
@@ -1409,7 +1415,7 @@ class VelocityScaleModel:
 class EKF_VIO:
     # 状态向量 10 维: [x, y, z, vx, vy, vz, roll, pitch, yaw, log(VO尺度水平)]
     # 第 10 维 = 尺度在参考速度处的 log 水平; 应用总尺度 = 水平 × c(v)
-    def __init__(self, init_pose, init_vel, dt=0.05):
+    def __init__(self, init_pose, init_vel, dt=0.05, depth_scale_file=None):
         self.x = np.array([
             init_pose[0], init_pose[1], init_pose[2],
             init_vel[0], init_vel[1], init_vel[2],
@@ -1463,6 +1469,28 @@ class EKF_VIO:
         self._heading_base = float(init_pose[5])
 
         self._gyro_bias = np.zeros(3)
+
+        # === 深度尺度支路 (DAv2-PnP 离线预计算, 可选; 无文件自动禁用, 与原版逐位一致) ===
+        self._depth_scale_enabled = False
+        self._depth_scale_frames = 0
+        self._depth_log = None
+        self._depth_inl = None
+        self._depth_init_log = math.log(VO_SCALE_PRIOR)
+        self._depth_scale_applied = 0
+        self._depth_scale_rejected = 0
+        self._depth_scale_skipped = 0
+        self._depth_win = deque(maxlen=200)   # 有效深度 log 尺度样本(窗中值去单帧尖峰)
+        self._depth_count = 0                 # 更新周期计数
+        self._depth_obs_hist = []             # [调试] 每次更新的窗中值
+        self._depth_state_hist = []           # [调试] 更新后 log s 状态
+        if depth_scale_file is not None:
+            self._load_depth_scale(depth_scale_file)
+            if self._depth_scale_enabled:
+                # 深度中值 → 尺度状态初值 (防早期慢帧发散样本把状态锁在错误水平)
+                self.x[9] = self._depth_init_log
+                self.P[9, 9] = 0.09           # std=0.3, 与深度观测噪声水平匹配
+                print(f"[EKF] 尺度状态深度中值初始化: log s={self._depth_init_log:.3f} "
+                      f"(s={math.exp(self._depth_init_log):.3f})")
         self._accel_bias = np.zeros(3)
         self._bias_samples = 0
         self._bias_max_samples = 200
@@ -1663,7 +1691,49 @@ class EKF_VIO:
         self._clamp_covariance()
         self._imu_steps_since_update += 1
 
-    def visual_update(self, visual_pose):
+    def _load_depth_scale(self, path):
+        """读 depth_scale.txt (行 = 帧号(1-based) log_s inliers).
+
+        帧号必须从 1 连续 (与 VO 行号口径严格一致); 解析失败自动禁用支路。
+        log_s 可为 nan (该帧无有效 DAv2-PnP 尺度)。
+        """
+        log_arr, inl_arr = [], []
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+                    fr = int(parts[0])
+                    lv = (math.nan if parts[1].lower() == 'nan'
+                          else float(parts[1]))
+                    il = int(parts[2]) if len(parts) > 2 else 0
+                    if fr != len(log_arr) + 1:
+                        raise ValueError(
+                            f"帧号不连续: 期望 {len(log_arr)+1}, 实际 {fr}")
+                    log_arr.append(lv)
+                    inl_arr.append(il)
+        except Exception as e:
+            print(f"[EKF] depth_scale: 读 {path} 失败 ({e}), 支路禁用")
+            return
+        if len(log_arr) < 2:
+            print(f"[EKF] depth_scale: {path} 有效行过少, 支路禁用")
+            return
+        self._depth_log = np.asarray(log_arr, dtype=np.float64)
+        self._depth_inl = np.asarray(inl_arr, dtype=np.int64)
+        self._depth_scale_frames = len(log_arr)
+        self._depth_init_log = float(np.median(self._depth_log[
+            np.isfinite(self._depth_log)]))
+        self._depth_scale_enabled = True
+        n_valid = int(np.isfinite(self._depth_log).sum())
+        print(f"[EKF] 深度尺度支路启用: {path} ({self._depth_scale_frames} 帧, "
+              f"有效 {n_valid}, 覆盖 {n_valid/(self._depth_scale_frames-1):.0%}, "
+              f"中值 s={math.exp(self._depth_init_log):.3f})")
+
+    def visual_update(self, visual_pose, frame_idx=None):
         self._update_call_count += 1
         print(f"[EKF UPDATE] visual_update count={self._update_call_count}, "
               f"ts_pose=({visual_pose[0]:.2f},{visual_pose[1]:.2f},{visual_pose[2]:.2f})")
@@ -1791,41 +1861,81 @@ class EKF_VIO:
                       + K_att @ R_att_use @ K_att.T)
             self._regularize_P()
 
+        # === 深度尺度观测（DAv2-PnP 离线预计算, 逐帧, 优先于运动学）===
+        # depth_scale.txt 行 k (1-based 帧号) = 区间 k-1→k 的 log 尺度 + PnP 内点数。
+        # 有有效值: 质量因子(内点数)→R, 更新; 该帧跳过运动学支路。
+        # 未加载文件时禁用, 行为与原版逐位一致 (EKF 基线不变)。
+        depth_used = False
+        if self._depth_scale_enabled:
+            k_ds = frame_idx if frame_idx is not None else self._update_call_count
+            if (1 <= k_ds <= self._depth_scale_frames
+                    and v_vo_rec > DEPTH_SCALE_VMIN):
+                dlog_v = float(self._depth_log[k_ds - 1])
+                if math.isfinite(dlog_v):
+                    self._depth_win.append(dlog_v)
+            self._depth_count += 1
+            if (self._depth_count >= DEPTH_SCALE_PERIOD
+                    and len(self._depth_win) >= DEPTH_SCALE_MIN_SAMPLES):
+                s_obs_log = float(np.median(np.asarray(self._depth_win)))
+                self._depth_count = 0
+                y_s = s_obs_log - self.x[9]
+                S_s = float(self.P[9, 9]) + DEPTH_SCALE_R
+                if abs(y_s) < DEPTH_SCALE_DEADBAND:
+                    # 状态已接近深度中值: 冻结, 不扰动自洽系统 (回退运动学原行为)
+                    self._depth_scale_skipped += 1
+                elif y_s * y_s < self.chi2_scale * S_s:
+                    K_s = (self.P[:, 9] / S_s).reshape(10, 1)
+                    self.x += (K_s * y_s).ravel()
+                    H_s = np.zeros((1, 10))
+                    H_s[0, 9] = 1.0
+                    I_KH_s = np.eye(10) - K_s @ H_s
+                    self.P = (I_KH_s @ self.P @ I_KH_s.T
+                              + K_s @ (DEPTH_SCALE_R * np.ones((1, 1))) @ K_s.T)
+                    self._regularize_P()
+                    self._depth_scale_applied += 1
+                    if os.environ.get('EKF_DEBUG_SCALE'):
+                        self._depth_obs_hist.append(s_obs_log)
+                        self._depth_state_hist.append(float(self.x[9]))
+                    depth_used = True
+                else:
+                    self._depth_scale_rejected += 1
+
         # === 尺度观测（独立分支：转弯运动学速度 / VO 记录速度，H 仅含尺度行） ===
         # s_obs = median(v_kin / v_VO)，v_kin = |a_lat|/|ω|（原始 IMU 读数，
         # 无积分、无尺度依赖、无零偏累积）。只在转弯帧可观测（直道 ω→0 病态）：
         # 样本入窗，每 5 帧取窗中值更新，直道段尺度冻结。
         # (#100 形态: 等权中值 + 无步限钳位; 速度形状/加权截尾分支已回退,
         #  它们把尺度水平压低, 导致 EKF 融合大幅退化)
-        if (self._last_accel_raw is not None and self._last_gyro_raw is not None
-                and v_vo_rec > 0.3):
-            a_lat_k = float((self._last_accel_raw - self._accel_bias)[1])
-            w_k = float((self._last_gyro_raw - self._gyro_bias)[2])
-            if abs(w_k) > 0.10 and abs(a_lat_k) > 0.3:
-                self._kin_win.append(
-                    abs(a_lat_k) / (abs(w_k) * v_vo_rec))
-        self._scale_kin_count += 1
-        if (self._scale_kin_count >= 5
-                and len(self._kin_win) >= 5):
-            s_obs = float(np.median(np.asarray(self._kin_win)))
-            self._scale_kin_count = 0
-            if os.environ.get('EKF_DEBUG_SCALE'):
-                self._scale_obs_hist.append(s_obs)
-                self._scale_dr_vel_hist.append(v_vo_rec)
-            y_s = math.log(max(s_obs, 1e-3)) - self.x[9]
-            S_s = float(self.P[9, 9]) + SCALE_R_BASE
-            if y_s * y_s < self.chi2_scale * S_s:
-                K_s = (self.P[:, 9] / S_s).reshape(10, 1)
-                self.x += (K_s * y_s).ravel()
-                H_s = np.zeros((1, 10))
-                H_s[0, 9] = 1.0
-                I_KH_s = np.eye(10) - K_s @ H_s
-                self.P = (I_KH_s @ self.P @ I_KH_s.T
-                          + K_s @ (SCALE_R_BASE * np.ones((1, 1))) @ K_s.T)
-                self._regularize_P()
-                self._scale_applied += 1
-            else:
-                self._scale_rejected += 1
+        if not depth_used:
+            if (self._last_accel_raw is not None and self._last_gyro_raw is not None
+                    and v_vo_rec > 0.3):
+                a_lat_k = float((self._last_accel_raw - self._accel_bias)[1])
+                w_k = float((self._last_gyro_raw - self._gyro_bias)[2])
+                if abs(w_k) > 0.10 and abs(a_lat_k) > 0.3:
+                    self._kin_win.append(
+                        abs(a_lat_k) / (abs(w_k) * v_vo_rec))
+            self._scale_kin_count += 1
+            if (self._scale_kin_count >= 5
+                    and len(self._kin_win) >= 5):
+                s_obs = float(np.median(np.asarray(self._kin_win)))
+                self._scale_kin_count = 0
+                if os.environ.get('EKF_DEBUG_SCALE'):
+                    self._scale_obs_hist.append(s_obs)
+                    self._scale_dr_vel_hist.append(v_vo_rec)
+                y_s = math.log(max(s_obs, 1e-3)) - self.x[9]
+                S_s = float(self.P[9, 9]) + SCALE_R_BASE
+                if y_s * y_s < self.chi2_scale * S_s:
+                    K_s = (self.P[:, 9] / S_s).reshape(10, 1)
+                    self.x += (K_s * y_s).ravel()
+                    H_s = np.zeros((1, 10))
+                    H_s[0, 9] = 1.0
+                    I_KH_s = np.eye(10) - K_s @ H_s
+                    self.P = (I_KH_s @ self.P @ I_KH_s.T
+                              + K_s @ (SCALE_R_BASE * np.ones((1, 1))) @ K_s.T)
+                    self._regularize_P()
+                    self._scale_applied += 1
+                else:
+                    self._scale_rejected += 1
 
         # === 位置观测（短窗口相对锚 + 当前尺度；卡方门控） ===
         # VO 绝对位置带全程航向漂移, 故每 POSITION_WIN 帧用 EKF 当前位置重锚;
@@ -3117,7 +3227,9 @@ def replay(data_dir):
 
     init_pose = [float(gt.iloc[0][c]) for c in ('pos_x', 'pos_y', 'pos_z',
                                                 'roll', 'pitch', 'yaw')]
-    ekf = EKF_VIO(init_pose, [0.0, 0.0, 0.0], dt=0.05)
+    ds_file = os.path.join(data_dir, 'depth_scale.txt')
+    ekf = EKF_VIO(init_pose, [0.0, 0.0, 0.0], dt=0.05,
+                  depth_scale_file=ds_file if os.path.exists(ds_file) else None)
 
     vo_rows = vo[['vo_x', 'vo_y', 'vo_z', 'roll', 'pitch', 'yaw']].values[:n]
     # aligned_imu.txt 首列是 timestamp，_ReplayImu 只要 6 个 (ax,ay,az,gx,gy,gz)
@@ -3146,7 +3258,7 @@ def replay(data_dir):
 
         if not vo_jump_skip:
             ekf._last_vo_inliers = int(ekf._vo_match_ref)
-            ekf.visual_update(z_row)
+            ekf.visual_update(z_row, frame_idx=i + 1)
 
         fusion_pos, fusion_att = ekf.get_current_pose()
         imu_dr, _ = ekf.get_imu_dead_reckoning_pose()
@@ -3219,6 +3331,20 @@ def replay(data_dir):
     print(f"[REPLAY] 航向观测: applied={ekf._heading_applied}, "
           f"rejected={ekf._heading_rejected}, 转弯帧≈{ekf._turn_count}")
     print(f"[REPLAY] 位置观测跳过: {ekf._pos_skip_count}")
+    if getattr(ekf, '_depth_scale_enabled', False):
+        print(f"[REPLAY] 深度尺度观测: applied={ekf._depth_scale_applied}, "
+              f"rejected={ekf._depth_scale_rejected}, "
+              f"deadband_skip={ekf._depth_scale_skipped}")
+        if os.environ.get('EKF_DEBUG_SCALE') and getattr(ekf, '_depth_obs_hist', None):
+            do = np.asarray(ekf._depth_obs_hist)
+            ds = np.asarray(ekf._depth_state_hist)
+            import math as _m
+            print(f"[REPLAY] 深度观测 log_s: median={np.median(do):.3f} "
+                  f"p10={np.percentile(do,10):.3f} p90={np.percentile(do,90):.3f} "
+                  f"(s: {np.exp(np.median(do)):.3f}/{np.exp(np.percentile(do,10)):.3f}/"
+                  f"{np.exp(np.percentile(do,90)):.3f})")
+            print(f"[REPLAY] 深度更新后状态 log s: 初={ds[0]:.3f} 末={ds[-1]:.3f} "
+                  f"(s: {_m.exp(ds[0]):.3f}→{_m.exp(ds[-1]):.3f})")
 
     fu_ate = _ate(gt_xy, fu_xy)
     vo_ate = _ate(gt_xy, vo_xy)
