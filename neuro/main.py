@@ -8,7 +8,7 @@ NeuroSLAM — 一键运行入口
     python main.py --setup              # 安装所有依赖
     python main.py --collect-only       # 仅数据采集（需CARLA）
     python main.py --skip-collect       # 跳过采集，只评估（使用已有数据）
-    python main.py --keep-data          # 保留已有数据，仅采集新数据（不删除旧数据）
+    python main.py --keep               # 保留已有数据，仅采集新数据（不删除旧数据）
     python main.py --host 192.168.1.1   # 指定CARLA服务器地址
 """
 
@@ -435,7 +435,7 @@ def step_collect(carla_host, carla_port, carla_py, keep_data=False, map_name=Non
     if not carla_root:
         carla_exe, carla_root = find_carla_exe()
 
-    # 处理已有数据：一键模式默认自动删除旧数据，--keep-data 保留
+    # 处理已有数据：一键模式默认自动删除旧数据，--keep 保留
     if os.path.isdir(DATA_DIR):
         existing = discover_datasets(DATA_DIR)
         if existing:
@@ -533,7 +533,7 @@ def main():
 示例:
   python main.py                      一键采集 + 评估（自动清理旧数据）
   python main.py --map Town10HD       在 Town10HD 地图采集
-  python main.py --keep-data          保留旧数据，追加采集新数据
+  python main.py --keep               保留旧数据，追加采集新数据
   python main.py --setup              安装所有 Python 依赖
   python main.py --collect-only       仅采集 CARLA 数据
   python main.py --skip-collect       跳过采集，只评估已有数据
@@ -546,7 +546,7 @@ def main():
                         help='仅运行 CARLA 数据采集')
     parser.add_argument('--skip-collect', action='store_true',
                         help='跳过数据采集，仅运行评估')
-    parser.add_argument('--keep-data', action='store_true',
+    parser.add_argument('--keep', action='store_true',
                         help='保留已有数据，不自动删除（默认会清理旧数据）')
     parser.add_argument('--host', default=DEFAULT_HOST,
                         help=f'CARLA 服务器地址 (默认: {DEFAULT_HOST})')
@@ -598,13 +598,13 @@ def main():
         if carla_py is None:
             print("[ERROR] 需要 CARLA Python 环境")
             sys.exit(1)
-        success = step_collect(args.host, args.port, carla_py, keep_data=args.keep_data, map_name=args.map)
+        success = step_collect(args.host, args.port, carla_py, keep_data=args.keep, map_name=args.map)
     elif args.skip_collect:
         success = step_ablate()
     else:
         # 完整流程：采集 + 评估
         if need_carla and carla_py:
-            success = step_collect(args.host, args.port, carla_py, keep_data=args.keep_data, map_name=args.map)
+            success = step_collect(args.host, args.port, carla_py, keep_data=args.keep, map_name=args.map)
             if not success:
                 print("\n[WARN] 数据采集未完全成功，尝试继续评估...")
         success = step_ablate() and success
