@@ -142,6 +142,16 @@ AGENT_MAX_SPEED = 12                # km/h，Town02 密集城市需降速避免�
 AGENT_SAFE_DISTANCE = 6.0           # 米，空旷道路避免误触发避险刹车
 COLLISION_RESET_THRESHOLD = 3       # 碰撞次数阈值
 
+# 背景车流/行人密度 (0 = 空城, 与旧数据口径一致)
+TRAFFIC_VEHICLES = 0                # 背景车辆数 (TM 自动驾驶)
+TRAFFIC_PEDESTRIANS = 0             # 背景行人数 (TM 运动学直驱)
+TM_PORT = 8000                      # Traffic Manager 端口 (与 get_trafficmanager 默认端口一致)
+# 背景行人运行态: [walker, 路点, 速度(m/s), 重定向计数]。
+# 0.9.16 的 Walker 无 set_autopilot, set_target_velocity 行为异常 (实测速度
+# ~50x 放大且可致服务器 SIGSEGV), 故用 set_transform 运动学直驱
+# (见 update_background_pedestrians)。
+BG_PEDESTRIANS = []
+
 # 消融开关：True = R 恒取基准值（关闭自适应缩放），用于隔离验证噪声模型影响
 FIXED_R = False
 
@@ -186,6 +196,12 @@ HEADING_MAX_STEP = 0.26      # 航向观测硬门限: |残差|>15° 直接拒
 TURN_SPEED_WIN = 30          # 转弯判定速度窗口(帧)
 SCALE_WIN = 60               # 尺度观测窗口(帧, 3s@20Hz)
 SCALE_R_BASE = 0.02          # 尺度观测噪声(log 域, ~2%)
+DEPTH_SCALE_PERIOD = 5       # 深度尺度观测更新周期(帧, 与运动学支路同节奏)
+DEPTH_SCALE_MIN_SAMPLES = 5  # 深度尺度窗内最少有效样本(不足则冻结)
+DEPTH_SCALE_R = 0.05         # 深度尺度观测噪声(log 域; 逐帧比运动学更噪, 放宽)
+DEPTH_SCALE_VMIN = 0.3       # 深度样本速度门(记录单位/s, 与运动学同口径; 慢帧 |dVO|→0 比值发散, 弃)
+DEPTH_SCALE_DEADBAND = 0.35  # 死区(log, ≈1.42x): 状态偏离深度中值超过此值才纠偏, 否则冻结
+                             # (漂移校正器语义: 短稳序列自洽尺度已优, 纠偏反扰动 → 免扰动)
 SCALE_MIN_DISP = 0.5         # 窗口内最小 VO 记录位移(0.10 尺度单位)
 SCALE_VMIN = 0.2             # 窗口内最小平均速度(记录单位 ≈2 m/s 真实)
 # 尺度稳健性: 步限钳位 + 协方差下限, 防 P 初值大时首窗一步跳变后 P 塌缩冻结(10HD 失效修复)
@@ -786,6 +802,129 @@ def safe_spawn_vehicle(world, bp_lib, max_attempts=10):
     raise RuntimeError(f"连续{max_attempts}次生成失败！")
 
 
+def spawn_background_traffic(world, bp_lib, spawn_points, n_vehicles=None,
+                             n_pedestrians=None, tm_port=TM_PORT):
+    """生成背景车流/行人（全部由 TM 自动驾驶控制）。
+
+    n_vehicles/n_pedestrians 默认 None = 调用时读 TRAFFIC_* 全局
+    （避免默认参数在定义时固化, 使 __main__ 的 CLI 覆盖生效）。
+    本函数自身不清场（调用方保证已清场）：
+      - init 路径: clear_all_actors 之后、ego 生成之前调用
+        （ego 的 try_spawn 会自动避开被占用的出生点）;
+      - 重连路径: clear_all_actors + _reset_vehicle 之后调用
+        （服务器重启会清掉全部 actor）。
+    返回实际生成的 (n_vehicles, n_pedestrians, peds); peds 同时写入全局
+    BG_PEDESTRIANS 供主循环每帧推进。
+    """
+    if n_vehicles is None:
+        n_vehicles = TRAFFIC_VEHICLES
+    if n_pedestrians is None:
+        n_pedestrians = TRAFFIC_PEDESTRIANS
+    if n_vehicles <= 0 and n_pedestrians <= 0:
+        return 0, 0
+    if not spawn_points:
+        print(f"[TRAFFIC] 无出生点, 无法生成背景车流/行人")
+        return 0, 0
+    veh_bps = [bp for bp in bp_lib.filter('vehicle.*')
+               if 'bike' not in bp.id and 'bicycle' not in bp.id
+               and 'yacht' not in bp.id]
+    ped_bps = list(bp_lib.filter('walker.pedestrian.*'))
+    nv = npd = 0
+    peds = []
+    for _ in range(max(0, n_vehicles)):
+        try:
+            veh = world.try_spawn_actor(random.choice(veh_bps),
+                                        random.choice(spawn_points))
+            if veh is not None:
+                veh.set_autopilot(True, tm_port)
+                nv += 1
+        except Exception:
+            continue
+    # 行人: 0.9.16 的 Walker 无 set_autopilot, set_target_velocity 行为异常
+    # (实测速度 ~50x 放大且可致服务器 SIGSEGV) → 只负责生成 + 记录路点,
+    # 由主循环每帧 set_transform 运动学直驱 (update_background_pedestrians)。
+    # 横向偏移 2.5m 避免生成在车道正中央 (t=0 与 ego/背景车碰撞);
+    # 出生点被占用时最多重试 5 次
+    m = world.get_map()
+    for _ in range(max(0, n_pedestrians)):
+        if not ped_bps:
+            break
+        walker = None
+        for _ in range(5):
+            sp = random.choice(spawn_points)
+            off_x = 2.5 * math.cos(math.radians(sp.rotation.yaw + 90.0))
+            off_y = 2.5 * math.sin(math.radians(sp.rotation.yaw + 90.0))
+            ped_tf = carla.Transform(
+                carla.Location(x=sp.location.x + off_x,
+                               y=sp.location.y + off_y, z=sp.location.z),
+                carla.Rotation(0, 0, sp.rotation.yaw))
+            try:
+                walker = world.try_spawn_actor(random.choice(ped_bps), ped_tf)
+            except Exception:
+                walker = None
+            if walker is not None:
+                break
+        if walker is None:
+            continue
+        wp = m.get_waypoint(walker.get_location(), project_to_road=True)
+        peds.append([walker, wp, random.uniform(1.0, 1.5), 0])
+        npd += 1
+    BG_PEDESTRIANS[:] = peds
+    print(f"[TRAFFIC] 背景车流/行人: 车辆 {nv}/{n_vehicles}, "
+          f"行人 {npd}/{n_pedestrians} (TM port={tm_port})")
+    return nv, npd, peds
+
+
+def update_background_pedestrians(world, dt=0.05):
+    """每帧推进背景行人: set_transform 运动学直驱 + 地图路点导向。
+
+    每帧朝当前路点走 speed*dt (1.0-1.5 m/s 步行速), 每 8 帧重选下一路点;
+    掉出道路 (get_waypoint 为 None) 的行人重投放到随机出生点; 异常 actor 移除。
+    """
+    if not BG_PEDESTRIANS:
+        return
+    m = world.get_map()
+    alive = []
+    for ped in BG_PEDESTRIANS:
+        w, wp, speed, cnt = ped[0], ped[1], ped[2], ped[3]
+        try:
+            loc = w.get_location()
+            if cnt % 8 == 0:
+                if m.get_waypoint(loc, project_to_road=True) is None:
+                    sp = random.choice(m.get_spawn_points())
+                    w.set_transform(carla.Transform(
+                        carla.Location(x=sp.location.x, y=sp.location.y,
+                                       z=sp.location.z),
+                        carla.Rotation(0, 0, sp.rotation.yaw)))
+                    loc = sp.location
+                nxt = wp.next(5.0) if wp is not None else None
+                if nxt:
+                    wp = nxt[0]
+                elif wp is None:
+                    wp = m.get_waypoint(loc, project_to_road=True)
+                ped[1] = wp
+            ped[3] += 1
+            if wp is not None:
+                tgt = wp.transform.location
+                dx, dy = tgt.x - loc.x, tgt.y - loc.y
+                dl = math.sqrt(dx * dx + dy * dy)
+                if dl > 1e-4:
+                    step = speed * dt
+                    w.set_transform(carla.Transform(
+                        carla.Location(x=loc.x + dx / dl * step,
+                                       y=loc.y + dy / dl * step,
+                                       z=tgt.z),
+                        carla.Rotation(0, 0,
+                                       math.degrees(math.atan2(dy, dx)))))
+            alive.append(ped)
+        except Exception:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+    BG_PEDESTRIANS[:] = alive
+
+
 def _spawn_agent_for_vehicle(world, bp_lib, vehicle, spawn_points):
     """为车辆初始化智能体：限速、PID、安全距离、目标点（初始化与重置共用）
 
@@ -995,6 +1134,11 @@ def init_carla_environment(host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
     # 6) 生成车辆
     bp_lib = world.get_blueprint_library()
+    # 6a) 背景车流/行人 (TM 自动驾驶; 先生成, ego 挑空闲出生点)
+    try:
+        spawn_background_traffic(world, bp_lib, world.get_map().get_spawn_points())
+    except Exception as e:
+        print(f"[WARN] 背景车流/行人生成失败: {e}")
     try:
         vehicle, spawn_points = safe_spawn_vehicle(world, bp_lib)
     except Exception as e:
@@ -1338,7 +1482,7 @@ class VelocityScaleModel:
 class EKF_VIO:
     # 状态向量 10 维: [x, y, z, vx, vy, vz, roll, pitch, yaw, log(VO尺度水平)]
     # 第 10 维 = 尺度在参考速度处的 log 水平; 应用总尺度 = 水平 × c(v)
-    def __init__(self, init_pose, init_vel, dt=0.05):
+    def __init__(self, init_pose, init_vel, dt=0.05, depth_scale_file=None):
         self.x = np.array([
             init_pose[0], init_pose[1], init_pose[2],
             init_vel[0], init_vel[1], init_vel[2],
@@ -1392,6 +1536,28 @@ class EKF_VIO:
         self._heading_base = float(init_pose[5])
 
         self._gyro_bias = np.zeros(3)
+
+        # === 深度尺度支路 (DAv2-PnP 离线预计算, 可选; 无文件自动禁用, 与原版逐位一致) ===
+        self._depth_scale_enabled = False
+        self._depth_scale_frames = 0
+        self._depth_log = None
+        self._depth_inl = None
+        self._depth_init_log = math.log(VO_SCALE_PRIOR)
+        self._depth_scale_applied = 0
+        self._depth_scale_rejected = 0
+        self._depth_scale_skipped = 0
+        self._depth_win = deque(maxlen=200)   # 有效深度 log 尺度样本(窗中值去单帧尖峰)
+        self._depth_count = 0                 # 更新周期计数
+        self._depth_obs_hist = []             # [调试] 每次更新的窗中值
+        self._depth_state_hist = []           # [调试] 更新后 log s 状态
+        if depth_scale_file is not None:
+            self._load_depth_scale(depth_scale_file)
+            if self._depth_scale_enabled:
+                # 深度中值 → 尺度状态初值 (防早期慢帧发散样本把状态锁在错误水平)
+                self.x[9] = self._depth_init_log
+                self.P[9, 9] = 0.09           # std=0.3, 与深度观测噪声水平匹配
+                print(f"[EKF] 尺度状态深度中值初始化: log s={self._depth_init_log:.3f} "
+                      f"(s={math.exp(self._depth_init_log):.3f})")
         self._accel_bias = np.zeros(3)
         self._bias_samples = 0
         self._bias_max_samples = 200
@@ -1592,7 +1758,49 @@ class EKF_VIO:
         self._clamp_covariance()
         self._imu_steps_since_update += 1
 
-    def visual_update(self, visual_pose):
+    def _load_depth_scale(self, path):
+        """读 depth_scale.txt (行 = 帧号(1-based) log_s inliers).
+
+        帧号必须从 1 连续 (与 VO 行号口径严格一致); 解析失败自动禁用支路。
+        log_s 可为 nan (该帧无有效 DAv2-PnP 尺度)。
+        """
+        log_arr, inl_arr = [], []
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+                    fr = int(parts[0])
+                    lv = (math.nan if parts[1].lower() == 'nan'
+                          else float(parts[1]))
+                    il = int(parts[2]) if len(parts) > 2 else 0
+                    if fr != len(log_arr) + 1:
+                        raise ValueError(
+                            f"帧号不连续: 期望 {len(log_arr)+1}, 实际 {fr}")
+                    log_arr.append(lv)
+                    inl_arr.append(il)
+        except Exception as e:
+            print(f"[EKF] depth_scale: 读 {path} 失败 ({e}), 支路禁用")
+            return
+        if len(log_arr) < 2:
+            print(f"[EKF] depth_scale: {path} 有效行过少, 支路禁用")
+            return
+        self._depth_log = np.asarray(log_arr, dtype=np.float64)
+        self._depth_inl = np.asarray(inl_arr, dtype=np.int64)
+        self._depth_scale_frames = len(log_arr)
+        self._depth_init_log = float(np.median(self._depth_log[
+            np.isfinite(self._depth_log)]))
+        self._depth_scale_enabled = True
+        n_valid = int(np.isfinite(self._depth_log).sum())
+        print(f"[EKF] 深度尺度支路启用: {path} ({self._depth_scale_frames} 帧, "
+              f"有效 {n_valid}, 覆盖 {n_valid/(self._depth_scale_frames-1):.0%}, "
+              f"中值 s={math.exp(self._depth_init_log):.3f})")
+
+    def visual_update(self, visual_pose, frame_idx=None):
         self._update_call_count += 1
         print(f"[EKF UPDATE] visual_update count={self._update_call_count}, "
               f"ts_pose=({visual_pose[0]:.2f},{visual_pose[1]:.2f},{visual_pose[2]:.2f})")
@@ -1720,41 +1928,81 @@ class EKF_VIO:
                       + K_att @ R_att_use @ K_att.T)
             self._regularize_P()
 
+        # === 深度尺度观测（DAv2-PnP 离线预计算, 逐帧, 优先于运动学）===
+        # depth_scale.txt 行 k (1-based 帧号) = 区间 k-1→k 的 log 尺度 + PnP 内点数。
+        # 有有效值: 质量因子(内点数)→R, 更新; 该帧跳过运动学支路。
+        # 未加载文件时禁用, 行为与原版逐位一致 (EKF 基线不变)。
+        depth_used = False
+        if self._depth_scale_enabled:
+            k_ds = frame_idx if frame_idx is not None else self._update_call_count
+            if (1 <= k_ds <= self._depth_scale_frames
+                    and v_vo_rec > DEPTH_SCALE_VMIN):
+                dlog_v = float(self._depth_log[k_ds - 1])
+                if math.isfinite(dlog_v):
+                    self._depth_win.append(dlog_v)
+            self._depth_count += 1
+            if (self._depth_count >= DEPTH_SCALE_PERIOD
+                    and len(self._depth_win) >= DEPTH_SCALE_MIN_SAMPLES):
+                s_obs_log = float(np.median(np.asarray(self._depth_win)))
+                self._depth_count = 0
+                y_s = s_obs_log - self.x[9]
+                S_s = float(self.P[9, 9]) + DEPTH_SCALE_R
+                if abs(y_s) < DEPTH_SCALE_DEADBAND:
+                    # 状态已接近深度中值: 冻结, 不扰动自洽系统 (回退运动学原行为)
+                    self._depth_scale_skipped += 1
+                elif y_s * y_s < self.chi2_scale * S_s:
+                    K_s = (self.P[:, 9] / S_s).reshape(10, 1)
+                    self.x += (K_s * y_s).ravel()
+                    H_s = np.zeros((1, 10))
+                    H_s[0, 9] = 1.0
+                    I_KH_s = np.eye(10) - K_s @ H_s
+                    self.P = (I_KH_s @ self.P @ I_KH_s.T
+                              + K_s @ (DEPTH_SCALE_R * np.ones((1, 1))) @ K_s.T)
+                    self._regularize_P()
+                    self._depth_scale_applied += 1
+                    if os.environ.get('EKF_DEBUG_SCALE'):
+                        self._depth_obs_hist.append(s_obs_log)
+                        self._depth_state_hist.append(float(self.x[9]))
+                    depth_used = True
+                else:
+                    self._depth_scale_rejected += 1
+
         # === 尺度观测（独立分支：转弯运动学速度 / VO 记录速度，H 仅含尺度行） ===
         # s_obs = median(v_kin / v_VO)，v_kin = |a_lat|/|ω|（原始 IMU 读数，
         # 无积分、无尺度依赖、无零偏累积）。只在转弯帧可观测（直道 ω→0 病态）：
         # 样本入窗，每 5 帧取窗中值更新，直道段尺度冻结。
         # (#100 形态: 等权中值 + 无步限钳位; 速度形状/加权截尾分支已回退,
         #  它们把尺度水平压低, 导致 EKF 融合大幅退化)
-        if (self._last_accel_raw is not None and self._last_gyro_raw is not None
-                and v_vo_rec > 0.3):
-            a_lat_k = float((self._last_accel_raw - self._accel_bias)[1])
-            w_k = float((self._last_gyro_raw - self._gyro_bias)[2])
-            if abs(w_k) > 0.10 and abs(a_lat_k) > 0.3:
-                self._kin_win.append(
-                    abs(a_lat_k) / (abs(w_k) * v_vo_rec))
-        self._scale_kin_count += 1
-        if (self._scale_kin_count >= 5
-                and len(self._kin_win) >= 5):
-            s_obs = float(np.median(np.asarray(self._kin_win)))
-            self._scale_kin_count = 0
-            if os.environ.get('EKF_DEBUG_SCALE'):
-                self._scale_obs_hist.append(s_obs)
-                self._scale_dr_vel_hist.append(v_vo_rec)
-            y_s = math.log(max(s_obs, 1e-3)) - self.x[9]
-            S_s = float(self.P[9, 9]) + SCALE_R_BASE
-            if y_s * y_s < self.chi2_scale * S_s:
-                K_s = (self.P[:, 9] / S_s).reshape(10, 1)
-                self.x += (K_s * y_s).ravel()
-                H_s = np.zeros((1, 10))
-                H_s[0, 9] = 1.0
-                I_KH_s = np.eye(10) - K_s @ H_s
-                self.P = (I_KH_s @ self.P @ I_KH_s.T
-                          + K_s @ (SCALE_R_BASE * np.ones((1, 1))) @ K_s.T)
-                self._regularize_P()
-                self._scale_applied += 1
-            else:
-                self._scale_rejected += 1
+        if not depth_used:
+            if (self._last_accel_raw is not None and self._last_gyro_raw is not None
+                    and v_vo_rec > 0.3):
+                a_lat_k = float((self._last_accel_raw - self._accel_bias)[1])
+                w_k = float((self._last_gyro_raw - self._gyro_bias)[2])
+                if abs(w_k) > 0.10 and abs(a_lat_k) > 0.3:
+                    self._kin_win.append(
+                        abs(a_lat_k) / (abs(w_k) * v_vo_rec))
+            self._scale_kin_count += 1
+            if (self._scale_kin_count >= 5
+                    and len(self._kin_win) >= 5):
+                s_obs = float(np.median(np.asarray(self._kin_win)))
+                self._scale_kin_count = 0
+                if os.environ.get('EKF_DEBUG_SCALE'):
+                    self._scale_obs_hist.append(s_obs)
+                    self._scale_dr_vel_hist.append(v_vo_rec)
+                y_s = math.log(max(s_obs, 1e-3)) - self.x[9]
+                S_s = float(self.P[9, 9]) + SCALE_R_BASE
+                if y_s * y_s < self.chi2_scale * S_s:
+                    K_s = (self.P[:, 9] / S_s).reshape(10, 1)
+                    self.x += (K_s * y_s).ravel()
+                    H_s = np.zeros((1, 10))
+                    H_s[0, 9] = 1.0
+                    I_KH_s = np.eye(10) - K_s @ H_s
+                    self.P = (I_KH_s @ self.P @ I_KH_s.T
+                              + K_s @ (SCALE_R_BASE * np.ones((1, 1))) @ K_s.T)
+                    self._regularize_P()
+                    self._scale_applied += 1
+                else:
+                    self._scale_rejected += 1
 
         # === 位置观测（短窗口相对锚 + 当前尺度；卡方门控） ===
         # VO 绝对位置带全程航向漂移, 故每 POSITION_WIN 帧用 EKF 当前位置重锚;
@@ -2250,6 +2498,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             try:
                 world.tick()
                 tick_errors = 0
+                if BG_PEDESTRIANS:
+                    try:
+                        update_background_pedestrians(world)
+                    except Exception:
+                        pass
             except Exception as e:
                 tick_errors += 1
                 print(f"[WARN] world.tick() 失败 ({tick_errors}): {e}")
@@ -2292,6 +2545,17 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                     vehicle, agent, camera, cam_transform, imu, collision_sensor = \
                         _reset_vehicle(world, bp_lib, vehicle, spawn_points,
                                        sensor_queue, camera, imu, collision_sensor)
+                    # 服务器重启清掉全部 actor, 背景车流/行人需重新生成
+                    try:
+                        if TRAFFIC_VEHICLES > 0 or TRAFFIC_PEDESTRIANS > 0:
+                            _rc = carla.Client(host, port)
+                            _rc.set_timeout(10.0)
+                            _rtm = _rc.get_trafficmanager(TM_PORT)
+                            _rtm.set_synchronous_mode(True)
+                            spawn_background_traffic(world, bp_lib, spawn_points,
+                                                     tm_port=TM_PORT)
+                    except Exception as _te:
+                        print(f"[WARN] 背景车流/行人重生失败: {_te}")
                     aligner = TimeAligner(time_threshold=0.02)
                     stagnant_count = 0
                     prev_throttle = 0.0
@@ -2951,6 +3215,8 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 f.write(f"total_images={img_idx}\n")
                 f.write(f"max_speed_kmh={AGENT_MAX_SPEED}\n")
                 f.write(f"behavior={AGENT_BEHAVIOR}\n")
+                f.write(f"traffic_vehicles={TRAFFIC_VEHICLES}\n")
+                f.write(f"traffic_pedestrians={TRAFFIC_PEDESTRIANS}\n")
                 f.write(f"imu_rate_hz={IMU_SAMPLE_RATE}\n")
                 f.write(f"camera_rate_hz={CAMERA_SAMPLE_RATE}\n")
         except Exception as e:
@@ -3033,7 +3299,9 @@ def replay(data_dir):
 
     init_pose = [float(gt.iloc[0][c]) for c in ('pos_x', 'pos_y', 'pos_z',
                                                 'roll', 'pitch', 'yaw')]
-    ekf = EKF_VIO(init_pose, [0.0, 0.0, 0.0], dt=0.05)
+    ds_file = os.path.join(data_dir, 'depth_scale.txt')
+    ekf = EKF_VIO(init_pose, [0.0, 0.0, 0.0], dt=0.05,
+                  depth_scale_file=ds_file if os.path.exists(ds_file) else None)
 
     vo_rows = vo[['vo_x', 'vo_y', 'vo_z', 'roll', 'pitch', 'yaw']].values[:n]
     # aligned_imu.txt 首列是 timestamp，_ReplayImu 只要 6 个 (ax,ay,az,gx,gy,gz)
@@ -3062,7 +3330,7 @@ def replay(data_dir):
 
         if not vo_jump_skip:
             ekf._last_vo_inliers = int(ekf._vo_match_ref)
-            ekf.visual_update(z_row)
+            ekf.visual_update(z_row, frame_idx=i + 1)
 
         fusion_pos, fusion_att = ekf.get_current_pose()
         imu_dr, _ = ekf.get_imu_dead_reckoning_pose()
@@ -3135,6 +3403,20 @@ def replay(data_dir):
     print(f"[REPLAY] 航向观测: applied={ekf._heading_applied}, "
           f"rejected={ekf._heading_rejected}, 转弯帧≈{ekf._turn_count}")
     print(f"[REPLAY] 位置观测跳过: {ekf._pos_skip_count}")
+    if getattr(ekf, '_depth_scale_enabled', False):
+        print(f"[REPLAY] 深度尺度观测: applied={ekf._depth_scale_applied}, "
+              f"rejected={ekf._depth_scale_rejected}, "
+              f"deadband_skip={ekf._depth_scale_skipped}")
+        if os.environ.get('EKF_DEBUG_SCALE') and getattr(ekf, '_depth_obs_hist', None):
+            do = np.asarray(ekf._depth_obs_hist)
+            ds = np.asarray(ekf._depth_state_hist)
+            import math as _m
+            print(f"[REPLAY] 深度观测 log_s: median={np.median(do):.3f} "
+                  f"p10={np.percentile(do,10):.3f} p90={np.percentile(do,90):.3f} "
+                  f"(s: {np.exp(np.median(do)):.3f}/{np.exp(np.percentile(do,10)):.3f}/"
+                  f"{np.exp(np.percentile(do,90)):.3f})")
+            print(f"[REPLAY] 深度更新后状态 log s: 初={ds[0]:.3f} 末={ds[-1]:.3f} "
+                  f"(s: {_m.exp(ds[0]):.3f}→{_m.exp(ds[-1]):.3f})")
 
     fu_ate = _ate(gt_xy, fu_xy)
     vo_ate = _ate(gt_xy, vo_xy)
@@ -3174,6 +3456,10 @@ if __name__ == "__main__":
     _parser.add_argument('--fresh', action='store_true',
                          help='全新采集（监督器首轮透传）。注: 本采集器无断点续采, '
                               '每次启动都从第0帧重采, 旧目录在 step 11 备份后清空重跑')
+    _parser.add_argument('--traffic-vehicles', type=int, default=0,
+                         help='背景车辆数 (0 = 空城, 与旧数据同口径)')
+    _parser.add_argument('--pedestrians', type=int, default=0,
+                         help='背景行人数 (0 = 空城, 与旧数据同口径)')
     _args = _parser.parse_args()
 
     if _args.replay:
@@ -3182,6 +3468,8 @@ if __name__ == "__main__":
     # 根据命令行参数覆盖地图和输出目录
     TARGET_MAP = _args.map
     TURNAROUND_ACTIVE = _args.turnaround
+    TRAFFIC_VEHICLES = _args.traffic_vehicles
+    TRAFFIC_PEDESTRIANS = _args.pedestrians
     if _args.bidir_start:
         try:
             _bx, _by = _args.bidir_start.split(',')

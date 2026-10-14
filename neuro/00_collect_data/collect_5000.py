@@ -114,7 +114,8 @@ def kill_server():
                           stderr=subprocess.DEVNULL).returncode != 0
 
 
-def start_server(carla_bin, port, server_log):
+def start_server(carla_bin, port, server_log,
+                 server_flags='-RenderOffScreen -quality-level=Low'):
     if port_open(port):
         print('[SERVER] 端口已监听，复用现有 CARLA 服务器')
         return None
@@ -123,11 +124,12 @@ def start_server(carla_bin, port, server_log):
             f'[FATAL] CARLA 启动脚本不可用: {carla_bin!r}\n'
             '        请设置环境变量 CARLA_BIN 或用 --carla-bin 指定 CarlaUE4.sh 路径，'
             '或手动启动 CARLA 服务器后再运行本脚本。')
-    print(f'[SERVER] 启动 CARLA: {carla_bin} -port={port}')
+    flag_list = server_flags.split()
+    print(f'[SERVER] 启动 CARLA: {carla_bin} {" ".join(flag_list)} -port={port}')
     server_log.write(f'\n===== server start {time.strftime("%F %T")} =====\n')
     server_log.flush()
     proc = subprocess.Popen(
-        [carla_bin, '-RenderOffScreen', '-quality-level=Low', f'-port={port}'],
+        [carla_bin] + flag_list + [f'-port={port}'],
         stdout=server_log, stderr=subprocess.STDOUT,
         start_new_session=True, cwd=HERE)
     return proc
@@ -159,7 +161,8 @@ def kill_proc_tree(proc):
 
 
 def run_attempt(attempt, host, port, out_dir, attempt_log, fresh=False,
-                turnaround=False, map_name=None, bidir_start=None):
+                turnaround=False, map_name=None, bidir_start=None,
+                traffic_vehicles=0, pedestrians=0):
     """运行一轮采集子进程，带"数据无增长"挂起看门狗。
 
     返回 (状态, 退出码)：状态 ∈ {'done','crash','hang'}
@@ -181,6 +184,10 @@ def run_attempt(attempt, host, port, out_dir, attempt_log, fresh=False,
         cmd.append('--turnaround')
     if bidir_start:
         cmd += ['--bidir-start', bidir_start]
+    if traffic_vehicles:
+        cmd += ['--traffic-vehicles', str(traffic_vehicles)]
+    if pedestrians:
+        cmd += ['--pedestrians', str(pedestrians)]
     proc = subprocess.Popen(
         cmd, cwd=HERE, stdout=attempt_log, stderr=subprocess.STDOUT,
         start_new_session=True)
@@ -209,6 +216,11 @@ def main():
     parser.add_argument('--port', type=int, default=2000)
     parser.add_argument('--map', default='Town05')
     parser.add_argument('--carla-bin', default=DEFAULT_CARLA_BIN)
+    parser.add_argument('--server-flags',
+                        default='-RenderOffScreen -quality-level=Low',
+                        help='服务器启动渲染参数(空格分隔字符串); '
+                             '置空字符串则用窗口模式 (2026-10-12: 该机 offscreen '
+                             '路径 SIGSEGV 时备用)')
     parser.add_argument('--max-attempts', type=int, default=10)
     parser.add_argument('--fresh', action='store_true',
                         help='首轮全新采集（备份并清空旧输出目录）；'
@@ -220,10 +232,22 @@ def main():
                         metavar='X,Y',
                         help='双向折返起点(如 "106,133"), 透传给采集器: '
                              '定点投放到该双向路段, 去程后掉头原路返回(真闭环)')
+    parser.add_argument('--traffic-vehicles', type=int, default=0,
+                        help='背景车辆数 (透传采集器, 0 = 空城与旧数据同口径)')
+    parser.add_argument('--pedestrians', type=int, default=0,
+                        help='背景行人数 (透传采集器, 0 = 空城与旧数据同口径)')
     args = parser.parse_args()
 
     out_dir = data_dir(args.map, turnaround=args.turnaround)
     os.makedirs(out_dir, exist_ok=True)
+    # --fresh: 若旧数据已跑满, 下方预检会直接退出 (fresh 只在 run_attempt
+    # 首轮生效), 故备份清空必须发生在循环之前 (2026-10-13: Town03/07/10HD
+    # 空城旧数据已跑满 5000 帧, 被预检跳过, 车流重采未执行)
+    if args.fresh and count_frames(out_dir) >= MAX_FRAMES:
+        bak = out_dir + '_backup_' + time.strftime('%Y%m%d_%H%M%S')
+        print(f'[FRESH] 旧数据已跑满, 备份至 {bak} 并清空后重采')
+        os.rename(out_dir, bak)
+        os.makedirs(out_dir, exist_ok=True)
     server_log = open('/tmp/carla_server_supervisor.log', 'a', encoding='utf-8')
     attempt_log = open('/tmp/collect_supervisor.log', 'a', encoding='utf-8')
 
@@ -238,7 +262,8 @@ def main():
         # 1) 确保服务器存活
         if not port_open(args.port, args.host):
             kill_server()  # 清理可能残留的半死进程
-            start_server(args.carla_bin, args.port, server_log)
+            start_server(args.carla_bin, args.port, server_log,
+                         args.server_flags)
             if not wait_port(args.port, args.host, timeout=300):
                 print(f'[FATAL] 第 {attempts} 轮 CARLA 服务器启动失败（300s 端口未监听）')
                 time.sleep(15)
@@ -249,7 +274,9 @@ def main():
         status, rc = run_attempt(attempts, args.host, args.port, out_dir,
                                  attempt_log, fresh=(args.fresh and attempts == 1),
                                  turnaround=args.turnaround, map_name=args.map,
-                                 bidir_start=args.bidir_start)
+                                 bidir_start=args.bidir_start,
+                                 traffic_vehicles=args.traffic_vehicles,
+                                 pedestrians=args.pedestrians)
         now_frames = count_frames(out_dir)
         print(f'[RUN {attempts}] 结束: status={status}, rc={rc}, 进度 {now_frames}/{MAX_FRAMES}')
 
