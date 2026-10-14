@@ -374,9 +374,10 @@ dc_prev_exp_id = 0; dc_prev_delta = zeros(1, 3);
 % NLM_LOOP_CONSTRAINT=1 时 exp_map_iteration 只记录闭环约束事件(不动节点/
 % NLM_LOOP_CORR, 零地图反馈), 轨迹结束后在本脚本输出层注入约束漂移场:
 % [t_old, t_now] 区间预校正消除 t_now 处重锚定阶梯, 之后保持修正(类DC v3结构)。
-global NLM_LOOP_CONSTRAINT NLM_LOOP_EVENTS NLM_FRAME_IDX;
+global NLM_LOOP_CONSTRAINT NLM_LOOP_EVENTS NLM_FRAME_IDX NLM_AFix_MAXFIELD;
 if isempty(NLM_LOOP_CONSTRAINT), NLM_LOOP_CONSTRAINT = false; end
-NLM_LOOP_EVENTS = zeros(0, 5);   % [t_now, t_old, dx, dy, dz] 逐run重置(防同会话多集串扰)
+if isempty(NLM_AFix_MAXFIELD), NLM_AFix_MAXFIELD = 35; end   % 累计修正上限(m): 防多事件叠加过冲(Town10HD 三假环曾叠到166m)
+NLM_LOOP_EVENTS = zeros(0, 5);   % [t_now, told, dx, dy, dz] 逐run重置(防同会话多集串扰)
 NLM_FRAME_IDX = 0;
 % 事件落盘用的B-fix参数(在nl_apply_loop_fix内才声明, 此处兜底供[8/9]save)
 global NLM_LOOP_BETA NLM_LOOP_CE_MIN NLM_LOOP_STEP_MAX;
@@ -387,6 +388,53 @@ global NLM_SIM3_REANCHOR;   % S2: 闭环时全Sim(3)重锚 (默认关; 设计见
 if isempty(NLM_SIM3_REANCHOR), NLM_SIM3_REANCHOR = false; end
 global NLM_SIM3_WIN;        % S2: 当前lap拟合窗帧数 (win=250 双口径最优, kb_s2_winsweep_v2 自校准)
 if isempty(NLM_SIM3_WIN), NLM_SIM3_WIN = 250; end
+
+% [PR] DINOv2 场景嵌入闭环分支 (DL-NLM Phase 1, 2026-10-13):
+% 闭环候选源 = DINOv2 全局场景嵌入 (零样本 gist 级场所记忆, 对车流/行人/
+% 视角/光照鲁棒), 替代 ORB-VT 的匹配判定; 门序列 = ① sim>=PR_SIM_THRESHOLD
+% ② 路径间隔>=PR_ARC_GAP ③ 地图直线距离<=PR_LOOP_RADIUS (多候选取最相似)。
+% Phase 0.5 验证 (GT 口径): tau=0.6-0.8, R=5-10m 时 P/R=100% (Town05 4/4,
+% Town03 5/5@R10, KITTI 2/2 零样本), ORB 基线 5 集 0 真闭环。
+% 默认关 = 基线逐帧行为不变; 开启时复用 EKF-odo 钉扎重锚定 (DR 清零 +
+% P1 跳变过渡/尖峰钳位), 并写 link 供闭环统计。
+% [PR] 门序列: ① sim>=tau ② 弧长间隔>=ARC_GAP ③ 地图直线距离<=RADIUS ④ 朝向门
+% ⑤ 长间隔门(旧节点出生距今>=LOOP_MIN_GAP帧, 滤近距/中程自交假闭环, 同 A-fix 去抖)。
+% 命中 → 记录闭环约束事件 (零地图反馈, 校正交输出层 A-fix 漂移场 + S2 Sim(3) 重锚),
+% 不再做硬重锚定 (不切 CUR_EXP_ID / 不清 ACCUM_DELTA) —— 硬重锚定实测劣于基线。
+global NLM_USE_PR PR_SIM_THRESHOLD PR_LOOP_RADIUS PR_ARC_GAP PR_MIN_GAP ...
+       PR_YAW_GATE PR_LOOP_MIN_GAP PR_EMB_FILE PR_STABLE_MIN;
+if isempty(NLM_USE_PR), NLM_USE_PR = false; end
+if isempty(PR_SIM_THRESHOLD), PR_SIM_THRESHOLD = 0.7; end
+if isempty(PR_LOOP_RADIUS), PR_LOOP_RADIUS = 10; end
+if isempty(PR_ARC_GAP), PR_ARC_GAP = 50; end
+if isempty(PR_MIN_GAP), PR_MIN_GAP = 30; end
+if isempty(PR_YAW_GATE), PR_YAW_GATE = 60 * pi / 180; end
+if isempty(PR_LOOP_MIN_GAP), PR_LOOP_MIN_GAP = 300; end
+% 时间持续性门: 候选旧帧需连续 >=PR_STABLE_MIN 帧稳定才接受 (真环=持续通过重访点
+% 几十帧; 假闭环=单帧/短串突发)。尺度无关, 跨集通用。Town05 真环 33-63 帧,
+% Town10HD 假环 max 6 帧 → 15 干净分离。
+if isempty(PR_STABLE_MIN), PR_STABLE_MIN = 15; end
+% 嵌入文件覆盖: 默认零样本 pr_embeddings.mat; P2 微调 A/B 指向 pr_embeddings_ft.mat
+if isempty(PR_EMB_FILE), PR_EMB_FILE = 'pr_embeddings.mat'; end
+global PR_EMB PR_LAST_REANCHOR_FRAME PR_LINKS_WRITTEN PR_REANCHOR_NUM PR_EVENTS PR_YAW_REJECT ...
+       PR_ODO_ARC PR_WIN_PTR PR_STABLE_LAST PR_STABLE_STREAK;
+PR_EMB = []; PR_LAST_REANCHOR_FRAME = 0; PR_LINKS_WRITTEN = 0; PR_REANCHOR_NUM = 0;
+PR_EVENTS = 0; PR_YAW_REJECT = 0; PR_ODO_ARC = []; PR_WIN_PTR = 0;
+PR_STABLE_LAST = -1; PR_STABLE_STREAK = 0;
+% [PR] 加载 DINOv2 场景嵌入 (离线预计算: pr_dinov2_embed.py → pr_export_embeddings.py)
+if NLM_USE_PR
+    pr_emb_file = fullfile(data_path, 'slam_results', PR_EMB_FILE);
+    if exist(pr_emb_file, 'file')
+        % 变量名兼容: 零样本文件存 PR_EMB, 微调文件存 pr_embeddings (取首个变量)
+        pr_emb_struct = load(pr_emb_file);
+        pr_emb_names = fieldnames(pr_emb_struct);
+        PR_EMB = pr_emb_struct.(pr_emb_names{1});
+        fprintf('[PR] 场景嵌入已加载: %d帧 x %d维 (tau=%.2f, R=%.0fm, arcΔ>=%.0fm)\n', ...
+            size(PR_EMB, 1), size(PR_EMB, 2), PR_SIM_THRESHOLD, PR_LOOP_RADIUS, PR_ARC_GAP);
+    else
+        error('[PR] 嵌入文件缺失: %s\n先运行: pr_dinov2_embed.py + pr_export_embeddings.py', pr_emb_file);
+    end
+end
 
 % 处理每一帧
 for frame_idx = 1:num_frames
@@ -482,6 +530,117 @@ for frame_idx = 1:num_frames
     
     % 使用类脑特征提取
     vtId = visual_template_neuro_matlab_only(rawImg, curr_x, curr_y, curr_z, curr_yaw, curr_height);
+
+    % [PR] DINOv2 场景嵌入闭环分支: 多候选 (sim>=tau + 弧长间隔 + 地图直线距离门)
+    % 命中 → 重锚定到旧节点 (与 exp_map_iteration 重锚定同动作) + 写 link + 去抖
+    if NLM_USE_PR && ~isempty(PR_EMB) && frame_idx <= size(PR_EMB, 1)
+        % [P2 帧基候选重写] 候选 = 帧 1..PR_WIN_PTR (EKF-odo 逐帧弧长 >= PR_ARC_GAP 之后)。
+        % 旧实现两个根因 bug: (a) PR_EMB(1:pr_b) 把"满足弧长门的节点数"当帧索引,
+        % 候选窗口只有前 ~447 帧, 绝大多数真环旧帧进不了窗口; (b) 节点地图弧长被
+        % VO 尺度压缩 ~7× (Town05 354m vs GT 2497m), 弧长门在 GT 尺度过严。
+        if isempty(PR_ODO_ARC)
+            pr_dp = sqrt(sum(diff(fusion_data.pos, 1, 1).^2, 2));
+            PR_ODO_ARC = [0; cumsum(pr_dp)];      % PR_ODO_ARC(i) = 帧 i 为止的 odo 弧长
+            PR_WIN_PTR = 0;
+        end
+        pr_arc_now = PR_ODO_ARC(frame_idx);
+        while PR_WIN_PTR + 1 < frame_idx && ...
+                PR_ODO_ARC(PR_WIN_PTR + 1) <= pr_arc_now - PR_ARC_GAP
+            PR_WIN_PTR = PR_WIN_PTR + 1;
+        end
+        if PR_WIN_PTR >= 1
+            pr_sim = PR_EMB(frame_idx, :) * PR_EMB(1:PR_WIN_PTR, :)';
+            [pr_smax, pr_k] = max(pr_sim);        % pr_k = 最相似旧帧 (帧索引)
+            % ③ 时间持续性门: 候选旧帧连续 >=PR_STABLE_MIN 帧稳定 (±10帧容差) 才放行。
+            % 真环=车辆持续通过重访点 (Town05 33-63 帧); 假闭环=单帧/短串突发
+            % (Town10HD 无环集假环 max 6 帧) → 15 帧干净分离, 尺度无关跨集通用。
+            if pr_smax >= PR_SIM_THRESHOLD
+                if pr_k == PR_STABLE_LAST || abs(pr_k - PR_STABLE_LAST) <= 10
+                    PR_STABLE_STREAK = PR_STABLE_STREAK + 1;
+                else
+                    PR_STABLE_STREAK = 1;
+                end
+                PR_STABLE_LAST = pr_k;
+            else
+                PR_STABLE_LAST = -1; PR_STABLE_STREAK = 0;
+            end
+            if pr_smax >= PR_SIM_THRESHOLD && PR_STABLE_STREAK >= PR_STABLE_MIN && ...
+                    (PR_LAST_REANCHOR_FRAME == 0 || frame_idx - PR_LAST_REANCHOR_FRAME >= PR_MIN_GAP)
+                % 旧帧地图坐标 (与节点 x_exp 同架系: EKF-odo - 初始位)
+                pr_old_map = [fusion_data.pos(pr_k, 1) - NLM_INIT_EKF_X0, ...
+                              fusion_data.pos(pr_k, 2) - NLM_INIT_EKF_Y0, ...
+                              fusion_data.pos(pr_k, 3) - NLM_INIT_EKF_Z0];
+                pr_pos = [EXPERIENCES(CUR_EXP_ID).x_exp + ACCUM_DELTA_X, ...
+                          EXPERIENCES(CUR_EXP_ID).y_exp + ACCUM_DELTA_Y, ...
+                          EXPERIENCES(CUR_EXP_ID).z_exp + ACCUM_DELTA_Z];
+                pr_d = norm(pr_pos(1:2) - pr_old_map(1:2));
+                if pr_d <= PR_LOOP_RADIUS
+                    % ④ 朝向门: 当前航向 vs 旧帧航向 (同向/反向掉头重访容差内才接受)
+                    pr_yaw_old = fusion_data.att(pr_k, 3) * DEGREE_TO_RADIAN;
+                    pr_dyaw = get_signed_delta_radian(odo_yaw, pr_yaw_old);
+                    if abs(pr_dyaw) > PR_YAW_GATE && abs(abs(pr_dyaw) - pi) > PR_YAW_GATE
+                        PR_YAW_REJECT = PR_YAW_REJECT + 1;
+                    else
+                        % ⑤ 长间隔门 (帧差基, 尺度无关)
+                        if frame_idx - pr_k >= PR_LOOP_MIN_GAP
+                            pr_r = pr_pos - pr_old_map;
+                            pr_norm_r = norm(pr_r);
+                            if pr_norm_r > 1e-6
+                                % 残差 r + 单步钳位 (同 nl_apply_loop_fix: |step|<=STEP_MAX)
+                                pr_step = -NLM_LOOP_BETA * min(1, NLM_LOOP_STEP_MAX / pr_norm_r) * pr_r;
+                                NLM_LOOP_EVENTS(end+1, :) = [frame_idx, pr_k, pr_step(1), pr_step(2), pr_step(3)];
+                                PR_EVENTS = PR_EVENTS + 1;
+                                % link: 旧帧 → 最近节点, 写当前节点 (5 字段同 exp_map_iteration, 去重)
+                                if NUM_EXPS > 0
+                                    pr_born = nan(NUM_EXPS, 1);
+                                    for pr_nn = 1:NUM_EXPS
+                                        if isfield(EXPERIENCES(pr_nn), 'born_frame') && ...
+                                                ~isempty(EXPERIENCES(pr_nn).born_frame)
+                                            pr_born(pr_nn) = EXPERIENCES(pr_nn).born_frame;
+                                        end
+                                    end
+                                    pr_born(isnan(pr_born)) = 1;
+                                    [~, pr_knode] = min(abs(pr_born - pr_k));
+                                else
+                                    pr_knode = 0;
+                                end
+                                pr_old = CUR_EXP_ID;
+                                if pr_knode > 0 && pr_knode ~= pr_old
+                                    pr_dxy = norm(pr_pos(1:2) - [EXPERIENCES(pr_old).x_exp, EXPERIENCES(pr_old).y_exp]);
+                                    pr_heading = atan2(pr_pos(2) - EXPERIENCES(pr_old).y_exp, pr_pos(1) - EXPERIENCES(pr_old).x_exp);
+                                    pr_link_exists = 0;
+                                    for pr_lk = 1:EXPERIENCES(pr_old).numlinks
+                                        if EXPERIENCES(pr_old).links(pr_lk).exp_id == pr_knode
+                                            pr_link_exists = 1; break;
+                                        end
+                                    end
+                                    if ~pr_link_exists
+                                        EXPERIENCES(pr_old).numlinks = EXPERIENCES(pr_old).numlinks + 1;
+                                        EXPERIENCES(pr_old).links(EXPERIENCES(pr_old).numlinks).exp_id = pr_knode;
+                                        EXPERIENCES(pr_old).links(EXPERIENCES(pr_old).numlinks).d_xy = pr_dxy;
+                                        EXPERIENCES(pr_old).links(EXPERIENCES(pr_old).numlinks).d_z = pr_pos(3) - EXPERIENCES(pr_knode).z_exp;
+                                        EXPERIENCES(pr_old).links(EXPERIENCES(pr_old).numlinks).heading_yaw_exp_rad = ...
+                                            get_signed_delta_radian(EXPERIENCES(pr_old).yaw_exp_rad, pr_heading);
+                                        EXPERIENCES(pr_old).links(EXPERIENCES(pr_old).numlinks).facing_yaw_exp_rad = ...
+                                            get_signed_delta_radian(EXPERIENCES(pr_old).yaw_exp_rad, ACCUM_DELTA_YAW);
+                                        PR_LINKS_WRITTEN = PR_LINKS_WRITTEN + 1;
+                                    end
+                                end
+                                PR_REANCHOR_NUM = PR_REANCHOR_NUM + 1;
+                                fprintf('   [PR] 帧%d: 闭环→帧%d (sim=%.3f, d=%.1fm, |r|=%.1fm)\n', ...
+                                    frame_idx, pr_k, pr_smax, pr_d, pr_norm_r);
+                            end
+                        end
+                    end
+                    % 不做硬重锚定: 不切 CUR_EXP_ID / 不清 ACCUM_DELTA (零地图反馈,
+                    % 校正交给输出层 A-fix 漂移场 + S2 Sim(3) 重锚, NLM_LOOP_CONSTRAINT
+                    % + NLM_SIM3_REANCHOR 需为 true)。
+                    PR_LAST_REANCHOR_FRAME = frame_idx;
+                end
+            end
+        end
+    end
+
     % 计算VT识别率
     if vtId > 0 && vtId == PREV_VT_ID
         vtRecog = 1;
@@ -590,6 +749,11 @@ for frame_idx = 1:num_frames
     PREV_VT_ID = vtId;
 end
 
+if NLM_USE_PR
+    fprintf('[PR] 汇总: %d 闭环候选, %d 约束事件, %d 条 link, 朝向门拒 %d\n', ...
+        PR_REANCHOR_NUM, PR_EVENTS, PR_LINKS_WRITTEN, PR_YAW_REJECT);
+end
+
 % [DC v3] 漂移场注入: 输出 = exp_trajectory + (d - C_cum)
 % C_cum = 重锚定跳变累计阶梯(原样输出中的离散修正分量);
 % d     = 每个跳变按raised-cosine在自适应W_i帧内爬坡、之后保持c_i(修正持续但平滑)。
@@ -659,8 +823,14 @@ if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
             L_field(seg, :) = L_field(seg, :) + F(:) * c;
         end
     end
+    % 累计修正上限: 多事件区间重叠处逐帧范数缩回 NLM_AFix_MAXFIELD (防过冲)
+    af_norm = sqrt(sum(L_field.^2, 2));
+    af_over = af_norm > NLM_AFix_MAXFIELD;
+    if any(af_over)
+        L_field(af_over, :) = L_field(af_over, :) .* (NLM_AFix_MAXFIELD / af_norm(af_over)).';
+    end
     exp_trajectory = exp_trajectory + L_field;
-    fprintf('[A-fix] 闭环约束漂移场: %d 事件注入, 最大区间修正 %.2f m\n', ...
+    fprintf('[A-fix] 闭环约束漂移场: %d 事件注入, 最大区间修正 %.2f m (上限 %.0f m, 触顶帧 %d)\n', ...
             size(NLM_LOOP_EVENTS, 1), max(sum(L_field.^2, 2)) ^ 0.5);
 end
 
