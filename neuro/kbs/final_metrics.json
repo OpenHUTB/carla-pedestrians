@@ -1,23 +1,23 @@
 {
   "table1": {
     "Town05Data_IMU_Fusion": {
-      "gt_len_m": 2496.8,
+      "gt_len_m": 485.6,
       "frames": 5000,
       "nlm": {
-        "rmse": 118.93,
-        "drift": 7.83
+        "rmse": 41.14,
+        "drift": 14.3
       },
       "ekf": {
-        "rmse": 118.94,
-        "drift": 7.82
+        "rmse": 44.44,
+        "drift": 13.26
       },
       "vo": {
-        "rmse": 106.5,
-        "drift": 3.35
+        "rmse": 48.26,
+        "drift": 24.16
       },
-      "exp_nodes": 485,
-      "templates": 485,
-      "loop_edges": 1
+      "exp_nodes": 175,
+      "templates": 175,
+      "loop_edges": 7
     },
     "Town03Data_IMU_Fusion": {
       "gt_len_m": 473.5,
@@ -39,30 +39,30 @@
       "loop_edges": 7
     },
     "Town07Data_IMU_Fusion": {
-      "gt_len_m": 747.9,
+      "gt_len_m": 617.9,
       "frames": 5000,
       "nlm": {
-        "rmse": 54.56,
-        "drift": 13.49
+        "rmse": 41.73,
+        "drift": 13.33
       },
       "ekf": {
-        "rmse": 54.57,
-        "drift": 13.49
+        "rmse": 40.64,
+        "drift": 12.82
       },
       "vo": {
-        "rmse": 74.82,
-        "drift": 10.54
+        "rmse": 50.07,
+        "drift": 14.35
       },
-      "exp_nodes": 305,
-      "templates": 305,
-      "loop_edges": 1
+      "exp_nodes": 270,
+      "templates": 270,
+      "loop_edges": 8
     },
     "Town10HDData_IMU_Fusion": {
       "gt_len_m": 452.3,
       "frames": 5000,
       "nlm": {
-        "rmse": 18.61,
-        "drift": 1.57
+        "rmse": 19.43,
+        "drift": 1.97
       },
       "ekf": {
         "rmse": 18.61,
@@ -74,14 +74,14 @@
       },
       "exp_nodes": 481,
       "templates": 481,
-      "loop_edges": 1
+      "loop_edges": 2
     },
     "KITTI07Data_IMU_Fusion": {
       "gt_len_m": 692.1,
       "frames": 1101,
       "nlm": {
-        "rmse": 21.45,
-        "drift": 8.77
+        "rmse": 21.48,
+        "drift": 9.98
       },
       "ekf": {
         "rmse": 22.09,
@@ -93,7 +93,7 @@
       },
       "exp_nodes": 964,
       "templates": 964,
-      "loop_edges": 10
+      "loop_edges": 13
     }
   }
 }

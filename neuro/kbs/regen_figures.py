@@ -21,9 +21,9 @@ from scipy.io import loadmat
 ROOT = '/home/yangrb/openhutb/neuro/data'
 FIG = '/home/yangrb/openhutb/neuro/kbs/fig'
 
-# ---------------- 论文现值 (Table 1, 2026-10-13 车流重采 final_metrics.json) ----------------
-EKF_RMSE = {'Town05': 118.94, 'Town03': 23.36, 'Town07': 54.57, 'Town10HD': 18.61, 'KITTI07': 22.09}
-VO_RMSE  = {'Town05': 106.50, 'Town03': 49.10, 'Town07': 74.82, 'Town10HD': 35.86, 'KITTI07': 27.84}
+# ---------------- 论文现值 (Table 1, 2026-10-14 二次重采 final_metrics.json) ----------------
+EKF_RMSE = {'Town05': 44.44, 'Town03': 23.36, 'Town07': 40.64, 'Town10HD': 18.61, 'KITTI07': 22.09}
+VO_RMSE  = {'Town05': 48.26, 'Town03': 49.10, 'Town07': 50.07, 'Town10HD': 35.86, 'KITTI07': 27.84}
 
 # 配色 (与原图一致: NLM 蓝 / EKF 浅橙 / VO 浅绿)
 C_NLM, C_EKF, C_VO = '#4490C2', '#F4A582', '#92C59B'
@@ -70,7 +70,19 @@ def procrustes_7dof(gt, est):
 def load_ds(ds):
     sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
-    nlm = load_pos(_result_file(sub, 'exp_trajectory.txt'))
+    nlm_txt = _result_file(sub, 'exp_trajectory.txt', required=False)
+    if nlm_txt is not None:
+        nlm = load_pos(nlm_txt)
+    else:
+        # 2026-10-14: 新 run 产物为 trajectories.mat (变量 exp_trajectory), P2 定解口径
+        nlm = None
+        for d in ('slam_results_p2ft', 'slam_results', 'dc_final'):
+            mp = f'{sub}/{d}/trajectories.mat'
+            if os.path.exists(mp):
+                nlm = np.array(loadmat(mp)['exp_trajectory'], dtype=float)
+                break
+        if nlm is None:
+            raise FileNotFoundError('exp_trajectory.txt / trajectories.mat')
     ekf = load_pos(f'{sub}/fusion_pose.txt')
     out = {'gt': gt, 'nlm': nlm, 'ekf': ekf, 'len_m': float(np.linalg.norm(np.diff(gt, axis=0), axis=1).sum())}
     # VO 口径 = visual_odometry.txt (vo_x/vo_y/vo_z), 与 Table 1 同源 (compute_final_metrics)
@@ -362,7 +374,19 @@ def fig_ablation(ta, tb, mpa):
 def fig_kitti_io():
     sub = f'{ROOT}/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
-    nlm = load_pos(_result_file(sub, 'exp_trajectory.txt'))
+    nlm_txt = _result_file(sub, 'exp_trajectory.txt', required=False)
+    if nlm_txt is not None:
+        nlm = load_pos(nlm_txt)
+    else:
+        # 2026-10-14: 新 run 产物为 trajectories.mat (变量 exp_trajectory), P2 定解口径
+        nlm = None
+        for d in ('slam_results_p2ft', 'slam_results', 'dc_final'):
+            mp = f'{sub}/{d}/trajectories.mat'
+            if os.path.exists(mp):
+                nlm = np.array(loadmat(mp)['exp_trajectory'], dtype=float)
+                break
+        if nlm is None:
+            raise FileNotFoundError('exp_trajectory.txt / trajectories.mat')
     A, s = procrustes_7dof(gt, nlm)
     n = min(len(gt), len(A))
     gt, A = gt[:n], A[:n]

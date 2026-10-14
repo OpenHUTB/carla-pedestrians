@@ -53,6 +53,10 @@ def main():
     ap.add_argument('--pos-floor', type=float, default=0.7)
     ap.add_argument('--neg-ceiling', type=float, default=-0.3)
     ap.add_argument('--lr', type=float, default=1e-3)
+    ap.add_argument('--pos-cap', type=int, default=25,
+                    help='每场所每 epoch 正对上限 (2026-10-14: 3 巨型密集簇各抽 85 正对'
+                         '把相似度空间压饱和 — Town05/07/10HD τ=0.9 各 ~200 假事件; '
+                         '上限 25 后正负信号再平衡)')
     args = ap.parse_args()
 
     torch.manual_seed(0)
@@ -87,7 +91,7 @@ def main():
         model.train()
         # ── triplet: 每场所抽 anchor + 同场所正对 + 该 anchor 的难负 (直接索引) ──
         anchors, positives = [], []
-        per = max(8, args.batch // max(1, len(group_keys) * 2))
+        per = min(max(8, args.batch // max(1, len(group_keys) * 2)), args.pos_cap)
         for gk in group_keys:
             mem = group_members[gk]
             n = mem.shape[0]

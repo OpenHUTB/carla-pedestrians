@@ -55,7 +55,7 @@ PR_ARC_GAP = 50;
 PR_MIN_GAP = 30;
 global NLM_LOOP_CONSTRAINT NLM_SIM3_REANCHOR NLM_SIM3_WIN;
 NLM_LOOP_CONSTRAINT = true;
-NLM_SIM3_REANCHOR = true;
+NLM_SIM3_REANCHOR = false;   % S2 关 (定解口径: A-fix only; 车流数据实测 S2 有害 +2.72m, 2026-10-13)
 NLM_SIM3_WIN = 250;
 
 fprintf('=== P2微调A/B Town05 (全量5000帧, NLM_USE_EKF_ODO=true) ===\n');

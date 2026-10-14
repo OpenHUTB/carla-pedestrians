@@ -41,6 +41,16 @@ SEQUENCES = {
         "gt": "ground_truth.txt", "vo": "visual_odometry.txt", "imu": "aligned_imu.txt",
         "K": K_CARLA, "carla": True, "img": r"(\d+)\.png",
     },
+    "Town03": {
+        "dir": BASE / "01_NeuroSLAM_Datasets" / "Town03Data_IMU_Fusion",
+        "gt": "ground_truth.txt", "vo": "visual_odometry.txt", "imu": "aligned_imu.txt",
+        "K": K_CARLA, "carla": True, "img": r"(\d+)\.png",
+    },
+    "Town07": {
+        "dir": BASE / "01_NeuroSLAM_Datasets" / "Town07Data_IMU_Fusion",
+        "gt": "ground_truth.txt", "vo": "visual_odometry.txt", "imu": "aligned_imu.txt",
+        "K": K_CARLA, "carla": True, "img": r"(\d+)\.png",
+    },
     "Turnaround": {
         "dir": BASE / "01_NeuroSLAM_Datasets" / "Town01Turnaround_IMU_Fusion",
         "gt": "ground_truth.txt", "vo": "visual_odometry.txt", "imu": "aligned_imu.txt",
@@ -256,6 +266,7 @@ def davn2_pnp_scale_seq(cfg, data, device="cuda", max_frames=None,
     bf = cv2.BFMatcher(cv2.NORM_HAMMING)
     s = np.full(n - 1, np.nan)
     inl = np.zeros(n - 1, dtype=int)
+    d_stat = np.full((n - 1, 4), np.nan)   # [median, std, p10, p90] metric 深度图 (P2 尺度头特征)
     n_ok = 0
     img_dir = cfg["dir"] / cfg.get("img_dir", "")
     fmt = cfg.get("img_fmt", "{:04d}")
@@ -267,6 +278,9 @@ def davn2_pnp_scale_seq(cfg, data, device="cuda", max_frames=None,
             continue
         rgb = cv2.cvtColor(I1, cv2.COLOR_GRAY2RGB)
         D = metric_depth(rgb)
+        df = D.ravel()
+        d_stat[i] = [np.median(df), np.std(df),
+                     np.percentile(df, 10), np.percentile(df, 90)]
         k0, d0 = orb.detectAndCompute(I0, None)
         k1, d1 = orb.detectAndCompute(I1, None)
         if d0 is None or d1 is None or len(d0) < 20 or len(d1) < 20:
@@ -293,7 +307,7 @@ def davn2_pnp_scale_seq(cfg, data, device="cuda", max_frames=None,
             n_ok += 1
         if (i + 1) % 250 == 0:
             print(f"    [daV2] {i+1}/{n-1} ok={n_ok}", flush=True)
-    return s, inl, n_ok, (n - 1)
+    return s, inl, d_stat, n_ok, (n - 1)
 
 
 # --------------------------------------------------------------------------- #
@@ -377,9 +391,10 @@ def main():
         s_depth = None
         s_depth_inl = None
         s_depth_win = None
+        d_stat = None
         if args.with_davl2 and torch_ok:
             try:
-                s_depth, s_depth_inl, n_ok, n_tot = davn2_pnp_scale_seq(
+                s_depth, s_depth_inl, d_stat, n_ok, n_tot = davn2_pnp_scale_seq(
                     cfg, data, device="cuda", max_frames=args.davl2_frames)
                 s_depth_win = windowed_median(s_depth, W)
                 res["davn2_perframe"] = est_metrics(s_depth, s_gt)
@@ -399,7 +414,9 @@ def main():
                             s_kin=s_kin if s_kin is not None else np.array([]),
                             s_kin_win=s_kin_win if s_kin_win is not None else np.array([]),
                             s_depth=s_depth if s_depth is not None else np.array([]),
+                            s_depth_inl=s_depth_inl if s_depth_inl is not None else np.array([]),
                             s_depth_win=s_depth_win if s_depth_win is not None else np.array([]),
+                            depth_stat=d_stat if d_stat is not None else np.array([]),
                             frames=np.arange(n))
         _print_row(name, res)
         _plot(name, s_gt, s_kin_win, s_star, s_depth_win, out)
