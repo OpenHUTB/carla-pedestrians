@@ -805,10 +805,21 @@ if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
     n_lc = num_frames;
     f0v = (1:n_lc)';
     L_field = zeros(n_lc, 3);
+    % [2026-10-14] 旧帧去重: 同一旧帧只注入首个事件。微调头在假闭环处会对
+    % 同一旧帧连续重发 (Town10HD 重采后实测: 帧3247/3277/3307 三连发同旧帧1852,
+    % 3x24.95m 叠加触顶35m → 轨迹尾部常偏移+斜坡拉长, 路径452→787m, RMSE 86.7m)。
+    % 对同一位置重复重锚无新信息; 真环 (Town07 各旧帧互异) 不受影响。
+    seen_old_frames = containers.Map('KeyType', 'double', 'ValueType', 'int32');
+    n_af_dedup = 0;
     for ev_k = 1:size(NLM_LOOP_EVENTS, 1)
         t_now = NLM_LOOP_EVENTS(ev_k, 1);
         t_old = NLM_LOOP_EVENTS(ev_k, 2);
         c = NLM_LOOP_EVENTS(ev_k, 3:5);
+        if ~isempty(seen_old_frames) && seen_old_frames.isKey(t_old)
+            n_af_dedup = n_af_dedup + 1;
+            continue;
+        end
+        seen_old_frames(t_old) = 1;
         if t_old >= t_now || t_old < 1
             % 无born_frame或区间退化: 单帧脉冲(跳变帧-1处瞬时c, 抵消当帧阶梯)
             if t_now > 1
@@ -830,8 +841,9 @@ if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
         L_field(af_over, :) = L_field(af_over, :) .* (NLM_AFix_MAXFIELD / af_norm(af_over)).';
     end
     exp_trajectory = exp_trajectory + L_field;
-    fprintf('[A-fix] 闭环约束漂移场: %d 事件注入, 最大区间修正 %.2f m (上限 %.0f m, 触顶帧 %d)\n', ...
-            size(NLM_LOOP_EVENTS, 1), max(sum(L_field.^2, 2)) ^ 0.5);
+    fprintf('[A-fix] 闭环约束漂移场: %d 事件记录, %d 注入 (旧帧去重剔除 %d), 最大区间修正 %.2f m (上限 %.0f m, 触顶帧 %d)\n', ...
+            size(NLM_LOOP_EVENTS, 1), size(NLM_LOOP_EVENTS, 1) - n_af_dedup, n_af_dedup, ...
+            max(sum(L_field.^2, 2)) ^ 0.5);
 end
 
 % [S2] 闭环全Sim(3)重锚 (创新核心升级, 设计见 neuro/kbs/NLM_LOOP_DESIGN.md §9):
