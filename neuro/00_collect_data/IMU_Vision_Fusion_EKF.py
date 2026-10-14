@@ -2460,6 +2460,12 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
 
     img_idx = 0
     stagnant_count = 0
+    # 自由驾驶原位恢复状态 (2026-10-14: 换车传送重置污染 GT —
+    # Town05 车流数据 13 次 ego 传送根因): 碰撞/停滞时车辆原地恢复
+    # (新 agent+新目的地, 无传送); 连续 4 次失败 → 放弃运行 (rc=2)
+    recover_streak = 0
+    last_recover_idx = 0
+    run_aborted = False
 
     # 油门/刹车平滑状态
     prev_throttle = 0.0
@@ -3043,70 +3049,106 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
                 except Exception:
                     pass  # 车辆句柄已失效时交由停滞重置恢复，不打断采集
 
-            # 碰撞重置
+            # 碰撞/停滞恢复 (2026-10-14: 自由驾驶改原位恢复 — 换车传送污染 GT;
+            # 折返模式保持原换车重置)
             reset_needed = False
             reset_reason = ""
 
             if collision_sensor.has_major_collision():
-                print(f"[WARN] 碰撞过多 ({collision_sensor.collision_count}), 重置车辆...")
+                print(f"[WARN] 碰撞过多 ({collision_sensor.collision_count}), 恢复...")
                 reset_needed = True
                 reset_reason = "碰撞过多"
 
-            # 停滞超 150 帧重置
+            # 停滞超 600 帧(30s)恢复: 车流中被堵 30s 仍属正常,
+            # 旧阈值 150 帧(7.5s) 在车流数据上大量误触发传送
             if speed < 0.1:
                 stagnant_count += 1
-                if stagnant_count > 150:
-                    print(f"[STUCK] 车辆停滞 ({stagnant_count} 帧), 重置...")
+                if stagnant_count > 600:
+                    print(f"[STUCK] 车辆停滞 ({stagnant_count} 帧), 恢复...")
                     reset_needed = True
                     reset_reason = "停滞"
             else:
                 stagnant_count = 0
+                if recover_streak and img_idx - last_recover_idx >= 600:
+                    recover_streak = 0   # 恢复后连续正常行驶 30s+, 计数清零
 
             if reset_needed:
                 print(f"[RESET] 原因: {reset_reason}")
-                # _reset_vehicle 先生成新车再销毁旧车，失败时旧车保持可用、循环继续推进
-                for _reset_attempt in range(3):
-                    try:
-                        vehicle, agent, camera, cam_transform, imu, collision_sensor = \
-                            _reset_vehicle(world, bp_lib, vehicle, spawn_points,
-                                           sensor_queue, camera, imu, collision_sensor)
-                        stagnant_count = 0
-                        prev_throttle = 0.0   # 重置时清空平滑状态
-                        prev_brake = 0.0
-                        # 双向折返模式: 重置会随机重投放并劫持目的地,
-                        # 送回双向起点、折返状态归零, 重新出发(保持折返轨迹干净)
-                        if (TURNAROUND_ACTIVE and start_loc is not None
-                                and TURNAROUND_BIDIR_START is not None):
-                            try:
-                                _m = world.get_map()
-                                _sx, _sy = TURNAROUND_BIDIR_START
-                                _wps = _m.get_waypoint(
-                                    carla.Location(_sx, _sy, 0.0),
-                                    project_to_road=True)
-                                _wp0 = (_wps[0]
-                                        if isinstance(_wps, (list, tuple))
-                                        else _wps)
-                                _tf = _wp0.transform
-                                _tf.location.z += 0.1   # 同初始投放: 路面内部高度修正
-                                vehicle.set_transform(_tf)
-                                wait_vehicle_deploy(vehicle, _tf.location)
-                                start_loc['phase'] = 'out'
-                                start_loc['relay_idx'] = 0
-                                _old_agent = agent
-                                agent = make_fresh_agent(vehicle, world)
+                if TURNAROUND_ACTIVE:
+                    # 折返模式: 保持原换车重置 (论文外模式, 行为不变)
+                    # _reset_vehicle 先生成新车再销毁旧车，失败时旧车保持可用、循环继续推进
+                    for _reset_attempt in range(3):
+                        try:
+                            vehicle, agent, camera, cam_transform, imu, collision_sensor = \
+                                _reset_vehicle(world, bp_lib, vehicle, spawn_points,
+                                               sensor_queue, camera, imu,
+                                               collision_sensor)
+                            stagnant_count = 0
+                            prev_throttle = 0.0   # 重置时清空平滑状态
+                            prev_brake = 0.0
+                            # 双向折返模式: 重置会随机重投放并劫持目的地,
+                            # 送回双向起点、折返状态归零, 重新出发(保持折返轨迹干净)
+                            if (start_loc is not None
+                                    and TURNAROUND_BIDIR_START is not None):
                                 try:
-                                    _old_agent.destroy()
-                                except Exception:
-                                    pass
-                                agent.set_destination(start_loc['out_dest'])
-                                print(f"[TURNAROUND] 重置后送回起点 "
-                                      f"({_sx},{_sy})，重新出发")
-                            except Exception as _e:
-                                print(f"[WARN] 折返重置回送失败: {_e}")
-                        print(f"[OK] 重置完成 (第{_reset_attempt + 1}次尝试)")
+                                    _m = world.get_map()
+                                    _sx, _sy = TURNAROUND_BIDIR_START
+                                    _wps = _m.get_waypoint(
+                                        carla.Location(_sx, _sy, 0.0),
+                                        project_to_road=True)
+                                    _wp0 = (_wps[0]
+                                            if isinstance(_wps, (list, tuple))
+                                            else _wps)
+                                    _tf = _wp0.transform
+                                    _tf.location.z += 0.1   # 同初始投放: 路面内部高度修正
+                                    vehicle.set_transform(_tf)
+                                    wait_vehicle_deploy(vehicle, _tf.location)
+                                    start_loc['phase'] = 'out'
+                                    start_loc['relay_idx'] = 0
+                                    _old_agent = agent
+                                    agent = make_fresh_agent(vehicle, world)
+                                    try:
+                                        _old_agent.destroy()
+                                    except Exception:
+                                        pass
+                                    agent.set_destination(start_loc['out_dest'])
+                                    print(f"[TURNAROUND] 重置后送回起点 "
+                                          f"({_sx},{_sy})，重新出发")
+                                except Exception as _e:
+                                    print(f"[WARN] 折返重置回送失败: {_e}")
+                            print(f"[OK] 重置完成 (第{_reset_attempt + 1}次尝试)")
+                            break
+                        except Exception as e:
+                            print(f"[ERROR] 重置失败 (第{_reset_attempt + 1}/3 次): {e}")
+                            time.sleep(2.0)
+                else:
+                    # 自由驾驶: 原位恢复 (新 agent + 新目的地, 车辆原地不动,
+                    # 数据连续无传送); 连续 4 次恢复失败 → 放弃本次运行 (rc=2)
+                    recover_streak += 1
+                    last_recover_idx = img_idx
+                    if recover_streak >= 4:
+                        print(f"[FATAL] 连续 {recover_streak} 次原位恢复失败, "
+                              f"放弃本次采集 (rc=2, 监督器备份后全新重采)")
+                        run_aborted = True
                         break
+                    try:
+                        _old_agent = agent
+                        agent = make_fresh_agent(vehicle, world)
+                        _dest = select_forward_destination(vehicle, spawn_points)
+                        agent.set_destination(_dest)
+                        validate_agent_path(agent, vehicle, spawn_points, world)
+                        try:
+                            _old_agent.destroy()
+                        except Exception:
+                            pass
+                        collision_sensor.reset_collision_count()
+                        stagnant_count = 0
+                        prev_throttle = 0.0
+                        prev_brake = 0.0
+                        print(f"[OK] 原位恢复完成 (连续 {recover_streak}/4), "
+                              f"新目的地 ({_dest.x:.1f},{_dest.y:.1f})")
                     except Exception as e:
-                        print(f"[ERROR] 重置失败 (第{_reset_attempt + 1}/3 次): {e}")
+                        print(f"[ERROR] 原位恢复失败: {e}")
                         time.sleep(2.0)
 
             # 视角（失败不影响采集主流程）
@@ -3128,8 +3170,9 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
         import traceback
         traceback.print_exc()
     finally:
-        # ---- 补帧兜底: 提前退出时用最后已知状态补写到 MAX_SAVE_IMG 行; 折返模式跳过(补帧会伪造静止段污染GT/EKF) ----
-        if img_idx < MAX_SAVE_IMG and not TURNAROUND_ACTIVE:
+        # ---- 补帧兜底: 提前退出时用最后已知状态补写到 MAX_SAVE_IMG 行; 折返模式跳过(补帧会伪造静止段污染GT/EKF);
+        #      主动放弃(run_aborted)跳过 — 补满 5001 行会被监督器误判"跑满"而接受污染数据 ----
+        if img_idx < MAX_SAVE_IMG and not TURNAROUND_ACTIVE and not run_aborted:
             print(f"[BACKFILL] 采集在 {img_idx}/{MAX_SAVE_IMG} 帧处结束，补写数据文件...")
             try:
                 try:
@@ -3205,6 +3248,11 @@ def main(headless=False, host=DEFAULT_CARLA_HOST, port=DEFAULT_CARLA_PORT):
             cv2.destroyAllWindows()
 
         print("资源清理完成")
+
+        if run_aborted:
+            print(f"[ABORT] 运行放弃 (停滞无法恢复), 数据不完整 ({img_idx} 帧), "
+                  f"监督器将备份后全新重采")
+            sys.exit(2)
 
         # 写入元数据
         try:
@@ -3285,8 +3333,12 @@ class _ReplayImu:
         self.gyroscope = _ReplayVec(gx, gy, gz)
 
 
-def replay(data_dir):
-    """离线复算 EKF 融合（不依赖 CARLA 运行时状态），返回融合 ATE (m)。"""
+def replay(data_dir, depth_file=None, deadband=None):
+    """离线复算 EKF 融合（不依赖 CARLA 运行时状态），返回融合 ATE (m)。
+
+    depth_file: 指定深度尺度文件路径 (默认 <data_dir>/depth_scale.txt);
+    deadband: 覆盖 DEPTH_SCALE_DEADBAND (log 域, P2 A/B 扫参用)。
+    """
     import pandas as pd
     gt = pd.read_csv(os.path.join(data_dir, 'ground_truth.txt'))
     vo = pd.read_csv(os.path.join(data_dir, 'visual_odometry.txt'))
@@ -3299,7 +3351,11 @@ def replay(data_dir):
 
     init_pose = [float(gt.iloc[0][c]) for c in ('pos_x', 'pos_y', 'pos_z',
                                                 'roll', 'pitch', 'yaw')]
-    ds_file = os.path.join(data_dir, 'depth_scale.txt')
+    if deadband is not None:
+        global DEPTH_SCALE_DEADBAND
+        DEPTH_SCALE_DEADBAND = float(deadband)
+        print(f"[REPLAY] 覆盖 DEPTH_SCALE_DEADBAND = {DEPTH_SCALE_DEADBAND}")
+    ds_file = depth_file or os.path.join(data_dir, 'depth_scale.txt')
     ekf = EKF_VIO(init_pose, [0.0, 0.0, 0.0], dt=0.05,
                   depth_scale_file=ds_file if os.path.exists(ds_file) else None)
 
@@ -3453,6 +3509,11 @@ if __name__ == "__main__":
                          help='离线复算 EKF 融合（不采集）：在指定数据目录的 '
                               'ground_truth/visual_odometry/aligned_imu 上重跑，'
                               '覆盖 fusion_pose.txt 并打印三方法指标')
+    _parser.add_argument('--replay-depth-file', type=str, default=None, metavar='PATH',
+                         help='replay: 指定深度尺度文件 (默认 <data_dir>/depth_scale.txt; '
+                              '指向不存在路径 = 禁用深度支路)')
+    _parser.add_argument('--replay-deadband', type=float, default=None, metavar='LOG',
+                         help='replay: 覆盖深度尺度死区 DEPTH_SCALE_DEADBAND (log 域, 默认 0.35)')
     _parser.add_argument('--fresh', action='store_true',
                          help='全新采集（监督器首轮透传）。注: 本采集器无断点续采, '
                               '每次启动都从第0帧重采, 旧目录在 step 11 备份后清空重跑')
@@ -3463,7 +3524,9 @@ if __name__ == "__main__":
     _args = _parser.parse_args()
 
     if _args.replay:
-        sys.exit(0 if replay(_args.replay) is not None else 1)
+        sys.exit(0 if replay(_args.replay,
+                             depth_file=_args.replay_depth_file,
+                             deadband=_args.replay_deadband) is not None else 1)
 
     # 根据命令行参数覆盖地图和输出目录
     TARGET_MAP = _args.map

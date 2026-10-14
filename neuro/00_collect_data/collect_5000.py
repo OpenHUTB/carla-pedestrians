@@ -280,6 +280,17 @@ def main():
         now_frames = count_frames(out_dir)
         print(f'[RUN {attempts}] 结束: status={status}, rc={rc}, 进度 {now_frames}/{MAX_FRAMES}')
 
+        if rc == 2 and now_frames < MAX_FRAMES:
+            # 采集器主动放弃 (停滞无法恢复, 2026-10-14 车流 GT 传送修复):
+            # 部分数据不可断点续采 (续采会在断点引入新 spawn 跳变), 备份后全新重采
+            if now_frames > 0:
+                bak = out_dir + '_aborted_' + time.strftime('%Y%m%d_%H%M%S')
+                os.rename(out_dir, bak)
+                os.makedirs(out_dir, exist_ok=True)
+                print(f'[ABORT] 采集放弃 (rc=2), 部分数据备份至 {bak}, 下轮全新采集')
+            else:
+                print(f'[ABORT] 采集放弃 (rc=2), 无有效数据, 下轮全新采集')
+
         if now_frames >= MAX_FRAMES:
             print(f'[OK] 第 {attempts} 轮跑满 {MAX_FRAMES} 帧，监督结束')
             break
