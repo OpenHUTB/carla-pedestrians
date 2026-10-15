@@ -1,0 +1,213 @@
+{
+  "Town05Data_IMU_Fusion": {
+    "gt_len_m": 485.6,
+    "VO": {
+      "se3_rmse": 53.86,
+      "se3_drift": 16.34,
+      "sim3_rmse": 48.26,
+      "sim3_drift": 24.16,
+      "sim3_fitted_scale": 1.5497
+    },
+    "EKF": {
+      "se3_rmse": 49.4,
+      "se3_drift": 10.43,
+      "sim3_rmse": 44.44,
+      "sim3_drift": 13.26,
+      "sim3_fitted_scale": 1.4459
+    },
+    "EKF+尺度": {
+      "se3_rmse": 33.26,
+      "se3_drift": 4.39,
+      "sim3_rmse": 20.1,
+      "sim3_drift": 4.66,
+      "sim3_fitted_scale": 1.4913
+    },
+    "NLM-闭环线": {
+      "se3_rmse": 46.37,
+      "se3_drift": 11.26,
+      "sim3_rmse": 41.14,
+      "sim3_drift": 14.3,
+      "sim3_fitted_scale": 1.4229
+    },
+    "NLM-全系统": {
+      "se3_rmse": 32.67,
+      "se3_drift": 4.51,
+      "sim3_rmse": 18.07,
+      "sim3_drift": 4.58,
+      "sim3_fitted_scale": 1.5069
+    },
+    "ORB-only": {
+      "se3_rmse": 49.58,
+      "se3_drift": 10.39,
+      "sim3_rmse": 44.72,
+      "sim3_drift": 13.18,
+      "sim3_fitted_scale": 1.4421
+    }
+  },
+  "Town03Data_IMU_Fusion": {
+    "gt_len_m": 473.5,
+    "VO": {
+      "se3_rmse": 49.15,
+      "se3_drift": 17.2,
+      "sim3_rmse": 49.1,
+      "sim3_drift": 17.59,
+      "sim3_fitted_scale": 0.9496
+    },
+    "EKF": {
+      "se3_rmse": 23.53,
+      "se3_drift": 5.03,
+      "sim3_rmse": 23.36,
+      "sim3_drift": 5.14,
+      "sim3_fitted_scale": 0.9566
+    },
+    "EKF+尺度": {
+      "se3_rmse": 17.47,
+      "se3_drift": 0.59,
+      "sim3_rmse": 16.07,
+      "sim3_drift": 3.44,
+      "sim3_fitted_scale": 1.1193
+    },
+    "NLM-闭环线": {
+      "se3_rmse": 23.05,
+      "se3_drift": 4.98,
+      "sim3_rmse": 22.91,
+      "sim3_drift": 5.03,
+      "sim3_fitted_scale": 0.9617
+    },
+    "NLM-全系统": {
+      "se3_rmse": 17.31,
+      "se3_drift": 0.24,
+      "sim3_rmse": 15.31,
+      "sim3_drift": 4.11,
+      "sim3_fitted_scale": 1.1433
+    },
+    "ORB-only": {
+      "se3_rmse": 23.05,
+      "se3_drift": 4.98,
+      "sim3_rmse": 22.91,
+      "sim3_drift": 5.03,
+      "sim3_fitted_scale": 0.9617
+    }
+  },
+  "Town07Data_IMU_Fusion": {
+    "gt_len_m": 617.9,
+    "VO": {
+      "se3_rmse": 50.13,
+      "se3_drift": 14.83,
+      "sim3_rmse": 50.07,
+      "sim3_drift": 14.35,
+      "sim3_fitted_scale": 0.9501
+    },
+    "EKF": {
+      "se3_rmse": 42.85,
+      "se3_drift": 17.43,
+      "sim3_rmse": 40.64,
+      "sim3_drift": 12.82,
+      "sim3_fitted_scale": 0.8032
+    },
+    "EKF+尺度": {
+      "se3_rmse": 29.21,
+      "se3_drift": 13.92,
+      "sim3_rmse": 27.9,
+      "sim3_drift": 11.57,
+      "sim3_fitted_scale": 0.879
+    },
+    "NLM-闭环线": {
+      "se3_rmse": 42.87,
+      "se3_drift": 18.86,
+      "sim3_rmse": 39.49,
+      "sim3_drift": 13.17,
+      "sim3_fitted_scale": 0.7715
+    },
+    "NLM-全系统": {
+      "se3_rmse": 31.51,
+      "se3_drift": 15.22,
+      "sim3_rmse": 28.75,
+      "sim3_drift": 11.65,
+      "sim3_fitted_scale": 0.8289
+    },
+    "ORB-only": {
+      "se3_rmse": 41.87,
+      "se3_drift": 17.55,
+      "sim3_rmse": 39.99,
+      "sim3_drift": 13.28,
+      "sim3_fitted_scale": 0.8188
+    }
+  },
+  "Town10HDData_IMU_Fusion": {
+    "gt_len_m": 452.3,
+    "VO": {
+      "se3_rmse": 58.04,
+      "se3_drift": 16.63,
+      "sim3_rmse": 35.86,
+      "sim3_drift": 15.58,
+      "sim3_fitted_scale": 1.9393
+    },
+    "EKF": {
+      "se3_rmse": 57.38,
+      "se3_drift": 19.0,
+      "sim3_rmse": 18.61,
+      "sim3_drift": 1.57,
+      "sim3_fitted_scale": 0.6461
+    },
+    "EKF+尺度": {
+      "se3_rmse": 49.89,
+      "se3_drift": 13.4,
+      "sim3_rmse": 14.44,
+      "sim3_drift": 2.92,
+      "sim3_fitted_scale": 1.918
+    },
+    "NLM-闭环线": {
+      "se3_rmse": 57.38,
+      "se3_drift": 19.01,
+      "sim3_rmse": 18.61,
+      "sim3_drift": 1.57,
+      "sim3_fitted_scale": 0.646
+    },
+    "NLM-全系统": {
+      "se3_rmse": 49.88,
+      "se3_drift": 13.4,
+      "sim3_rmse": 14.44,
+      "sim3_drift": 2.92,
+      "sim3_fitted_scale": 1.9179
+    },
+    "ORB-only": {
+      "se3_rmse": 57.38,
+      "se3_drift": 19.01,
+      "sim3_rmse": 18.61,
+      "sim3_drift": 1.57,
+      "sim3_fitted_scale": 0.646
+    }
+  },
+  "KITTI07Data_IMU_Fusion": {
+    "gt_len_m": 692.1,
+    "VO": {
+      "se3_rmse": 38.35,
+      "se3_drift": 13.74,
+      "sim3_rmse": 27.84,
+      "sim3_drift": 9.86,
+      "sim3_fitted_scale": 0.7668
+    },
+    "EKF": {
+      "se3_rmse": 30.45,
+      "se3_drift": 11.21,
+      "sim3_rmse": 22.09,
+      "sim3_drift": 8.33,
+      "sim3_fitted_scale": 0.8083
+    },
+    "NLM-闭环线": {
+      "se3_rmse": 29.99,
+      "se3_drift": 13.09,
+      "sim3_rmse": 18.45,
+      "sim3_drift": 9.71,
+      "sim3_fitted_scale": 0.7905
+    },
+    "ORB-only": {
+      "se3_rmse": 29.82,
+      "se3_drift": 11.74,
+      "sim3_rmse": 21.45,
+      "sim3_drift": 8.77,
+      "sim3_fitted_scale": 0.8103
+    }
+  }
+}
