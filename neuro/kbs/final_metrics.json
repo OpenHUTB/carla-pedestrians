@@ -42,8 +42,8 @@
       "gt_len_m": 617.9,
       "frames": 5000,
       "nlm": {
-        "rmse": 41.73,
-        "drift": 13.33
+        "rmse": 39.49,
+        "drift": 13.17
       },
       "ekf": {
         "rmse": 40.64,
@@ -55,14 +55,14 @@
       },
       "exp_nodes": 270,
       "templates": 270,
-      "loop_edges": 8
+      "loop_edges": 7
     },
     "Town10HDData_IMU_Fusion": {
       "gt_len_m": 452.3,
       "frames": 5000,
       "nlm": {
-        "rmse": 19.43,
-        "drift": 1.97
+        "rmse": 18.61,
+        "drift": 1.57
       },
       "ekf": {
         "rmse": 18.61,
@@ -74,14 +74,14 @@
       },
       "exp_nodes": 481,
       "templates": 481,
-      "loop_edges": 2
+      "loop_edges": 1
     },
     "KITTI07Data_IMU_Fusion": {
       "gt_len_m": 692.1,
       "frames": 1101,
       "nlm": {
-        "rmse": 21.48,
-        "drift": 9.98
+        "rmse": 18.45,
+        "drift": 9.71
       },
       "ekf": {
         "rmse": 22.09,
@@ -93,7 +93,7 @@
       },
       "exp_nodes": 964,
       "templates": 964,
-      "loop_edges": 13
+      "loop_edges": 11
     }
   }
 }
