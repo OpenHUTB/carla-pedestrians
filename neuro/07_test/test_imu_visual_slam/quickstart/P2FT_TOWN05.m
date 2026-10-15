@@ -49,7 +49,7 @@ RESULT_SUBDIR = 'slam_results_p2ft';
 global NLM_USE_PR PR_SIM_THRESHOLD PR_LOOP_RADIUS PR_ARC_GAP PR_MIN_GAP PR_EMB_FILE;
 NLM_USE_PR = true;
 PR_EMB_FILE = 'pr_embeddings_ft.mat';
-PR_SIM_THRESHOLD = 0.9;      % v2 微调甜点 (CARLA 同分布 P: 5%->75%)
+PR_SIM_THRESHOLD = 0.94;     % τ定解 (2026-10-14 五集A/B: 4胜1平0负, 杀假环0.907-0.935/留强真环0.949+)
 PR_LOOP_RADIUS = 1e9;        % 距离门禁用 (漂移/压缩地图上不可靠, 靠嵌入精度+朝向/长间隔门)
 PR_ARC_GAP = 50;
 PR_MIN_GAP = 30;

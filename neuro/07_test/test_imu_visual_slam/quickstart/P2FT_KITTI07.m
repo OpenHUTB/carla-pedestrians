@@ -24,7 +24,7 @@ RESULT_SUBDIR = 'slam_results_p2ft';
 global NLM_USE_PR PR_SIM_THRESHOLD PR_LOOP_RADIUS PR_ARC_GAP PR_MIN_GAP PR_EMB_FILE;
 NLM_USE_PR = true;
 PR_EMB_FILE = 'pr_embeddings_ft.mat';
-PR_SIM_THRESHOLD = 0.9;
+PR_SIM_THRESHOLD = 0.94;     % τ定解 (2026-10-14 五集A/B: 4胜1平0负, 杀假环0.907-0.935/留强真环0.949+)
 PR_LOOP_RADIUS = 1e9;
 PR_ARC_GAP = 50;
 PR_MIN_GAP = 30;
