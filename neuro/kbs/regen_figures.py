@@ -31,6 +31,13 @@ C_GRAY = '#888888'
 
 
 # ---------------- 数据加载 ----------------
+# 2026-10-16 定调: 论文主形态 = NLM 全系统 (EKF+尺度+闭环)。
+# CARLA 4 集 NLM 轨迹源优先 slam_results_scale_nlm (全系统), 回退 slam_results (闭环线);
+# KITTI07 无全系统 (零样本尺度支路失效), 保持闭环线 slam_results。
+def _nlm_dirs(ds):
+    return ('slam_results',) if ds == 'KITTI07' else ('slam_results_scale_nlm', 'slam_results')
+
+
 def load_pos(path, poscols=None):
     with open(path) as f:
         first = f.readline().strip()
@@ -70,13 +77,18 @@ def procrustes_7dof(gt, est):
 def load_ds(ds):
     sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
-    nlm_txt = _result_file(sub, 'exp_trajectory.txt', required=False)
+    nlm_txt = None
+    for d in _nlm_dirs(ds):
+        p = f'{sub}/{d}/exp_trajectory.txt'
+        if os.path.exists(p):
+            nlm_txt = p
+            break
     if nlm_txt is not None:
         nlm = load_pos(nlm_txt)
     else:
-        # 2026-10-14: 新 run 产物为 trajectories.mat (变量 exp_trajectory), P2 定解口径
+        # 新 run 产物为 trajectories.mat (变量 exp_trajectory), P2 定解口径
         nlm = None
-        for d in ('slam_results_p2ft', 'slam_results', 'dc_final'):
+        for d in _nlm_dirs(ds):
             mp = f'{sub}/{d}/trajectories.mat'
             if os.path.exists(mp):
                 nlm = np.array(loadmat(mp)['exp_trajectory'], dtype=float)
@@ -142,7 +154,14 @@ def _mat_field(E, name):
 
 def load_map(ds):
     sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
-    m = loadmat(_result_file(sub, 'experiences.mat'))
+    m = None
+    for d in _nlm_dirs(ds):
+        p = f'{sub}/{d}/experiences.mat'
+        if os.path.exists(p):
+            m = loadmat(p)
+            break
+    if m is None:
+        m = loadmat(_result_file(sub, 'experiences.mat'))
     E = m['EXPERIENCES']
     E = E[0] if E.ndim > 1 else E
     n = len(E)
@@ -327,16 +346,27 @@ def fig_ablation(ta, tb, mpa):
     fig, axes = plt.subplots(1, 2, figsize=(483 / 72, 240 / 72), dpi=300)
     fs = 8.5
 
-    # (a) Ablation bars on Town05
+    # (a) Town05 组件消融 (全系统时代 5 成分, sim3_full 口径)
     ax = axes[0]
-    cats = ['Full', 'w/o IMU', 'w/o ExpMap']
-    vals = [ta['nlm_rmse'], ta['vo_rmse'], ta['ekf_rmse']]
-    cols = [C_NLM, C_VO, C_EKF]
-    bars = ax.bar(cats, vals, color=cols, edgecolor='k', linewidth=0.5, width=0.55)
+    sub5 = f'{ROOT}/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion'
+    comps = [('Full\n(EKF+scale+loop)', ta['nlm'])]
+    _ekfs = load_pos(f'{ROOT}/_p11_backup_20261014/Town05/fp_head030.txt')  # EKF+尺度 replay (无闭环)
+    comps += [('w/o loop\n(EKF+scale)', _ekfs),
+              ('w/o scale\n(loop only)', load_pos(f'{sub5}/slam_results/exp_trajectory.txt')),
+              ('EKF', ta['ekf']), ('VO', ta['vo'])]
+    cats, vals, cols = [], [], []
+    for i, (lab, T) in enumerate(comps):
+        A, _ = procrustes_7dof(ta['gt'], T)
+        n = min(len(ta['gt']), len(A))
+        rmse = float(np.sqrt((np.linalg.norm(A[:n] - ta['gt'][:n], axis=1) ** 2).mean()))
+        cats.append(lab); vals.append(rmse)
+        cols.append([C_NLM, '#7FB2D5', '#B9A5D6', C_EKF, C_VO][i])
+    bars = ax.bar(cats, vals, color=cols, edgecolor='k', linewidth=0.5, width=0.6)
     for b, v in zip(bars, vals):
         ax.text(b.get_x() + b.get_width() / 2, v + 0.6, f'{v:.1f} m', ha='center', fontsize=fs)
     ax.set_ylabel('RMSE (m)', fontsize=fs)
-    ax.set_title(f'(a) Ablation RMSE on Town05 ({ta["len_m"]:.0f} m)', fontsize=fs + 0.5)
+    ax.set_title(f'(a) Component Ablation on Town05 ({ta["len_m"]:.0f} m)', fontsize=fs + 0.5)
+    ax.tick_params(axis='x', labelsize=fs - 1.5)
     ax.set_ylim(0, max(vals) * 1.15)
     style_ax(ax, fs)
 
