@@ -64,6 +64,34 @@ def sim3_scale(res, ref):
     return float((S @ np.array([1, 1, d])) / (ec ** 2).sum())
 
 
+def procrustes_7dof(gt, est):
+    """管线 7-DoF Procrustes (与 regen_table.py 同口径): 把 est 映射到 gt 坐标系。
+    返回 (对齐后 est, 尺度 s, 逐帧误差)。ATE=RMSE(逐帧误差) 应与 final_metrics 主表一致。"""
+    n = min(len(gt), len(est)); gt, est = gt[:n], est[:n]
+    gs = gt - gt.mean(0); es = est - est.mean(0)
+    U, S, Vt = np.linalg.svd(gs.T @ es)
+    D = np.diag([1, 1, np.sign(np.linalg.det(U @ Vt))])
+    R = U @ D @ Vt
+    s = S.sum() / max(np.sum(es ** 2), 1e-12)
+    t = gt.mean(0) - (s * R) @ est.mean(0)
+    est_a = (s * (R @ est.T)).T + t
+    return est_a, s, np.linalg.norm(est_a - gt, axis=1)
+
+
+def per_frame_err(res, ref):
+    """逐帧位移幅值误差 |‖Δres‖-‖Δref‖| 与 GT 逐帧位移 (官方 RTE 分子/分母)。"""
+    n = min(len(res), len(ref))
+    dr = np.linalg.norm(np.diff(res[:n], axis=0), axis=1)
+    df = np.linalg.norm(np.diff(ref[:n], axis=0), axis=1)
+    return np.abs(dr - df), df
+
+
+def rte_excl(e, df, k):
+    """剔除误差最大的 k 个帧后的 RTE%。"""
+    m = np.ones(len(e), bool); m[np.argsort(e)[::-1][:k]] = False
+    return float(e[m].mean() / df[m].mean() * 100)
+
+
 base = sys.argv[1] if len(sys.argv) > 1 else \
     '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/'
 if not base.endswith('/'):
@@ -77,14 +105,27 @@ cfg = {
     'NLM+尺度': loadmat(base, 'slam_results_scale_nlm/trajectories.mat', 'exp_trajectory'),
 }
 print(f'== {os.path.basename(base.rstrip("/"))}  GT {len(gt)} 帧, 长度 {L:.1f}m ==')
-print(f"{'配置':14s} {'帧数':>7s} {'RTE(%)':>9s} {'|s-1|地板':>10s} {'sim3 s':>8s}   诊断(meanΔgt/meanΔres, m/帧)")
+print(f"{'配置':14s} {'帧数':>7s} {'RTE%(无对齐)':>13s} {'RTE%(Sim3对齐)':>15s} {'ATE(Sim3)m':>11s} {'sim3 s':>8s}")
 for name, traj in cfg.items():
     if traj is None:
         print(f'{name:14s}   (MISSING)')
         continue
     r, mref, mres = rte(traj, gt); s = sim3_scale(traj, gt)
-    print(f'{name:14s} {len(traj):7d} {r:9.2f} {abs(s - 1) * 100:9.2f}% {s:8.4f}   '
-          f'(gt {mref:.4f} / res {mres:.4f}, 比值 {mres / mref:.3f})')
+    est_a, s7, d7 = procrustes_7dof(gt, traj)
+    ate = float(np.sqrt((d7 ** 2).mean())); r7, _, _ = rte(est_a, gt)
+    print(f'{name:14s} {len(traj):7d} {r:13.2f} {r7:15.2f} {ate:11.2f} {s7:8.4f}   '
+          f'(meanΔgt {mref:.4f} / meanΔres {mres:.4f}, 比值 {mres / mref:.3f})')
+
+print()
+print('== 对齐后 RTE 离群帧诊断 (剔除误差最大 top-k 帧; 判定系统性逐帧漂移 vs 少量脏帧) ==')
+for name, traj in cfg.items():
+    if traj is None:
+        continue
+    est_a, _, _ = procrustes_7dof(gt, traj)
+    e, df = per_frame_err(est_a, gt)
+    full = float(e.mean() / df.mean() * 100)
+    excl = '  '.join(f'剔top-{k}={rte_excl(e, df, k):6.2f}%' for k in (5, 10, 20, 50))
+    print(f'{name:14s} 完整={full:7.2f}%  最大单帧={e.max():7.1f}m  {excl}')
 print()
 print('参考 (官方相对平移误差): SOFT2(st) 0.53% | SOFT-SLAM(st) 0.65% |')
 print('  VINS-Fusion(st) 1.09% | ORB-SLAM2(st) 1.15% | MonoROCC 1.11% | MonoDepth2 12.59%')
