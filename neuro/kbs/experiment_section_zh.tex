@@ -202,6 +202,38 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
     \label{fig:kitti_input_output}
 \end{figure*}
 
+\textbf{与经典 VIO/SLAM 基线对比.} 为把 NeuroLocMap 放到内部 EKF/VO 基线之外的参照系中，表~\ref{tab:external} 采用 KITTI 里程计官方指标——相对轨迹误差（RTE：100--800~m 子段上逐帧平移漂移的均值，以行进距离的 \% 计；属逐帧里程计指标，区别于表~\ref{tab:results} 中的末端/长度漂移率）——将其与已发表的视觉、视觉-惯性与 SLAM 系统对比。已发表数值为各系统报告的 KITTI 里程计基准结果；我们的数值在序列 07 上以两种协议实测。
+
+\begin{table}[!t]
+    \centering
+    \setlength{\tabcolsep}{4pt}
+    \footnotesize
+    \caption{KITTI 里程计基准上已发表基线对比。RTE：相对轨迹误差（\% 行进距离）；ATE：序列 07 上 7 自由度 Sim(3) 对齐后 RMSE（m）。}
+    \label{tab:external}
+    \begin{threeparttable}
+        \begin{tabular}{@{}l l c c@{}}
+            \toprule
+            方法 & 传感器 & RTE (\%) & ATE (m) \\
+            \midrule
+            SOFT-SLAM~\cite{Cvisic2017}       & 立体     & 0.65  & --- \\
+            VINS-Fusion~\cite{VinsFusion2018} & 立体+IMU & 1.09  & --- \\
+            ORB-SLAM2~\cite{MurArtal2017}     & 立体     & 1.15  & --- \\
+            MonoDepth2~\cite{Godard2021}      & 单目     & 12.59 & --- \\
+            \midrule
+            NeuroLocMap（EKF 核） & 单目+IMU & 94.7 / 72.1  & 22.09 \\
+            NeuroLocMap（全系统） & 单目+IMU & 101.1 / 75.2 & \textbf{18.45} \\
+            \bottomrule
+        \end{tabular}
+        \begin{tablenotes}
+            \scriptsize
+            \item 已发表 RTE：各系统报告的 KITTI 里程计基准值；立体系统尺度自洽，MonoDepth2（输出即为度量深度的学习深度网络）是唯一的纯单目条目。
+            \item NeuroLocMap RTE 在序列 07 上：原始（未对齐）/ 7 自由度 Sim(3) 对齐后。ATE：Sim(3) 对齐 RMSE。
+        \end{tablenotes}
+    \end{threeparttable}
+\end{table}
+
+两个诚实的观察。其一，所有尺度自洽的已发表系统 RTE 均低于 1.2\%：立体几何内在地固定了尺度，唯一的单目条目是输出即为度量深度的学习深度网络。相比之下，NeuroLocMap 是单目+IMU 且无外部尺度参考，补充材料 S.1 节表明在真实 KITTI 图像上全局尺度不可从运动恢复；原始 RTE（94.7/101.1\%）由这一单一全局偏移主导（轨迹长度为 GT 的 1.9 倍），因此与尺度自洽系统不可比。其二，即使在最有利的单目协议下——7 自由度 Sim(3) 对齐消除全局尺度——逐帧 RTE（72.1/75.2\%）仍远高于已发表数值，剔除逐帧误差最大的 50 帧后仍剩 38.2/46.9\%。残差是系统性逐帧尺度漂移，即同一不可恢复全局尺度（补充材料 S.1 节）的逐帧投影：它属于 up-to-scale VIO 核的性质，而非本文贡献的闭环/尺度恢复层。该贡献可见之处在全局一致性：KITTI~07 上闭环线将 EKF 核的对齐 ATE 从 22.09~m 降至 18.45~m（$-$16.5\%），四个 CARLA 城镇上全系统将 EKF 的 ATE 最多削减 59.3\%（表~\ref{tab:results}）。NeuroLocMap 最宜读作 up-to-scale VIO 核之上的闭环与全局一致性层，而非与尺度自洽立体系统逐帧竞争的单目里程计。
+
 \textbf{与学习方法对比.} 与学习型 SLAM 方法（DROID-SLAM~\cite{teed2021droid}、TartanVO~\cite{wang2021tartanvo}、DeepVO~\cite{wang2017deepvo}）的直接定量对比受限于根本不同的评估协议与训练需求：这些方法需要大规模训练数据（如 TartanVO 训练于 100 万帧）、GPU 密集推理与面向部署的领域特定微调。在数据可得处我们提供语境化对比：
 
 \begin{itemize}

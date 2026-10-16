@@ -211,6 +211,38 @@ Figure~\ref{fig:kitti_input_output} visualizes the framework's input-output rela
     \label{fig:kitti_input_output}
 \end{figure*}
 
+\textbf{Comparison with Classical VIO/SLAM Baselines.} To situate NeuroLocMap beyond the internal EKF/VO baselines, Table~\ref{tab:external} compares it with published visual, visual-inertial, and SLAM systems using the official KITTI odometry metric, the relative trajectory error (RTE): the mean per-frame translation drift over 100--800~m subsequences, in \% of traversed distance (a per-frame odometry metric, distinct from the terminal/length drift rate reported in Table~\ref{tab:results}). Published values are the KITTI odometry benchmark figures reported by each system; our values are measured on sequence~07 under two protocols.
+
+\begin{table}[!t]
+    \centering
+    \setlength{\tabcolsep}{4pt}
+    \footnotesize
+    \caption{Comparison with published baselines on the KITTI odometry benchmark. RTE: relative trajectory error (\% of traversed distance); ATE: 7-DoF Sim(3)-aligned RMSE on sequence 07 (m).}
+    \label{tab:external}
+    \begin{threeparttable}
+        \begin{tabular}{@{}l l c c@{}}
+            \toprule
+            Method & Sensors & RTE (\%) & ATE (m) \\
+            \midrule
+            SOFT-SLAM~\cite{Cvisic2017}       & stereo     & 0.65  & --- \\
+            VINS-Fusion~\cite{VinsFusion2018} & stereo+IMU & 1.09  & --- \\
+            ORB-SLAM2~\cite{MurArtal2017}     & stereo     & 1.15  & --- \\
+            MonoDepth2~\cite{Godard2021}      & monocular  & 12.59 & --- \\
+            \midrule
+            NeuroLocMap (EKF core)  & mono+IMU & 94.7 / 72.1  & 22.09 \\
+            NeuroLocMap (full)      & mono+IMU & 101.1 / 75.2 & \textbf{18.45} \\
+            \bottomrule
+        \end{tabular}
+        \begin{tablenotes}
+            \scriptsize
+            \item Published RTE: KITTI odometry benchmark values as reported by each system; stereo systems are intrinsically scale-consistent, and MonoDepth2 (a learned depth network with metric output) is the only purely monocular entry.
+            \item NeuroLocMap RTE on sequence 07: raw (unaligned) / after 7-DoF Sim(3) alignment. ATE: Sim(3)-aligned RMSE.
+        \end{tablenotes}
+    \end{threeparttable}
+\end{table}
+
+Two honest observations follow. First, every scale-consistent published system sits below 1.2\% RTE: stereo geometry fixes the scale intrinsically, and the sole monocular entry is a learned depth network whose output is already metric. NeuroLocMap, by contrast, is monocular plus IMU with no external scale reference, and Supplementary Section~S.1 shows that on real KITTI imagery the global scale is not recoverable from motion; the raw RTE (94.7/101.1\%) is dominated by this single global offset (the trajectory spans 1.9$\times$ the GT length) and is therefore not comparable to scale-consistent systems. Second, even under the most favorable monocular protocol --- a 7-DoF Sim(3) alignment that removes the global scale --- the per-frame RTE (72.1/75.2\%) remains far above the published figures, and excluding the 50 largest per-frame errors still leaves 38.2/46.9\%. The residual is a systematic per-frame scale drift, the per-frame projection of the same unrecoverable global scale (Supplementary Section~S.1): a property of the up-to-scale VIO core, not of the loop-closure / scale-recovery layer this paper contributes. Where that contribution is visible is global consistency: on KITTI~07 the loop-closure line reduces the EKF core's aligned ATE from 22.09~m to 18.45~m ($-$16.5\%), and across the four CARLA towns the full system reduces the EKF's ATE by up to 59.3\% (Table~\ref{tab:results}). NeuroLocMap is best read as a loop-closure and global-consistency layer on top of an up-to-scale VIO core, rather than a per-frame odometry competitor to scale-consistent stereo systems.
+
 \textbf{Comparison with Learning-Based Methods.} Direct quantitative comparison with learning-based SLAM methods (DROID-SLAM~\cite{teed2021droid}, TartanVO~\cite{wang2021tartanvo}, DeepVO~\cite{wang2017deepvo}) is challenging due to fundamentally different evaluation protocols and training requirements. These methods require large-scale training datasets (e.g., TartanVO trained on 1M frames), GPU-intensive inference, and do\-main-spe\-cif\-ic fine-tuning for deployment. Nevertheless, we provide contextual comparison where data is available:
 
 \begin{itemize}
