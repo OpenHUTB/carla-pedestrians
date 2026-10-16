@@ -62,7 +62,7 @@ SEQUENCES = {
         "K": K_CARLA, "carla": True, "img": r"(\d+)\.png",
     },
     "KITTI07": {
-        "dir": BASE / "KITTI_07",
+        "dir": BASE / "_kitti07_newraw",   # [2026-10-15] 新真VIO VO (旧 BASE/"KITTI_07" 为合成管线)
         "gt": "ground_truth_ekf.txt", "vo": "visual_odometry_ekf.txt", "imu": None,
         "K": K_KITTI, "carla": False, "img": r"(\d+)\.png",
         "img_dir": "image_0", "img_fmt": "{:06d}", "img_off": 0,
