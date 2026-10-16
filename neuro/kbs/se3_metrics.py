@@ -17,7 +17,7 @@ import numpy as np, pandas as pd, scipy.io as sio, json, os
 D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/'
 BK = '/home/yangrb/openhutb/neuro/data/_p11_backup_20261014/'
 SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
-        'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion']
+        'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion', 'KITTI09Data_IMU_Fusion']
 SHORT = {'Town05Data_IMU_Fusion': 'Town05', 'Town03Data_IMU_Fusion': 'Town03',
          'Town07Data_IMU_Fusion': 'Town07', 'Town10HDData_IMU_Fusion': 'Town10HD'}
 

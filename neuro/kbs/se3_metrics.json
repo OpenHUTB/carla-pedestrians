@@ -209,5 +209,29 @@
       "sim3_drift": 8.77,
       "sim3_fitted_scale": 0.8103
     }
+  },
+  "KITTI09Data_IMU_Fusion": {
+    "gt_len_m": 1705.1,
+    "VO": {
+      "se3_rmse": 211.74,
+      "se3_drift": 17.81,
+      "sim3_rmse": 206.28,
+      "sim3_drift": 20.16,
+      "sim3_fitted_scale": 2.0551
+    },
+    "EKF": {
+      "se3_rmse": 54.77,
+      "se3_drift": 8.28,
+      "sim3_rmse": 42.34,
+      "sim3_drift": 6.74,
+      "sim3_fitted_scale": 1.1853
+    },
+    "NLM-闭环线": {
+      "se3_rmse": 54.63,
+      "se3_drift": 8.28,
+      "sim3_rmse": 42.37,
+      "sim3_drift": 6.75,
+      "sim3_fitted_scale": 1.1836
+    }
   }
 }
