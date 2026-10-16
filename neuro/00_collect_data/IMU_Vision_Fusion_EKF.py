@@ -3333,11 +3333,12 @@ class _ReplayImu:
         self.gyroscope = _ReplayVec(gx, gy, gz)
 
 
-def replay(data_dir, depth_file=None, deadband=None):
+def replay(data_dir, depth_file=None, deadband=None, dt=0.05):
     """离线复算 EKF 融合（不依赖 CARLA 运行时状态），返回融合 ATE (m)。
 
     depth_file: 指定深度尺度文件路径 (默认 <data_dir>/depth_scale.txt);
-    deadband: 覆盖 DEPTH_SCALE_DEADBAND (log 域, P2 A/B 扫参用)。
+    deadband: 覆盖 DEPTH_SCALE_DEADBAND (log 域, P2 A/B 扫参用);
+    dt: IMU 积分步长 (默认 0.05=CARLA 20Hz; KITTI 约 0.104s)。
     """
     import pandas as pd
     gt = pd.read_csv(os.path.join(data_dir, 'ground_truth.txt'))
@@ -3356,7 +3357,7 @@ def replay(data_dir, depth_file=None, deadband=None):
         DEPTH_SCALE_DEADBAND = float(deadband)
         print(f"[REPLAY] 覆盖 DEPTH_SCALE_DEADBAND = {DEPTH_SCALE_DEADBAND}")
     ds_file = depth_file or os.path.join(data_dir, 'depth_scale.txt')
-    ekf = EKF_VIO(init_pose, [0.0, 0.0, 0.0], dt=0.05,
+    ekf = EKF_VIO(init_pose, [0.0, 0.0, 0.0], dt=dt,
                   depth_scale_file=ds_file if os.path.exists(ds_file) else None)
 
     vo_rows = vo[['vo_x', 'vo_y', 'vo_z', 'roll', 'pitch', 'yaw']].values[:n]
@@ -3514,6 +3515,8 @@ if __name__ == "__main__":
                               '指向不存在路径 = 禁用深度支路)')
     _parser.add_argument('--replay-deadband', type=float, default=None, metavar='LOG',
                          help='replay: 覆盖深度尺度死区 DEPTH_SCALE_DEADBAND (log 域, 默认 0.35)')
+    _parser.add_argument('--replay-dt', type=float, default=0.05, metavar='SEC',
+                         help='replay: IMU 积分步长 (默认 0.05=CARLA 20Hz; KITTI=0.104)')
     _parser.add_argument('--fresh', action='store_true',
                          help='全新采集（监督器首轮透传）。注: 本采集器无断点续采, '
                               '每次启动都从第0帧重采, 旧目录在 step 11 备份后清空重跑')
@@ -3526,7 +3529,8 @@ if __name__ == "__main__":
     if _args.replay:
         sys.exit(0 if replay(_args.replay,
                              depth_file=_args.replay_depth_file,
-                             deadband=_args.replay_deadband) is not None else 1)
+                             deadband=_args.replay_deadband,
+                             dt=_args.replay_dt) is not None else 1)
 
     # 根据命令行参数覆盖地图和输出目录
     TARGET_MAP = _args.map
