@@ -25,6 +25,7 @@ SETS = {
     'Town07Data_IMU_Fusion': dict(pad=4, base=1),
     'Town10HDData_IMU_Fusion': dict(pad=4, base=1),
     'KITTI07Data_IMU_Fusion': dict(pad=6, base=0),
+    'KITTI09Data_IMU_Fusion': dict(pad=6, base=0),
 }
 
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
