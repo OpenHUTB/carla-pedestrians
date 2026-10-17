@@ -96,7 +96,7 @@ without IMU fusion or loop closure. We additionally report
         \begin{tablenotes}
             \scriptsize
             \item Bold = best of the four configurations in that caliber. NeuroLocMap beats the EKF on all five scenarios under both calibers (Sim(3) $+$16.5\% to $+$59.3\%; SE(3) $+$1.5\% to $+$33.9\%) and monocular VO on all five (Sim(3) $+$33.7\% to $+$68.8\%).
-            \item Drift rates (terminal error / length): NeuroLocMap 2.9--11.7\% (Sim(3)) and 0.2--15.2\% (SE(3)), versus 1.6--13.3\% and 5.0--19.0\% for the EKF and 9.9--24.2\% and 13.7--17.2\% for VO.
+            \item Drift rates (terminal error / length): NeuroLocMap 1.6--14.3\% (Sim(3)) and 0.2--15.2\% (SE(3)), versus 1.6--13.3\% and 5.0--19.0\% for the EKF and 9.9--24.2\% and 13.7--17.2\% for VO.
             \item n/a: the zero-shot scale head is not deployed on KITTI~07 (real-image domain gap; Supplementary Section~S.1); the KITTI result is the loop-closure line over the EKF core. On Town07 the scale branch alone is strongest (loop contribution $+0.85$~m); elsewhere the full system is best.
         \end{tablenotes}
     \end{threeparttable}
@@ -224,6 +224,7 @@ Figure~\ref{fig:kitti_input_output} visualizes the framework's input-output rela
             \toprule
             Method & Sensors & RTE (\%) & ATE (m) \\
             \midrule
+            SOFT2~\cite{cvisic2023soft2}      & stereo     & 0.53  & --- \\
             SOFT-SLAM~\cite{Cvisic2017}       & stereo     & 0.65  & --- \\
             VINS-Fusion~\cite{VinsFusion2018} & stereo+IMU & 1.09  & --- \\
             ORB-SLAM2~\cite{MurArtal2017}     & stereo     & 1.15  & --- \\
@@ -236,6 +237,7 @@ Figure~\ref{fig:kitti_input_output} visualizes the framework's input-output rela
         \begin{tablenotes}
             \scriptsize
             \item Published RTE: KITTI odometry benchmark values as reported by each system; stereo systems are intrinsically scale-consistent, and MonoDepth2 (a learned depth network with metric output) is the only purely monocular entry.
+            \item SOFT2 is the current top entry on the official KITTI odometry leaderboard; its 0.53\% submission uses recalibrated camera parameters.
             \item NeuroLocMap RTE on sequence 07: raw (unaligned) / after 7-DoF Sim(3) alignment. ATE: Sim(3)-aligned RMSE.
         \end{tablenotes}
     \end{threeparttable}
@@ -243,10 +245,10 @@ Figure~\ref{fig:kitti_input_output} visualizes the framework's input-output rela
 
 Two honest observations follow. First, every scale-consistent published system sits below 1.2\% RTE: stereo geometry fixes the scale intrinsically, and the sole monocular entry is a learned depth network whose output is already metric. NeuroLocMap, by contrast, is monocular plus IMU with no external scale reference, and Supplementary Section~S.1 shows that on real KITTI imagery the global scale is not recoverable from motion; the raw RTE (94.7/101.1\%) is dominated by this single global offset (the trajectory spans 1.9$\times$ the GT length) and is therefore not comparable to scale-consistent systems. Second, even under the most favorable monocular protocol --- a 7-DoF Sim(3) alignment that removes the global scale --- the per-frame RTE (72.1/75.2\%) remains far above the published figures, and excluding the 50 largest per-frame errors still leaves 38.2/46.9\%. The residual is a systematic per-frame scale drift, the per-frame projection of the same unrecoverable global scale (Supplementary Section~S.1): a property of the up-to-scale VIO core, not of the loop-closure / scale-recovery layer this paper contributes. Where that contribution is visible is global consistency: on KITTI~07 the loop-closure line reduces the EKF core's aligned ATE from 22.09~m to 18.45~m ($-$16.5\%), and across the four CARLA towns the full system reduces the EKF's ATE by up to 59.3\% (Table~\ref{tab:results}). NeuroLocMap is best read as a loop-closure and global-consistency layer on top of an up-to-scale VIO core, rather than a per-frame odometry competitor to scale-consistent stereo systems.
 
-\textbf{Comparison with Learning-Based Methods.} Direct quantitative comparison with learning-based SLAM methods (DROID-SLAM~\cite{teed2021droid}, TartanVO~\cite{wang2021tartanvo}, DeepVO~\cite{wang2017deepvo}) is challenging due to fundamentally different evaluation protocols and training requirements. These methods require large-scale training datasets (e.g., TartanVO trained on 1M frames), GPU-intensive inference, and do\-main-spe\-cif\-ic fine-tuning for deployment. Nevertheless, we provide contextual comparison where data is available:
+\textbf{Comparison with Learning-Based Methods.} Direct quantitative comparison with learning-based SLAM methods (DROID-SLAM~\cite{teed2021droid}, TartanVO~\cite{wang2021tartanvo}, DeepVO~\cite{wang2017deepvo}) is challenging due to fundamentally different evaluation protocols and training requirements. These methods require large-scale training datasets (e.g., TartanVO trained on the large-scale synthetic TartanAir benchmark), GPU-intensive inference, and do\-main-spe\-cif\-ic fine-tuning for deployment. Nevertheless, we provide contextual comparison where data is available:
 
 \begin{itemize}
-    \item \textbf{Accuracy}: DeepVO reports 10.2\% drift on KITTI~07, where NeuroLocMap achieves 9.71\%. TartanVO achieves 2--3\% drift on CARLA but with extensive training. NeuroLocMap attains 2.9--11.7\% drift across the five test scenarios with its learned components trained once on simulation only.
+    \item \textbf{Accuracy}: published values use the official KITTI subsegment drift rate (trel), a different protocol from our terminal/length drift, so each is reported under its own protocol. DeepVO, trained on real KITTI sequences, reports 3.91\% trel on sequence~07; TartanVO, trained purely on synthetic data and transferred to KITTI without fine-tuning, reports 4.32\% trel on the same sequence. NeuroLocMap, with its learned components trained once on simulation and deployed zero-shot, attains 9.71\% terminal/length drift on KITTI~07 (1.6--14.3\% across the five test scenarios, Table~\ref{tab:results}).
 
     \item \textbf{Computational Efficiency}: DROID-SLAM achieves state-of-the-art accuracy but runs at 4--5~FPS (slower than NeuroLocMap's $\sim$31~FPS), limiting real-time deployment on embedded platforms.
 

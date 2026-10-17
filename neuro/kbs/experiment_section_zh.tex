@@ -87,7 +87,7 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
         \begin{tablenotes}
             \scriptsize
             \item 加粗 = 该口径下四种配置最优。NeuroLocMap 在两种口径下于全部五个场景上优于 EKF（Sim(3) $+$16.5\% 至 $+$59.3\%；SE(3) $+$1.5\% 至 $+$33.9\%），并在全部五个场景上优于单目VO（Sim(3) $+$33.7\% 至 $+$68.8\%）。
-            \item 漂移率（末端误差/长度）：NeuroLocMap 2.9--11.7\%（Sim(3)）与 0.2--15.2\%（SE(3)）；EKF 为 1.6--13.3\% 与 5.0--19.0\%；VO 为 9.9--24.2\% 与 13.7--17.2\%。
+            \item 漂移率（末端误差/长度）：NeuroLocMap 1.6--14.3\%（Sim(3)）与 0.2--15.2\%（SE(3)）；EKF 为 1.6--13.3\% 与 5.0--19.0\%；VO 为 9.9--24.2\% 与 13.7--17.2\%。
             \item n/a：零样本尺度头未部署于 KITTI~07（真实图像域差距；补充材料 S.1 节），KITTI 结果为 EKF 核之上的闭环线。Town07 上仅尺度支路最强（闭环贡献 $+0.85$~m）；其余场景全系统最优。
         \end{tablenotes}
     \end{threeparttable}
@@ -215,6 +215,7 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
             \toprule
             方法 & 传感器 & RTE (\%) & ATE (m) \\
             \midrule
+            SOFT2~\cite{cvisic2023soft2}    & 立体     & 0.53  & --- \\
             SOFT-SLAM~\cite{Cvisic2017}       & 立体     & 0.65  & --- \\
             VINS-Fusion~\cite{VinsFusion2018} & 立体+IMU & 1.09  & --- \\
             ORB-SLAM2~\cite{MurArtal2017}     & 立体     & 1.15  & --- \\
@@ -227,6 +228,7 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
         \begin{tablenotes}
             \scriptsize
             \item 已发表 RTE：各系统报告的 KITTI 里程计基准值；立体系统尺度自洽，MonoDepth2（输出即为度量深度的学习深度网络）是唯一的纯单目条目。
+            \item SOFT2 为官方 KITTI 里程计榜当前榜首；其 0.53\% 提交使用重新标定的相机参数。
             \item NeuroLocMap RTE 在序列 07 上：原始（未对齐）/ 7 自由度 Sim(3) 对齐后。ATE：Sim(3) 对齐 RMSE。
         \end{tablenotes}
     \end{threeparttable}
@@ -234,10 +236,10 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
 
 两个诚实的观察。其一，所有尺度自洽的已发表系统 RTE 均低于 1.2\%：立体几何内在地固定了尺度，唯一的单目条目是输出即为度量深度的学习深度网络。相比之下，NeuroLocMap 是单目+IMU 且无外部尺度参考，补充材料 S.1 节表明在真实 KITTI 图像上全局尺度不可从运动恢复；原始 RTE（94.7/101.1\%）由这一单一全局偏移主导（轨迹长度为 GT 的 1.9 倍），因此与尺度自洽系统不可比。其二，即使在最有利的单目协议下——7 自由度 Sim(3) 对齐消除全局尺度——逐帧 RTE（72.1/75.2\%）仍远高于已发表数值，剔除逐帧误差最大的 50 帧后仍剩 38.2/46.9\%。残差是系统性逐帧尺度漂移，即同一不可恢复全局尺度（补充材料 S.1 节）的逐帧投影：它属于 up-to-scale VIO 核的性质，而非本文贡献的闭环/尺度恢复层。该贡献可见之处在全局一致性：KITTI~07 上闭环线将 EKF 核的对齐 ATE 从 22.09~m 降至 18.45~m（$-$16.5\%），四个 CARLA 城镇上全系统将 EKF 的 ATE 最多削减 59.3\%（表~\ref{tab:results}）。NeuroLocMap 最宜读作 up-to-scale VIO 核之上的闭环与全局一致性层，而非与尺度自洽立体系统逐帧竞争的单目里程计。
 
-\textbf{与学习方法对比.} 与学习型 SLAM 方法（DROID-SLAM~\cite{teed2021droid}、TartanVO~\cite{wang2021tartanvo}、DeepVO~\cite{wang2017deepvo}）的直接定量对比受限于根本不同的评估协议与训练需求：这些方法需要大规模训练数据（如 TartanVO 训练于 100 万帧）、GPU 密集推理与面向部署的领域特定微调。在数据可得处我们提供语境化对比：
+\textbf{与学习方法对比.} 与学习型 SLAM 方法（DROID-SLAM~\cite{teed2021droid}、TartanVO~\cite{wang2021tartanvo}、DeepVO~\cite{wang2017deepvo}）的直接定量对比受限于根本不同的评估协议与训练需求：这些方法需要大规模训练数据（如 TartanVO 训练于大规模合成基准 TartanAir）、GPU 密集推理与面向部署的领域特定微调。在数据可得处我们提供语境化对比：
 
 \begin{itemize}
-    \item \textbf{精度}：DeepVO 报告 KITTI~07 漂移 10.2\%，NeuroLocMap 为 9.71\%。TartanVO 在 CARLA 上达 2--3\% 漂移但依赖大规模训练。NeuroLocMap 的学习组件仅在仿真上训练一次，即在五个测试场景取得 2.9--11.7\% 漂移。
+    \item \textbf{精度}：已发表数值采用 KITTI 官方子段漂移率（trel），与本文末端/长度漂移口径不同，故各自按自身口径报告。DeepVO 在真实 KITTI 序列上训练，序列 07 报告 3.91\% trel；TartanVO 纯合成数据训练、无微调迁移至 KITTI，同一序列报告 4.32\% trel。NeuroLocMap 学习组件仅在仿真上训练一次、零样本部署，KITTI~07 末端/长度漂移 9.71\%（五个测试场景 1.6--14.3\%，表~\ref{tab:results}）。
 
     \item \textbf{计算效率}：DROID-SLAM 精度领先但仅 4--5~FPS（低于 NeuroLocMap 的 $\sim$31~FPS），限制嵌入式实时部署。
 
