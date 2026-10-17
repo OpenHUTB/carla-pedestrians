@@ -113,9 +113,9 @@ The dual streams are then integrated through a lightweight global-local feature 
 \textbf{Fixed-Gate LSTM for Zero-Shot Temporal Modeling.}
 Unlike conventional data-driven LSTMs that require extensive training on do\-main-spe\-cif\-ic datasets, our temporal module employs manually-tuned fixed gate values inspired by biological ves\-tib\-u\-lar-visual integration principles~\cite{Angelaki2004, Cullen2012}:
 \begin{align}
-    \text{Input gate: }  & i_t = 0.55 \quad \text{(controls new information intake)} \\
-    \text{Forget gate: } & f_t = 0.60 \quad \text{(retains 60\% historical context)} \\
-    \text{Output gate: } & o_t = 0.92 \quad \text{(emphasizes current perception)}
+    \text{Input gate: }  & i_t = 0.5 \quad \text{(controls new information intake)} \\
+    \text{Forget gate: } & f_t = 0.5 \quad \text{(retains 50\% historical context)} \\
+    \text{Output gate: } & o_t = 0.9 \quad \text{(emphasizes current perception)}
 \end{align}
 where $i_t$, $f_t$, $o_t$ represent fixed input gate, forget gate, output gate of bio-inspired LSTM module, respectively.
 
@@ -124,7 +124,7 @@ This design offers three critical advantages for SLAM applications:
 
 \textbf{(1) Zero-shot deployment capability:} No training data required, enabling immediate deployment in novel environments. This is crucial for SLAM where each environment presents unique visual characteristics and collecting representative training data is impractical. Our validation across six diverse scenarios (urban, highway, indoor) without any environment-specific tuning demonstrates robust generalization.
 
-\textbf{(2) Biological interpretability:} Gate values reflect em\-pir\-i\-cal\-ly-val\-i\-dat\-ed principles from neuroscience. The forget gate ($f_t=0.6$) implements short-term spatial memory retention consistent with hippocampal replay dynamics, where recent experiences are preferentially retained for path integration. The high output gate ($o_t=0.92$) prioritizes current sensory input, mimicking the ves\-tib\-u\-lar system's emphasis on immediate self-motion cues for balance and navigation. The moderate input gate ($i_t=0.55$) balances novelty detection with stability.
+\textbf{(2) Biological interpretability:} Gate values reflect em\-pir\-i\-cal\-ly-val\-i\-dat\-ed principles from neuroscience. The forget gate ($f_t=0.5$) implements short-term spatial memory retention consistent with hippocampal replay dynamics, where recent experiences are preferentially retained for path integration. The high output gate ($o_t=0.9$) prioritizes current sensory input, mimicking the ves\-tib\-u\-lar system's emphasis on immediate self-motion cues for balance and navigation. The moderate input gate ($i_t=0.5$) balances novelty detection with stability.
 
 \textbf{(3) Computational efficiency:} Eliminates training overhead (no backpropagation, no gradient computation) while maintaining real-time per\-for\-mance ($\sim$31 FPS). Fixed gates can be directly implemented in hardware (e.g., FPGAs, neuromorphic chips) without weight storage or update logic, enabling deployment on resource-constrained platforms.
 

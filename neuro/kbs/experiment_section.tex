@@ -10,7 +10,7 @@ We evaluate NeuroLocMap on five scenarios spanning simulated urban driving (CARL
 
 \subsection{Experimental Setup and Datasets}
 
-\textbf{Implementation Details.} All experiments are conducted on a laptop workstation equipped with an Intel Core i5-12450H CPU (12th Gen, 8~cores), 16~GB RAM, and NVIDIA GeForce RTX 4050 Laptop GPU. The visual processing pipeline leverages GPU acceleration for HART-like feature extraction and Trans\-form\-er-in\-spired encoding (using simplified self-attention via global statistical modulation), while spatial cell computations run on CPU. The LSTM temporal module uses manually-tuned fixed gate values (input=0.55, forget=0.6, output=0.92) rather than learned parameters. The framework achieves real-time per\-for\-mance at $\sim$31~FPS on average across all test scenarios.
+\textbf{Implementation Details.} All experiments are conducted on a laptop workstation equipped with an Intel Core i5-12450H CPU (12th Gen, 8~cores), 16~GB RAM, and NVIDIA GeForce RTX 4050 Laptop GPU. The visual processing pipeline leverages GPU acceleration for HART-like feature extraction and Trans\-form\-er-in\-spired encoding (using simplified self-attention via global statistical modulation), while spatial cell computations run on CPU. The LSTM temporal module uses manually-tuned fixed gate values (input=0.5, forget=0.5, output=0.9) rather than learned parameters. The framework achieves real-time per\-for\-mance at $\sim$31~FPS on average across all test scenarios.
 
 \textbf{Baseline Methods.} We compare NeuroLocMap against two baseline approaches:
 (1) EKF Fusion --- a loosely-coupled 10-state Extended Kalman Filter
