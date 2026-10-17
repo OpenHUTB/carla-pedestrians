@@ -40,7 +40,7 @@ In this formulation, $(x_t, y_t, z_t) \in \mathbb{R}^3$ represent global 3D tran
     \mathbf{X}_{t+1} = \mathcal{F}\big(\mathbf{X}_t,\, \mathbf{U}_t\big)
     \label{eq:state_evolution}
 \end{equation}
-The mapping $\mathcal{F}(\cdot)$ encapsulates the complete forward pipeline, including multi-scale visual feature extraction, inertial motion calculation, frequency-domain multimodal fusion and spatial network path integration. Detailed mathematical decomposition of $\mathcal{F}(\cdot)$ will be presented in Sec. 3.3 (visual-vestibular processing) and Sec. 3.4 (spatial encoding network).
+The mapping $\mathcal{F}(\cdot)$ encapsulates the complete forward pipeline, including multi-scale visual feature extraction, inertial motion calculation, frequency-domain multimodal fusion and spatial network path integration. Detailed mathematical decomposition of $\mathcal{F}(\cdot)$ is presented in Sections~\ref{sec:visual_cortex}--\ref{sec:fusion} (visual cortex, vestibular system, and complementary fusion) and Sections~\ref{sec:scale_recovery}--\ref{sec:loop_closure} (scale recovery and the spatial memory system).
 
 As visualized in Fig.~\ref{fig:system_overview}, the end-to-end data pipeline consists of five sequential coupled modules:
 1. Hierarchical dual-stream visual front-end: Parallel ventral/dorsal branches are constructed to independently generate scene descriptors and compute pixel-wise ego-motion, eliminating mutual interference between recognition and tracking tasks.
@@ -51,11 +51,10 @@ As visualized in Fig.~\ref{fig:system_overview}, the end-to-end data pipeline co
 
 \noindent Above this five-module pipeline, the deployed system adds two higher-level corrections that operate on the fused estimate rather than on the raw sensor streams: a monocular scale recovery branch (Section~\ref{sec:scale_recovery}) that drives the EKF's scale state from a lightweight, train-once head over a frozen depth foundation model, and a learned-embedding loop-closure line (Section~\ref{sec:loop_closure}) that re-anchors the trajectory at verified revisits. Both are trained once on simulated data and frozen at deployment --- in contrast to the baseline's kinematic scale observability, which plateaus at the VO-relative scale and recovers no absolute scale. Together they turn the tracking core from an up-to-scale VIO estimator into the metric-scale system evaluated in the experiments.
 
-\subsection{Sensory Processing and Fusion}
+\subsection{Visual Cortex: Ventral and Dorsal Pathways}
+\label{sec:visual_cortex}
 
-The sensory processing module extracts self-motion cues from visual and inertial modalities, then fuses them via complementary filtering.
-
-\textbf{Visual Front-End.} The visual front-end implements a biologically-plausible processing pipeline inspired by the hierarchical architecture of the primate visual cortex, transforming raw RGB images into compact scene descriptors suitable for place recognition and motion estimation.
+The visual front-end --- neuroanatomically, the dual ventral (``what'') and dorsal (``where'') streams of the visual cortex --- implements a biologically-plausible processing pipeline inspired by the hierarchical architecture of the primate visual cortex, transforming raw RGB images into compact scene descriptors suitable for place recognition and motion estimation.
 
 \textbf{Hierarchical Feature Extraction.} Given an RGB image $I_t\in\mathbb{R}^{H\times W\times 3}$, we define a sequence of operators that mimic processing stages from retina through inferotemporal cortex.
 
@@ -176,7 +175,10 @@ where $\lambda_i$ is inverse depth of feature point $i$, matrix $\mathbf{A}_i$ i
 
 Beyond this motion stream, the dorsal front-end also provides the pixel-level metric depth field $\hat z_t$ (frozen DAv2 backbone) and the learned scene embeddings $\boldsymbol{e}_t$ consumed by the two higher-level corrections (Section~\ref{sec:scale_recovery}); depth estimation and scene recognition stay decoupled from the velocity estimation above.
 
-\textbf{Ves\-tib\-u\-lar Front-End.} The ves\-tib\-u\-lar front-end processes inertial measurements to extract self-motion cues analogous to the mammalian ves\-tib\-u\-lar system. The ves\-tib\-u\-lar apparatus comprises semicircular canals (angular velocity) and otolith organs (linear acceleration).
+\subsection{Vestibular System}
+\label{sec:vestibular}
+
+The vestibular front-end processes inertial measurements to extract self-motion cues analogous to the mammalian ves\-tib\-u\-lar system. The ves\-tib\-u\-lar apparatus comprises semicircular canals (angular velocity) and otolith organs (linear acceleration).
 
 \textbf{Angular Velocity Extraction.} From the gyroscope measurements $\mathbf{g}_t\in\mathbb{R}^3$ (IMU frame), we directly use the $z$-axis gyro without online bias removal, converting to degrees per second as in our implementation. For 4-DoF lo\-cal\-i\-za\-tion-and-map\-ping under a planar constraint, the yaw (azimuthal) angular velocity is approximated by
 \begin{equation}
@@ -194,7 +196,10 @@ where $g=9.81\,\mathrm{m/s^2}$ is gravitational acceleration, $k_t, k_z$ are con
 
 \textbf{Bias Estimation.} The baseline implementation does not perform online bias or gravity-vector estimation. More advanced bias/gravity compensation can be integrated as future work, but is not required for the complementary-fusion results reported here.
 
-\textbf{Com\-ple\-men\-tary IMU--Visual Fusion.} Visual and inertial modalities provide complementary information: visual odometry offers accurate low-frequency position estimates but drifts over long horizons, while IMU integration provides reliable high-frequency motion cues but accumulates bias drift. Com\-ple\-men\-tary filtering exploits this frequency-domain separation to achieve robust fusion without requiring complex nonlinear optimization or Extended Kalman Filtering. Figure~\ref{fig:imu_visual_fusion} illustrates the frequency-domain characteristics of this complementary fusion strategy and its biological analog in ves\-tib\-u\-lar-visual integration.
+\subsection{Vestibular-Visual Complementary Fusion}
+\label{sec:fusion}
+
+Visual and inertial modalities provide complementary information: visual odometry offers accurate low-frequency position estimates but drifts over long horizons, while IMU integration provides reliable high-frequency motion cues but accumulates bias drift. Com\-ple\-men\-tary filtering exploits this frequency-domain separation to achieve robust fusion without requiring complex nonlinear optimization or Extended Kalman Filtering. Figure~\ref{fig:imu_visual_fusion} illustrates the frequency-domain characteristics of this complementary fusion strategy and its biological analog in ves\-tib\-u\-lar-visual integration.
 
 \begin{figure*}[!t]
     \centering
@@ -246,9 +251,37 @@ Additionally, the visual odometry scale factor $\kappa_t$ in Eq.~\eqref{eq:vis_s
 \end{equation}
 where $\beta \ll 1$ is a small adaptation gain for online visual odometry scale correction (e.g., $\beta=0.01$). This online scale adaptation compensates for systematic errors in the assumed ground plane depth or camera calibration inaccuracies.
 
-\subsection{Neural Spatial Representation}
+\subsection{Monocular Scale Recovery Branch}
+\label{sec:scale_recovery}
 
-The spatial representation module encodes the robot's 4-DoF pose through bio-inspired neural coordinate systems using conjunctive pose cells. The 3D location $(x, y, z)$ is represented by grid cells using a 3D continuous attractor network (MD-CAN), while orientation $\psi$ (yaw) is encoded by multilayered head direction cells. These representations enable stable, noise-tolerant path integration through attractor dynamics.
+\textbf{Problem.} The 10th EKF state $\log s$ converges online from turn kinematics, which are observable only in turning frames (294/1101 frames on KITTI~07) and, by construction, recover only the \emph{VO-relative} scale --- the absolute scale between the visual frame and the metric world remains unrecoverable from inertial motion alone. Monocular metric-depth networks offer an independent cue, but their zero-shot predictions carry a scene-dependent bias (a preliminary study showed the raw depth scale to be unreliable across scenes), so raw depth cannot serve directly as a scale observation. Rather than trusting the depth network, we learn a lightweight \emph{calibration} that maps depth-statistics features to the true global scale: trained once on simulation, frozen at deployment.
+
+\textbf{Structure.} For each frame $t$, let $\hat z_t$ denote the metric depth map predicted by a frozen monocular depth foundation model (Depth-Anything-V2, outdoor head). We summarize it into an 8-dimensional feature vector
+\begin{equation}
+    \mathbf{f}_t = \big[\log \hat s^{\,\mathrm{dav2}}_t,\ \log d^{\mathrm{med}}_t,\ \log (d^{\mathrm{std}}_t{+}\epsilon),\ \log d^{\mathrm{p10}}_t,\ \log d^{\mathrm{p90}}_t,\ \log (\hat s^{\,\mathrm{inl}}_t{+}1),\ f_x/W,\ 1\big]^{\top},
+    \label{eq:scale_feat}
+\end{equation}
+where $\hat s^{\,\mathrm{dav2}}_t$ is the windowed-median zero-shot depth scale estimate (VO displacement over median metric depth over the inter-frame interval), $d^{\mathrm{med}}, d^{\mathrm{p10}}, d^{\mathrm{p90}}, d^{\mathrm{std}}$ are the metric-depth median, percentiles, and standard deviation, $\hat s^{\,\mathrm{inl}}_t$ is the feature-inlier-consistent scale, and $f_x/W$ encodes the camera geometry. A windowed median ($W{=}50$ intervals) smooths each feature. The scale head $g_\theta$ is a compact MLP $8{\to}64{\to}64{\to}1$ (ReLU, ${\sim}4.8$k parameters) predicting the log scale
+\begin{equation}
+    \hat \ell_t = g_\theta(\mathbf{f}_t) \;\approx\; \log s^{*}_t,
+    \label{eq:scale_head}
+\end{equation}
+supervised, during training only, by the per-interval ground-truth scale
+\begin{equation}
+    \ell^{*}_t = \log \frac{\lVert \mathbf{p}^{*}_t - \mathbf{p}^{*}_{t-1} \rVert}{\lVert \mathbf{p}_t - \mathbf{p}_{t-1} \rVert},
+    \label{eq:scale_sup}
+\end{equation}
+where $\mathbf{p}^{*}$ are ground-truth metric positions (available in simulation) and $\mathbf{p}$ the VO positions.
+
+\textbf{Train-Once Protocol.} The head is optimized on three simulated towns (Town05/03/07) with Adam (learning rate $10^{-3}$, weight decay $10^{-3}$), MSE loss on standardized features, and early stopping on a held-out split ($10\%$); the feature standardization is frozen together with the weights. A fourth town (Town10HD) is held out entirely, and no real-world data is seen. After training, \emph{all parameters are frozen}: there is no per-sequence calibration and no online adaptation at deployment --- the head is used as-is on every test sequence.
+
+\textbf{Gated Integration.} The prediction $\hat s_t = \exp(g_\theta(\mathbf{f}_t))$ enters the EKF as the scale-branch observation in the log domain: it (i) replaces the depth-median initialization of $\log s$ when the branch activates, (ii) persistently pulls the scale state through a chi-square-gated update with a log-domain dead band, and (iii) suppresses the kinematic scale observation while active, so the two scale evidences do not fight. The correction is deliberately \emph{scale-only}: it adjusts the 10th state and, through it, the visual-velocity observations --- it never rewrites position or attitude directly, so a wrong scale prediction degrades gracefully rather than corrupting the fused trajectory.
+
+\textbf{Zero-Shot Behavior and Honest Limits.} Within the simulation domain the learned mapping generalizes across scenes --- including the held-out town --- and outperforms an ordinary-least-squares calibration baseline on all five evaluation sequences. Across the sim-to-real boundary, however, the mapping does not transfer: on KITTI~07 the head predicts a scale correction in the wrong direction ($s\approx0.3$ where the route requires $\approx1.8$), and deploying it degrades the EKF (Supplementary Section~S.1 quantifies this failure). All real-world results in this paper therefore run without the scale branch --- an honest limitation we return to in the experiments. The head's computational cost is negligible: ${\sim}4.8$k parameters and sub-millisecond CPU inference per frame, outside the 31-FPS critical path; the frozen depth backbone is evaluated asynchronously and cached.
+
+\subsection{Entorhinal Cortex: Grid Cells and Head Direction Cells}
+
+The spatial representation module --- neuroanatomically, the entorhinal cortex, whose grid cells and head-direction cells provide the brain's metric coordinate system --- encodes the robot's 4-DoF pose through bio-inspired neural coordinate systems using conjunctive pose cells. The 3D location $(x, y, z)$ is represented by grid cells using a 3D continuous attractor network (MD-CAN), while orientation $\psi$ (yaw) is encoded by multilayered head direction cells. These representations enable stable, noise-tolerant path integration through attractor dynamics.
 
 \textbf{3D Grid Cell Network.} The 3D grid cell network mimics the 3D spatial neural representation in the mammalian brain, exhibiting regular 3D lattice patterns (face-centered cubic, FCC) that encode position and provide a universal metric for path integration. Inspired by the discovery of 3D grid cells in bats~\cite{finkelstein2016three} and theoretical models of hexagonal grid structures~\cite{hafting2005microstructure}, our implementation extends 2D continuous attractor networks to full 3D space while preserving key biological properties: multi-scale representation, metric path integration, and resilience to noise.
 
@@ -329,38 +362,10 @@ where $\gamma_\psi$ converts angular velocity to azimuth bins, and $\gamma_h$ ma
 \end{align}
 This decoding naturally handles the circular topology of orientation (using $\mathrm{\mathrm{atan2}}$ to avoid angle wrapping issues) and provides sub-bin resolution for position through the weighted average.
 
-\subsection{Monocular Scale Recovery Branch}
-\label{sec:scale_recovery}
-
-\textbf{Problem.} The 10th EKF state $\log s$ converges online from turn kinematics, which are observable only in turning frames (294/1101 frames on KITTI~07) and, by construction, recover only the \emph{VO-relative} scale --- the absolute scale between the visual frame and the metric world remains unrecoverable from inertial motion alone. Monocular metric-depth networks offer an independent cue, but their zero-shot predictions carry a scene-dependent bias (a preliminary study showed the raw depth scale to be unreliable across scenes), so raw depth cannot serve directly as a scale observation. Rather than trusting the depth network, we learn a lightweight \emph{calibration} that maps depth-statistics features to the true global scale: trained once on simulation, frozen at deployment.
-
-\textbf{Structure.} For each frame $t$, let $\hat z_t$ denote the metric depth map predicted by a frozen monocular depth foundation model (Depth-Anything-V2, outdoor head). We summarize it into an 8-dimensional feature vector
-\begin{equation}
-    \mathbf{f}_t = \big[\log \hat s^{\,\mathrm{dav2}}_t,\ \log d^{\mathrm{med}}_t,\ \log (d^{\mathrm{std}}_t{+}\epsilon),\ \log d^{\mathrm{p10}}_t,\ \log d^{\mathrm{p90}}_t,\ \log (\hat s^{\,\mathrm{inl}}_t{+}1),\ f_x/W,\ 1\big]^{\top},
-    \label{eq:scale_feat}
-\end{equation}
-where $\hat s^{\,\mathrm{dav2}}_t$ is the windowed-median zero-shot depth scale estimate (VO displacement over median metric depth over the inter-frame interval), $d^{\mathrm{med}}, d^{\mathrm{p10}}, d^{\mathrm{p90}}, d^{\mathrm{std}}$ are the metric-depth median, percentiles, and standard deviation, $\hat s^{\,\mathrm{inl}}_t$ is the feature-inlier-consistent scale, and $f_x/W$ encodes the camera geometry. A windowed median ($W{=}50$ intervals) smooths each feature. The scale head $g_\theta$ is a compact MLP $8{\to}64{\to}64{\to}1$ (ReLU, ${\sim}4.8$k parameters) predicting the log scale
-\begin{equation}
-    \hat \ell_t = g_\theta(\mathbf{f}_t) \;\approx\; \log s^{*}_t,
-    \label{eq:scale_head}
-\end{equation}
-supervised, during training only, by the per-interval ground-truth scale
-\begin{equation}
-    \ell^{*}_t = \log \frac{\lVert \mathbf{p}^{*}_t - \mathbf{p}^{*}_{t-1} \rVert}{\lVert \mathbf{p}_t - \mathbf{p}_{t-1} \rVert},
-    \label{eq:scale_sup}
-\end{equation}
-where $\mathbf{p}^{*}$ are ground-truth metric positions (available in simulation) and $\mathbf{p}$ the VO positions.
-
-\textbf{Train-Once Protocol.} The head is optimized on three simulated towns (Town05/03/07) with Adam (learning rate $10^{-3}$, weight decay $10^{-3}$), MSE loss on standardized features, and early stopping on a held-out split ($10\%$); the feature standardization is frozen together with the weights. A fourth town (Town10HD) is held out entirely, and no real-world data is seen. After training, \emph{all parameters are frozen}: there is no per-sequence calibration and no online adaptation at deployment --- the head is used as-is on every test sequence.
-
-\textbf{Gated Integration.} The prediction $\hat s_t = \exp(g_\theta(\mathbf{f}_t))$ enters the EKF as the scale-branch observation in the log domain: it (i) replaces the depth-median initialization of $\log s$ when the branch activates, (ii) persistently pulls the scale state through a chi-square-gated update with a log-domain dead band, and (iii) suppresses the kinematic scale observation while active, so the two scale evidences do not fight. The correction is deliberately \emph{scale-only}: it adjusts the 10th state and, through it, the visual-velocity observations --- it never rewrites position or attitude directly, so a wrong scale prediction degrades gracefully rather than corrupting the fused trajectory.
-
-\textbf{Zero-Shot Behavior and Honest Limits.} Within the simulation domain the learned mapping generalizes across scenes --- including the held-out town --- and outperforms an ordinary-least-squares calibration baseline on all five evaluation sequences. Across the sim-to-real boundary, however, the mapping does not transfer: on KITTI~07 the head predicts a scale correction in the wrong direction ($s\approx0.3$ where the route requires $\approx1.8$), and deploying it degrades the EKF (Supplementary Section~S.1 quantifies this failure). All real-world results in this paper therefore run without the scale branch --- an honest limitation we return to in the experiments. The head's computational cost is negligible: ${\sim}4.8$k parameters and sub-millisecond CPU inference per frame, outside the 31-FPS critical path; the frozen depth backbone is evaluated asynchronously and cached.
-
-\subsection{Experience Map and Loop Closure}
+\subsection{Hippocampal Experience Map and Loop Closure}
 \label{sec:loop_closure}
 
-The multilayered experience map represents 3D spatial experiences as a graph structure, providing a hybrid topological-metric representation that combines the benefits of discrete place-based maps (topological robustness, loop closure) and continuous metric representations (accurate localization).
+In the brain, the hippocampus links place representations into episodic memories of traversed space, and their replay and re-consolidation underpin memory-guided navigation. The multilayered experience map mirrors this organization: it represents 3D spatial experiences as a graph structure, providing a hybrid topological-metric representation that combines the benefits of discrete place-based maps (topological robustness, loop closure) and continuous metric representations (accurate localization).
 
 \textbf{Experience Representation.} Each experience node $\mathcal{E}_i$ encodes a distinct spatial episode comprising the active visual template and descriptor $(VT_i,\,\boldsymbol{\phi}_i\in\mathbb{R}^{4096})$, the concurrent spatial-cell codes $\mathbf{P}^{gc}_i=\mathbf{A}^\mathrm{g}_i\in\mathbb{R}^{N_x\times N_y\times N_z}$ and $\mathbf{P}^{hdc}_i=\mathbf{A}^\mathrm{h}_i\in\mathbb{R}^{N_\psi\times N_h}$, the metric pose $(x_i, y_i, z_i, \psi_i)$ decoded from these activities, and the timestamp $t_i$ for temporal ordering.
 This rich multimodal encoding enables robust loop closure detection through visual matching while maintaining metric information through the spatial cell codes.
@@ -463,4 +468,3 @@ with $\mathrm{win} = 250$ frames (self-calibrated by an offline window sweep) an
     \hat{\mathbf{p}}(f) = s\,(\mathbf{p}(f)\mathbf{R}) + \mathbf{t}, \qquad t_{\mathrm{now}} < f < t_{\mathrm{next}},
 \end{equation}
 applied independently per event on the pre-correction trajectory (non-chained, so one event's refit is not polluted by its predecessor's transform). Because each accepted loop is a genuine re-visit of the same physical location, the re-anchoring is a global consistency correction that uses no ground-truth information; on loop-free routes it is a strict no-op. On a dedicated closed-loop benchmark (an urban route crossing the same road segments at widely separated times), this full-Sim(3) re-anchoring recovers $9\times$ more of the accumulated global drift than the EKF baseline (44.24~m vs 398.05~m, anchored-Sim(3) caliber): the dominant global error accumulated between loops is the monocular scale error, which only the full similarity re-fit removes.
-
