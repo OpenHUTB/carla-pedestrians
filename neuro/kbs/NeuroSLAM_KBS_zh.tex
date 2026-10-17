@@ -18,6 +18,16 @@
 \usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
 \usepackage{url}
 \usepackage{xurl}
+% 浮动页顶对齐: 消除独页大图上下居中造成的大片留白
+\makeatletter
+\setlength{\@fptop}{0pt}
+\makeatother
+% 浮动参数: 大图优先作页顶浮动、正文填充图下空间, 独页浮动须占满 80% 页高
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.8}
+\renewcommand{\dblfloatpagefraction}{0.8}
 \usepackage{graphicx}
 \graphicspath{{fig/}}
 \usepackage{xcolor}
