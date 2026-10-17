@@ -70,7 +70,7 @@
 % TODO: 邮箱待定稿时填写（HUTB 邮箱域名应为 hutb.edu.cn）
 \IEEEauthorblockN{Haidong Wang, Caixia Ning}
 \IEEEauthorblockA{Hunan University of Technology and Business\\
-Changsha, 400210, China\\
+Changsha, 410205, China\\
 Email: xxx@hutb.edu.cn}
 }
 
@@ -81,7 +81,7 @@ Email: xxx@hutb.edu.cn}
 % 摘要
 \begin{abstract}
     \sloppy
-    Brain-inspired spatial cognition offers interpretable alternatives to opaque learning methods for autonomous localization. However, existing brain-inspired frameworks remain limited to 2D environments or simplified visual processing, lacking robust 3D spatial representations under challenging conditions. To address these limitations, this paper proposes NeuroLocMap, a brain-inspired localization-mapping framework extended to 4-DoF state estimation within 3D space, integrating vestibular-visual complementary fusion with hippocampal-entorhinal spatial representations. The framework comprises dual-stream visual processing (ventral for recognition, dorsal for motion), vestibular IMU modeling, 3D grid cells with face-centered cubic lattice for position encoding, and experience-based cognitive mapping for loop closure; on top of its 10-state EKF core, two higher-level corrections complete the system: an online, scale-only monocular correction (a lightweight head over a frozen depth foundation model, trained once on simulation and frozen at deployment) and a learned-embedding loop-closure line. Experiments on five scenarios spanning simulated urban driving (CARLA Town05/03/07/10HD) and real-world highway driving (KITTI~07) show that the full system outperforms the 10-state EKF visual-inertial baseline on \emph{all five scenarios under both evaluation calibers} --- by 16.5--59.3\% under a shape-only full-Sim(3) refit (an upper bound that absorbs global scale) and by 1.5--33.9\% under the stricter rigid SE(3) alignment, in which a wrong metric scale cannot be absorbed by the aligner --- and outperforms monocular visual odometry by 33.7--68.8\%. On a dedicated closed-loop benchmark, the experience-map re-anchoring recovers 9$\times$ more of the accumulated global drift than the EKF baseline (44.24~m vs 398.05~m anchored Sim(3)). The system runs in real time ($\sim$31 FPS on CPU), its learned components are trained once and deployed zero-shot, and it outputs an interpretable topological experience map, validating the framework's effectiveness for autonomous localization and mapping across diverse environments.
+    Brain-inspired spatial cognition offers interpretable alternatives to opaque learning methods for autonomous localization. However, existing brain-inspired frameworks remain limited to 2D environments or simplified visual processing, lacking robust 3D spatial representations under challenging conditions. We propose NeuroLocMap, a brain-inspired localization-mapping framework extended to 4-DoF state estimation within 3D space, integrating vestibular-visual complementary fusion with hippocampal-entorhinal spatial representations. The framework comprises dual-stream visual processing (ventral for recognition, dorsal for motion), vestibular IMU modeling, 3D grid cells with face-centered cubic lattice for position encoding, and experience-based cognitive mapping for loop closure; on top of its 10-state EKF core, two higher-level corrections complete the system: an online, scale-only monocular correction (a lightweight head over a frozen depth foundation model) and a learned-embedding loop-closure line. Experiments on five scenarios spanning simulated urban driving (CARLA Town05/03/07/10HD) and real-world highway driving (KITTI~07) show that the full system outperforms the 10-state EKF visual-inertial baseline on \emph{all five scenarios under both evaluation calibers} --- by 16.5--59.3\% under a shape-only full-Sim(3) refit (an upper bound that absorbs global scale) and by 1.5--33.9\% under the stricter rigid SE(3) alignment, where a wrong metric scale cannot be absorbed --- and outperforms monocular visual odometry by 33.7--68.8\%. On a dedicated closed-loop benchmark, the experience-map re-anchoring recovers 9$\times$ more of the accumulated global drift than the EKF baseline (44.24~m vs 398.05~m anchored Sim(3)). The system runs in real time ($\sim$31 FPS on CPU), its learned components are trained once and deployed zero-shot, and it outputs an interpretable topological experience map.
 \end{abstract}
 
 % IEEE标准关键词，逗号分隔，不用\sep
@@ -92,7 +92,7 @@ Brain-inspired localization-mapping, Vestibular-visual fusion, Hippocampal spati
 \section{Introduction}
 \label{sec:intro}
 
-Spatial localization and mapping in complex 3D environments is fundamental to autonomous driving, mobile robotics, and intelligent transportation systems~\cite{cadena2016past}. As the core sensing module of autonomous devices, SLAM directly supports all autonomous movement planning and execution. Modern practical approaches typically combine cameras, IMUs, and sometimes GNSS to achieve robust pose estimation~\cite{saputra2018visual}.Conventional SLAM solutions mostly adopt optimization or filtering frameworks for pose solving, but they commonly have obvious defects in model interpretability and computing resource consumption.
+Spatial localization and mapping in complex 3D environments is fundamental to autonomous driving, mobile robotics, and intelligent transportation systems~\cite{cadena2016past}. As the core sensing module of autonomous devices, SLAM directly supports all autonomous movement planning and execution. Modern practical approaches typically combine cameras, IMUs, and sometimes GNSS to achieve robust pose estimation~\cite{saputra2018visual}. Conventional SLAM solutions mostly adopt optimization or filtering frameworks for pose solving, but they commonly have obvious defects in model interpretability and computing resource consumption.
 
 Interestingly, organisms such as bats complete 3D navigation by fusing visual and vestibular signals with hippocampal spatial cells~\cite{jeffery2013navigating,hafting2005microstructure,taube1990head,finkelstein2016three,solstad2008representation}. These neural mechanisms enable brain-inspired localization frameworks to outperform traditional SLAM in interpretability and computational efficiency.
 
@@ -151,7 +151,12 @@ The authors declare that they have no known competing financial interests or per
 \noindent \textbf{Author contributions}
 \vspace{0.5em}
 
-\textbf{Haidong Wang}: Conceptualization, Methodology, Software, Writing - Original Draft. \textbf{Caixia Ning}: Data curation, Validation, Writing - Review \& Editing.
+\textbf{Haidong Wang}: Conceptualization, Methodology, Software, Writing -- original draft. \textbf{Caixia Ning}: Data curation, Validation, Writing -- review \& editing.
+
+\vspace{1em}
+\noindent \textbf{Data availability}
+
+The CARLA datasets were collected with the open-source CARLA simulator (v0.9.16) using the collection code included in the public repository below; the KITTI odometry benchmark is publicly available at \url{https://www.cvlibs.net/datasets/kitti/}. All processed sequences, trained model weights, and evaluation scripts are available at \url{https://github.com/OpenHUTB/carla-pedestrians}.
 
 %% Bibliography
 \bibliographystyle{IEEEtran}
