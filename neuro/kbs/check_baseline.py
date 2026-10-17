@@ -11,7 +11,7 @@
   python3 check_baseline.py --offline       # 不重算, 仅校验仓内 JSON 与冻结基线一致
 
 数据源: ../data/01_NeuroSLAM_Datasets/<set>/slam_results/ (论文规范目录)
-冻结基线: baseline_frozen.json (随仓库提交, 手工修改无效——重算即覆盖)
+冻结基线: baseline_frozen.json (随仓库提交; --freeze 重新生成)
 """
 import json, os, sys, subprocess
 
@@ -69,7 +69,6 @@ def main():
         sys.exit(f'缺少冻结基线 {FROZEN} — 首次请运行: python3 check_baseline.py --freeze')
     ref = json.load(open(FROZEN))
 
-    # 覆盖检查: cur 必须是 ref 的超集 (指标键不得丢失)
     missing = [k for k in ref if k not in cur]
     if missing:
         sys.exit(f'守护失败: {len(missing)} 项基线指标在重算结果中消失 (如 {missing[:3]})')
