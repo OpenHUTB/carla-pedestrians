@@ -14,6 +14,9 @@
 """
 import numpy as np, pandas as pd, scipy.io as sio, json, os
 
+# 锚定到脚本所在目录: 本脚本含 ../ 相对路径, 需保证从任意 cwd 调用均正确
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 D = '../data/01_NeuroSLAM_Datasets/'
 BK = '../data/_p11_backup_20261014/'
 SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
