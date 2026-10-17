@@ -1,0 +1,61 @@
+%% Cover Letter — Knowledge-Based Systems submission
+\documentclass[11pt]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{url}
+\pagestyle{empty}
+
+\begin{document}
+
+\noindent October 17, 2026
+
+\vspace{1.5em}
+
+\noindent The Editors-in-Chief\\
+\emph{Knowledge-Based Systems}
+
+\vspace{1.5em}
+
+\noindent Dear Editors,
+
+\vspace{0.8em}
+
+We are pleased to submit our manuscript entitled ``\textbf{Brain-Inspired 4-DoF Localization-Mapping: Complementary Vestibular-Visual Fusion with Spatial Cells}'' for consideration in \emph{Knowledge-Based Systems}.
+
+\vspace{0.6em}
+
+Autonomous localization today is dominated by black-box learning pipelines whose failures are hard to diagnose and whose resource demands are hard to justify. Our manuscript develops an interpretable alternative grounded in explicitly represented spatial knowledge: a brain-inspired localization-mapping framework (NeuroLocMap) that couples dual-stream visual processing with vestibular IMU fusion on a 10-state EKF core, represents space through 3D grid cells and multilayered head direction cells, and stores spatial experience in a multilayer cognitive map whose topology is directly inspectable. On top of this core, two lightweight learned corrections --- a scale-only calibration head over a frozen monocular depth foundation model and a learned-embedding loop-closure line --- are trained once on simulation and deployed zero-shot.
+
+\vspace{0.6em}
+
+We believe this work fits the scope of \emph{Knowledge-Based Systems} for the following reasons:
+
+\begin{itemize}
+    \item \textbf{Explicit knowledge representation for spatial reasoning.} The experience map is a symbolic-topological knowledge structure (nodes, links, re-anchoring events) built on top of subsignal processing, making localization decisions auditable rather than opaque.
+    \item \textbf{Knowledge acquisition with minimal supervision.} All learned components are trained once in simulation and transferred to the real world zero-shot, an explicit study of how domain knowledge encoded in neural representations survives the sim-to-real gap --- reported honestly, including where it does not transfer.
+    \item \textbf{Verifiable, reproducible claims.} Every headline number is evaluated under two alignment calibers (shape-only Sim(3) and rigid SE(3)), with datasets, trained weights, and evaluation scripts released in a public repository.
+\end{itemize}
+
+\vspace{0.6em}
+
+The full system outperforms a 10-state EKF visual-inertial baseline on all five evaluation scenarios (four simulated urban routes and the real-world KITTI 07 sequence) under both calibers, runs in real time on CPU ($\sim$31 FPS), and produces an interpretable topological experience map as a by-product of localization.
+
+\vspace{0.8em}
+
+We confirm that this manuscript is original, has not been published previously, and is not under consideration by any other journal. All authors have approved the manuscript and agree with its submission. The authors declare no competing interests. Datasets, code, and trained models are publicly available at \url{https://github.com/OpenHUTB/carla-pedestrians}.
+
+\vspace{0.8em}
+
+Thank you for your consideration. We look forward to the reviewers' feedback.
+
+\vspace{1.5em}
+
+\noindent Sincerely,
+
+\vspace{1.5em}
+
+\noindent Haidong Wang (Corresponding author)\\
+Hunan University of Technology and Business\\
+Email: xxx@hutb.edu.cn \emph{[to be filled before submission]}\\
+On behalf of all authors
+
+\end{document}
