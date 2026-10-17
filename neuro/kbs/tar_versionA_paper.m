@@ -2,8 +2,8 @@
 % 版本A 位于 neuro/07_test/07_test/test_imu_visual_slam/ablation/compute_metrics_with_alignment.m
 % 这是决定 "论文口径下 NLM 能否胜过 EKF" 的判据测试
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');  % 版本A
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');  % 版本A
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt   = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 ekf  = csvread(fullfile(tar,'a_final','imu_aided_trajectory.txt'));
 dc   = csvread(fullfile(tar,'dc_final','exp_trajectory.txt'));

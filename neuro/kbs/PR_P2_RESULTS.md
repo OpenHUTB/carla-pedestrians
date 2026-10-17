@@ -171,23 +171,23 @@ SE(3) 刚性口径 (旋转+平移对齐, 不重拟合尺度) 校验。脚本对 
 ```bash
 cd neuro/kbs
 # 1. 闭环头: 标签 + 训练 + P/R (tdmpc env)
-/home/yangrb/anaconda3/envs/tdmpc/bin/python pr_mine_loops.py
-/home/yangrb/anaconda3/envs/tdmpc/bin/python pr_train_head.py --pos-cap 25
-/home/yangrb/anaconda3/envs/tdmpc/bin/python pr_eval_finetuned.py
-/home/yangrb/anaconda3/envs/tdmpc/bin/python tau_scan.py        # τ 事件级明细
+~/anaconda3/envs/tdmpc/bin/python pr_mine_loops.py
+~/anaconda3/envs/tdmpc/bin/python pr_train_head.py --pos-cap 25
+~/anaconda3/envs/tdmpc/bin/python pr_eval_finetuned.py
+~/anaconda3/envs/tdmpc/bin/python tau_scan.py        # τ 事件级明细
 # 2. 尺度线: 特征 + 尺度头 + EKF 层 replay A/B
-/home/yangrb/anaconda3/envs/tdmpc/bin/python scale_series_p1.py
-/home/yangrb/anaconda3/envs/tdmpc/bin/python pr_scale_head.py
-/home/yangrb/anaconda3/envs/tdmpc/bin/python replay_depth_ab.py --tag head030 --deadband 0.30
+~/anaconda3/envs/tdmpc/bin/python scale_series_p1.py
+~/anaconda3/envs/tdmpc/bin/python pr_scale_head.py
+~/anaconda3/envs/tdmpc/bin/python replay_depth_ab.py --tag head030 --deadband 0.30
 # 3. MATLAB (quickstart/): 5 集 A/B (τ=0.94 定解驱动) + 尺度 NLM 层 A/B
 matlab -batch P2FT_TOWN05    # 其余: TOWN03/TOWN07/TOWN10HD/KITTI07
 matlab -batch P2S_TOWN05     # 尺度 NLM 层 (需先换 fusion_pose, 见 run_scale_nlm_ab.sh)
 # A/B 对照驱动 (历史 τ0.94 前对照/ORB-only 消融): P2FT94_*.m, P2AB_*_ORBONLY.m
 # 4. 定解提升 + 指标 + 图
-/home/yangrb/anaconda3/envs/tdmpc/bin/python promote_t94_final.py  # p2ft → 规范 slam_results/
-/home/yangrb/anaconda3/envs/tdmpc/bin/python compute_final_metrics.py
-/home/yangrb/anaconda3/envs/tdmpc/bin/python regen_figures.py
-/home/yangrb/anaconda3/envs/tdmpc/bin/python se3_metrics.py        # SE(3) 刚性 + sim3_full 全矩阵 + 规范交叉校验
+~/anaconda3/envs/tdmpc/bin/python promote_t94_final.py  # p2ft → 规范 slam_results/
+~/anaconda3/envs/tdmpc/bin/python compute_final_metrics.py
+~/anaconda3/envs/tdmpc/bin/python regen_figures.py
+~/anaconda3/envs/tdmpc/bin/python se3_metrics.py        # SE(3) 刚性 + sim3_full 全矩阵 + 规范交叉校验
 ```
 
 ## 论文定位建议

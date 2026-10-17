@@ -22,10 +22,10 @@ import sys
 import numpy as np
 import pandas as pd
 
-DATA = "/home/yangrb/openhutb/neuro/data"
+DATA = "../data"
 BACKUP = os.path.join(DATA, "_p11_backup_20261014")
-EKF = "/home/yangrb/openhutb/neuro/00_collect_data/IMU_Vision_Fusion_EKF.py"
-PY = "/home/yangrb/openhutb/carla/bin/python"
+EKF = "../00_collect_data/IMU_Vision_Fusion_EKF.py"
+PY = "../../carla/bin/python"
 SETS = {s: os.path.join(DATA, s + "Data_IMU_Fusion")
         for s in ("Town05", "Town03", "Town07", "Town10HD")}
 SETS["KITTI07"] = os.path.join(DATA, "01_NeuroSLAM_Datasets",

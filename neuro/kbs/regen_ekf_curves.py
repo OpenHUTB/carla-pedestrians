@@ -19,8 +19,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-D = '/home/yangrb/openhutb/neuro/data/'
-OUT = '/home/yangrb/openhutb/neuro/kbs/fig/'
+D = '../data/'
+OUT = '../kbs/fig/'
 
 def procrustes_full(est, gt, tag=''):
     est = np.asarray(est, dtype=float); gt = np.asarray(gt, dtype=float)

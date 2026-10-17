@@ -1,0 +1,122 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{xeCJK}
+\setCJKmainfont[BoldFont={Noto Serif CJK SC Bold}]{Noto Serif CJK SC}
+\setCJKsansfont[BoldFont={Noto Sans CJK SC Bold}]{Noto Sans CJK SC}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[expansion=false]{microtype}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\title{\textbf{NeuroLocMap 后续性能提升方案}\\[4pt]\large 基于五场景终审结果的分析与路线（2026-10-17）}
+\author{王海东、杨荣波\\湖南工商大学}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{现状基线}
+
+全系统（EKF 核 + 尺度支路 + 闭环线）当前在五个场景、双口径下全部优于 10 状态 EKF 视觉-惯性基线：
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+ & \multicolumn{2}{c}{Sim(3) 全重拟合（形状上界）} & \multicolumn{2}{c}{SE(3) 刚性（度量口径）} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+场景 & 全系统 (m) & 优于 EKF & 全系统 (m) & 优于 EKF \\
+\midrule
+Town05   & 18.07 & $+$59.3\% & 32.67 & $+$33.9\% \\
+Town03   & 15.31 & $+$33.7\% & 17.31 & $+$26.4\% \\
+Town07   & 28.75 & $+$29.2\% & 31.51 & $+$26.5\% \\
+Town10HD & 14.44 & $+$22.4\% & 49.88 & $+$13.1\% \\
+KITTI 07 & 18.45 & $+$16.5\% & 29.99 & $+$1.5\%  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+提升空间按可行性与预期收益分三档：确定性改进（小而实）、结构性受限（需新观测模态）、前端天花板（需换核）。
+
+\section{第一档：确定性改进（推荐，预计 1--2 周）}
+
+\subsection{Town07 闭环接受门控（最干净的一刀）}
+
+\textbf{问题}：Town07 上闭环边际贡献为 $+0.85$~m（Sim(3)，28.75 对 27.90）——闭环反而轻微有害，该场景尺度支路单独配置最强。
+
+\textbf{方案}：在闭环接受门（持续性门 15 帧、朝向门 60°）之上增加\textbf{尺度支路置信度感知门}：
+\begin{itemize}[nosep]
+  \item 当 EKF 尺度态的估计方差收敛良好（深度支路持续有效）时，说明 EKF+尺度轨迹本身已高度可信，此时对闭环重锚定施加更严的幅度门（如单事件修正上限从 25~m 收紧），或要求候选簇相似度阈值 $\tau$ 自适应上调；
+  \item 反之（尺度支路失效，如 KITTI 零样本场景）维持现有宽松门，让闭环承担主要校正。
+\end{itemize}
+
+\textbf{预期}：Town07 收回 $\le 0.85$~m，其余四场景不回退（门控在闭环本就有益的场景自动放松）。风险低，只需离线重放验证。
+
+\subsection{闭环嵌入前端升级（针对 KITTI 最薄边际）}
+
+\textbf{问题}：KITTI 07 零样本嵌入 P=5.6\%、R=50\%，闭环对 EKF 的 SE(3) 边际仅 1.5\%（29.99 对 30.45），且主要靠 A-fix 形状修正而非重锚定本身。嵌入候选质量是瓶颈。
+
+\textbf{方案}（按成本递增）：
+\begin{enumerate}[nosep]
+  \item \textbf{嵌入聚合升级}：现用逐帧 DINOv2 特征 + 微调头，可替换为 NetVLAD/GeM 级聚合描述子，提升跨域鲁棒性；训练管线不变（仍是一次训练、零样本部署）。
+  \item \textbf{多帧融合嵌入}：以局部轨迹片段（如 16 帧窗口）的嵌入均值替代单帧嵌入，抑制瞬态视角/光照噪声；PR 事件分布显示单帧候选的误报集中在视觉相似但几何不邻的区段。
+  \item \textbf{几何一致性前置}：把 A-fix 窗口 Procrustes 残差作为候选的二级过滤，替代后置的 A-fix 补偿。
+\end{enumerate}
+
+\textbf{预期}：KITTI SE(3) 边际从 1.5\% 拉开至 3--5\% 量级；Town05/07 闭环精确率同步提升。
+
+\section{第二档：结构性受限（需新观测模态，中期工作）}
+
+\subsection{零样本尺度恢复的剩余路径}
+
+KITTI 上尺度支路失效（23.13~m 对基线 17.75~m，方向反）已判明两条死路：
+\begin{itemize}[nosep]
+  \item 全局尺度回归头：仅 3 个 CARLA 训练场景 = 3 个训练点，回归无从泛化；
+  \item 运动学尺度观察器：收敛值 $s\approx5.65$，真值 $\approx6.78$，结构性够不着（无真值时不可分辨）。
+\end{itemize}
+
+剩余可行路径均需引入新观测，按成本排序：
+\begin{enumerate}[nosep]
+  \item \textbf{气压计高度差}：Consumer IMU（如 BMP388 级）的高度分辨率在数百米路线上足以约束全局尺度；需 CARLA 采集端加气压仿真通道 + EKF 增加一个观测支路。
+  \item \textbf{IMU 尺度在线标定}：利用加速度计偏置与 VO 尺度的可观测性耦合，在长直线段在线估计 VO 比例因子；纯算法改动，但对激励条件敏感。
+  \item \textbf{主张收缩}：若两者都不可行，论文口径已诚实支持"up-to-scale 核心 + SE(3) 刚性口径全胜"的现有主张，无需改动。
+\end{enumerate}
+
+\subsection{Town10HD 闭环惰性}
+
+开放路型、全路线仅一次重访，闭环天然无可作为（1 条惰性 link）——非算法问题，不投入。
+
+\section{第三档：前端天花板（换核级改动，长期）}
+
+逐帧尺度漂移（RTE 对齐后仍 72--75\%）的根因在 up-to-scale VO 核，NLM 贡献层（闭环 + 尺度校正）无法覆盖。可选方向：
+
+\begin{itemize}[nosep]
+  \item \textbf{深度特征参与里程计}：让 DAv2 度量深度（或其学习特征）直接进入 VO 位姿求解，从源头压制逐帧尺度漂移；收益最大但需重做采集-里程计链路。
+  \item \textbf{学习型 VO 前端}：替换为 DROID-SLAM 级前端（牺牲实时性换取精度）作对照实验，量化"可解释框架 + 强前端"的组合上限。
+\end{itemize}
+
+\section{优先级与预期汇总}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llccc@{}}
+\toprule
+优先级 & 事项 & 成本 & 预期收益 & 风险 \\
+\midrule
+P0 & Town07 尺度感知闭环门控 & $\sim$3 天 & 收回 0.85 m，5 集无回退 & 低 \\
+P0 & 嵌入聚合升级（NetVLAD/GeM） & $\sim$1 周 & KITTI SE(3) 边际 1.5\%$\to$3--5\% & 中 \\
+P1 & 气压计尺度支路 & $\sim$2 周 & KITTI 零样本尺度可用 & 中 \\
+P2 & IMU 尺度在线标定 & $\sim$1 周 & 同上（对激励敏感） & 中 \\
+P2 & 深度特征进 VO & $\sim$3 周 & 全链路数字整体抬升 & 高 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{结论}：两项 P0 建议在论文投稿前作为可选项完成（时间充足），其余列入下一篇论文或期刊扩展版。以当前投稿口径，5/5 全胜已成立，上述提升均不构成投稿阻塞。
+
+\end{document}

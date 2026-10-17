@@ -1,5 +1,5 @@
 % kb_check_events.m — 各数据集 a_final 闭环事件计数 (S2 中性判定基础)
-root = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets';
+root = '../data/01_NeuroSLAM_Datasets';
 datasets = {'Town01Data_IMU_Fusion','Town02Data_IMU_Fusion','Town05Data_IMU_Fusion', ...
             'Town10HDData_IMU_Fusion','KITTI07Data_IMU_Fusion','Town01Turnaround_IMU_Fusion'};
 for i = 1:numel(datasets)

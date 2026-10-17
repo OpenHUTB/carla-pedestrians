@@ -7,7 +7,7 @@ import glob, os
 import numpy as np
 import pandas as pd
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/'
+D = '../data/01_NeuroSLAM_Datasets/'
 
 SETS = {
     'Town01Data_IMU_Fusion': 'pos_x',

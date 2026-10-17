@@ -14,7 +14,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-KBS = '/home/yangrb/openhutb/neuro/kbs'
+KBS = '../kbs'
 FIG = f'{KBS}/fig'
 with open(f'{KBS}/se3_metrics.json') as f:
     SE3 = json.load(f)

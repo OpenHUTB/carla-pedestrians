@@ -1,8 +1,8 @@
 % kb_replay_ab.m — Town05 EKF 恢复 A/B + 论文 Sim(3) 口径 (首100帧锚定, Table 1 同口径)
 % A = 恢复后(#100尺度形态) replay 输出; B = 恢复前(HEAD尺度形态) replay 输出; C = 磁盘10-07基线
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
-ad = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
+ad = '../data/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion';
 gt = readmatrix(fullfile(ad,'ground_truth.txt'));
 vo = readmatrix(fullfile(ad,'visual_odometry.txt'));
 n = min([size(gt,1), size(vo,1)]);

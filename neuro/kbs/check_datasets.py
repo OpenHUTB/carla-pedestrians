@@ -14,7 +14,7 @@
 import os, sys
 import pandas as pd, scipy.io as sio
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/'
+D = '../data/01_NeuroSLAM_Datasets/'
 TOWNS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
          'Town10HDData_IMU_Fusion']
 KITTI = 'KITTI07Data_IMU_Fusion'

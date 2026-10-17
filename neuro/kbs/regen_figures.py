@@ -18,8 +18,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 
-ROOT = '/home/yangrb/openhutb/neuro/data'
-FIG = '/home/yangrb/openhutb/neuro/kbs/fig'
+ROOT = '../data'
+FIG = '../kbs/fig'
 
 # ---------------- 论文现值 (Table 1, 2026-10-14 二次重采 final_metrics.json) ----------------
 EKF_RMSE = {'Town05': 44.44, 'Town03': 23.36, 'Town07': 40.64, 'Town10HD': 18.61, 'KITTI07': 22.09}

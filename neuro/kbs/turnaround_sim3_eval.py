@@ -11,10 +11,10 @@ import sys
 import numpy as np
 from scipy.io import loadmat
 
-sys.path.insert(0, '/home/yangrb/桌面/NeuroSLAM四图一键_脚本')
+sys.path.insert(0, os.path.expanduser('~/桌面/NeuroSLAM四图一键_脚本'))
 from metrics_aligned import align_metric  # noqa: E402
 
-BASE = '/home/yangrb/openhutb/neuro/data/Town01Turnaround_IMU_Fusion'
+BASE = '../data/Town01Turnaround_IMU_Fusion'
 
 
 def main():

@@ -94,25 +94,6 @@
       "exp_nodes": 964,
       "templates": 964,
       "loop_edges": 11
-    },
-    "KITTI09Data_IMU_Fusion": {
-      "gt_len_m": 1705.1,
-      "frames": 1591,
-      "nlm": {
-        "rmse": 42.37,
-        "drift": 6.75
-      },
-      "ekf": {
-        "rmse": 42.34,
-        "drift": 6.74
-      },
-      "vo": {
-        "rmse": 206.28,
-        "drift": 20.16
-      },
-      "exp_nodes": 1491,
-      "templates": 1474,
-      "loop_edges": 9
     }
   }
 }

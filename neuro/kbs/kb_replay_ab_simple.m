@@ -1,7 +1,7 @@
 % kb_replay_ab_simple.m — Town05 EKF 恢复 A/B, 论文 simple 口径 (起点+长度匹配, 无旋转)
 % 用户口径 "EKF 大幅超 VO/IMU" = 该口径 (论文 Table 1: EKF 72.25 vs VO 161.84)
 clear all; close all; clc;
-ad = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion';
+ad = '../data/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion';
 gt = readmatrix(fullfile(ad,'ground_truth.txt'));
 vo = readmatrix(fullfile(ad,'visual_odometry.txt'));
 n = min([size(gt,1), size(vo,1)]);

@@ -27,8 +27,8 @@ from pathlib import Path
 
 import numpy as np
 
-BASE = Path("/home/yangrb/openhutb/neuro/data")
-OUT_DEFAULT = Path("/home/yangrb/openhutb/neuro/kbs/scale_p1")
+BASE = Path("../data")
+OUT_DEFAULT = Path("../kbs/scale_p1")
 
 # CARLA 640x480, 默认 FOV=90deg -> fx=fy=(W/2)/tan(45)=320, cx=320, cy=240
 K_CARLA = np.array([[320.0, 0.0, 320.0], [0.0, 320.0, 240.0], [0.0, 0.0, 1.0]])

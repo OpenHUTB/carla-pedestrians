@@ -2,8 +2,8 @@
 """perframe_err.py — 逐帧误差定位: NLM(新,P1ON) vs EKF, 7-DoF 对齐后。
 找 NLM 输 EKF 的帧段, 判断是局部尖峰(可用 P1 平滑)还是持续漂移(架构性)。"""
 import numpy as np, os, json
-exec(open('/home/yangrb/openhutb/neuro/kbs/regen_table.py').read().split("# ---------- 口径验证")[0])
-ROOT = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets'
+exec(open('../kbs/regen_table.py').read().split("# ---------- 口径验证")[0])
+ROOT = '../data/01_NeuroSLAM_Datasets'
 
 def err_curve(gt, est, anchor=None):
     n = min(len(gt), len(est)); gt = gt[:n]; est = est[:n]

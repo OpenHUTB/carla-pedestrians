@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 
-D = '/home/yangrb/openhutb/neuro/data'
+D = '../data'
 SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
         'Town10HDData_IMU_Fusion', '01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion']
 TAU, STABLE_MIN, MIN_GAP, LOOP_MIN_GAP, ARC_GAP, YAW_GATE = 0.9, 15, 30, 300, 50.0, 60.0

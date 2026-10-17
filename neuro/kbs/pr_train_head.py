@@ -20,9 +20,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets'
+D = '../data/01_NeuroSLAM_Datasets'
 TRAIN_SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion']
-OUT = '/home/yangrb/openhutb/neuro/kbs/pr_head.pt'
+OUT = '../kbs/pr_head.pt'
 
 
 def load_set(name):

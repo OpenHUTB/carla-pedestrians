@@ -15,7 +15,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-DATA = "/home/yangrb/openhutb/neuro/data/"
+DATA = "../data/"
 SETS = {
     "Town03":   f"{DATA}Town03Data_IMU_Fusion",
     "Town05":   f"{DATA}Town05Data_IMU_Fusion",

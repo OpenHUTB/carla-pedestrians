@@ -1,6 +1,6 @@
 % VERIFY_PAPER_METRICS.m — 用论文官方口径 (compute_metrics_with_alignment, 全轨迹Sim(3))
 % 对恢复EKF后的 4 CARLA 集 × 3 方法做权威 ATE 计算 (Table 1 草稿核验用)
-cd('/home/yangrb/openhutb');
+cd(fullfile(fileparts(mfilename('fullpath')), '..', '..', '..')); % 仓库根 (neuro/kbs 上溯三级)
 addpath('neuro/07_test/test_imu_visual_slam/ablation');
 sets = {'Town01Data_IMU_Fusion','Town02Data_IMU_Fusion','Town05Data_IMU_Fusion','Town10HDData_IMU_Fusion'};
 for i = 1:numel(sets)

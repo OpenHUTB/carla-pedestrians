@@ -3,8 +3,8 @@
 % (每lap独立吸收该lap的全局Sim3, 残差=非系统性局部漂移=闭环唯一能改善的量)
 % 同时给 全局(版本B单段) 作对照, 得出 系统性 vs 非系统性 分解
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/ablation');
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+addpath('../07_test/test_imu_visual_slam/ablation');
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 
 gt   = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 cfgs = {'EKF',       csvread(fullfile(tar,'a_final','imu_aided_trajectory.txt'));

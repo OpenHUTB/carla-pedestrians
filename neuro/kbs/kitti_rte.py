@@ -93,7 +93,7 @@ def rte_excl(e, df, k):
 
 
 base = sys.argv[1] if len(sys.argv) > 1 else \
-    '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/'
+    '../data/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/'
 if not base.endswith('/'):
     base += '/'
 gt = loadcsv(base, 'ground_truth.txt', ['pos_x', 'pos_y', 'pos_z'])

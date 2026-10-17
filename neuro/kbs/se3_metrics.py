@@ -14,8 +14,8 @@
 """
 import numpy as np, pandas as pd, scipy.io as sio, json, os
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/'
-BK = '/home/yangrb/openhutb/neuro/data/_p11_backup_20261014/'
+D = '../data/01_NeuroSLAM_Datasets/'
+BK = '../data/_p11_backup_20261014/'
 SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
         'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion', 'KITTI09Data_IMU_Fusion']
 SHORT = {'Town05Data_IMU_Fusion': 'Town05', 'Town03Data_IMU_Fusion': 'Town03',
@@ -94,7 +94,7 @@ for sd in SETS:
                      'sim3_fitted_scale': round(s_f, 4)}
     OUT[sd] = row
 
-with open('/home/yangrb/openhutb/neuro/kbs/se3_metrics.json', 'w') as f:
+with open('../kbs/se3_metrics.json', 'w') as f:
     json.dump(OUT, f, indent=2, ensure_ascii=False)
 
 # ─────────────────── 打印 ───────────────────
@@ -111,11 +111,13 @@ for sd, row in OUT.items():
 print('\n→ 已写入 neuro/kbs/se3_metrics.json')
 
 # ─────────────────── 规范交叉校验 (sim3_full 必须与 final_metrics 逐位一致) ───────────────────
-FM = json.load(open('/home/yangrb/openhutb/neuro/kbs/final_metrics.json'))
+FM = json.load(open('../kbs/final_metrics.json'))
 t1 = FM['table1']
 print('\n── 与 final_metrics.json 交叉校验 (sim3_full 应一致) ──')
 ok = True
 for sd, row in OUT.items():
+    if sd not in t1:
+        continue  # 补充材料数据集 (如 KITTI09) 不在主表, 跳过交叉
     for name, key in [('NLM-闭环线', 'nlm'), ('EKF', 'ekf'), ('VO', 'vo')]:
         ref = t1[sd].get(key)
         if name in row and ref:

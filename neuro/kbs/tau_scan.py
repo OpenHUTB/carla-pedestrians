@@ -26,7 +26,7 @@ def main():
     default = ['Town05Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
                'Town10HDData_IMU_Fusion']
     names = sys.argv[1:] or default
-    ck = torch.load('/home/yangrb/openhutb/neuro/kbs/pr_head.pt',
+    ck = torch.load('../kbs/pr_head.pt',
                     map_location='cpu')
     model = Head(ck['din'], 384, ck['dout']).cuda().eval()
     for name in names:

@@ -3,8 +3,8 @@
 % 1) win ∈ {200,300,400,500,600} 非链式S2: 版本A + simple + per-lap oracle
 % 2) 当前盘上 core 输出 (win=400) 的版本A 口径 + per-lap oracle (论文口径核验)
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt0   = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 preS2 = csvread('/tmp/turnaround_a_final_preS2_20261006/exp_trajectory.txt');
 core400 = csvread(fullfile(tar,'a_final','exp_trajectory.txt'));

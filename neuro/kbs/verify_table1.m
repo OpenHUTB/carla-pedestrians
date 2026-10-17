@@ -2,8 +2,8 @@
 % 打印: 各文件行数 / compute_metrics_with_alignment(NLM,EKF,VO) 的 RMSE+终点误差+漂移 /
 %       函数内部 Procrustes 尺度 / MATLAB内手动Umeyama(用于对照Python)
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/ablation');
-base = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets';
+addpath('../07_test/test_imu_visual_slam/ablation');
+base = '../data/01_NeuroSLAM_Datasets';
 sets = {'Town01Data_IMU_Fusion','Town02Data_IMU_Fusion','Town05Data_IMU_Fusion', ...
         'Town10HDData_IMU_Fusion','KITTI07Data_IMU_Fusion'};
 for k = 1:numel(sets)

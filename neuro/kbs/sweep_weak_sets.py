@@ -31,10 +31,10 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/'
+D = '../data/01_NeuroSLAM_Datasets/'
 STAGE = '/tmp/nlm_sweep_weak'
 LOG = os.path.join(STAGE, 'log.txt')
-QUICKSTART = '/home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/quickstart'
+QUICKSTART = '../07_test/test_imu_visual_slam/quickstart'
 KBS = os.path.dirname(os.path.abspath(__file__))
 
 # (set, vt_base, ce_base, rmse_base) — 基线来自 final_metrics.json (2026-10-12 5集全量)

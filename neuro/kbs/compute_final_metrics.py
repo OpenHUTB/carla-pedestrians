@@ -9,7 +9,7 @@
 """
 import numpy as np, pandas as pd, scipy.io as sio, json, os
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/'
+D = '../data/01_NeuroSLAM_Datasets/'
 OUT = {}
 
 def sim3_full(est, gt):
@@ -98,7 +98,7 @@ for d in ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusi
     t1[d] = row
 
 OUT = {'table1': t1}
-with open('/home/yangrb/openhutb/neuro/kbs/final_metrics.json', 'w') as f:
+with open('../kbs/final_metrics.json', 'w') as f:
     json.dump(OUT, f, indent=2, ensure_ascii=False)
 
 # ─────────────────── 打印 ───────────────────

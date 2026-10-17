@@ -1,9 +1,9 @@
 % kb_s2_verify.m — win=250 vs 400 防伪验证 (per-lap oracle + 事件生效集)
 % 判据 (NLM_LOOP_DESIGN.md §9.3): S2 增益必须纯来自全局 Sim(3) 移除,
 %   per-lap 独立对齐 ATE 在 S2off vs S2on 间应基本不变 (无局部畸变/无GT泄漏).
-% 运行: matlab -batch "cd('/home/yangrb/openhutb/neuro/kbs'); kb_s2_verify"
+% 运行: matlab -batch "cd('../kbs'); kb_s2_verify"
 clear all;
-BASE = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+BASE = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt     = csvread(fullfile(BASE, 'a_final', 'ground_truth_backup.txt'));
 pres2  = csvread(fullfile(BASE, 'a_final', 'exp_trajectory_preS2.txt'));
 a_disk = csvread(fullfile(BASE, 'a_final', 'exp_trajectory.txt'));

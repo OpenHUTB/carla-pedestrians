@@ -1,6 +1,6 @@
 % kb_baseline_at.m — 各数据集现有 a_final (S2关) 的 ATE 基线, 两种口径
-root = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets';
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
+root = '../data/01_NeuroSLAM_Datasets';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
 datasets = {'Town01Turnaround_IMU_Fusion','Town05Data_IMU_Fusion','KITTI07Data_IMU_Fusion', ...
             'Town01Data_IMU_Fusion','Town02Data_IMU_Fusion','Town10HDData_IMU_Fusion'};
 for i = 1:numel(datasets)

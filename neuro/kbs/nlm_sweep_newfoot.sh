@@ -1,8 +1,8 @@
 #!/bin/bash
 # nlm_sweep_newfoot.sh — 驱动 NLM_SWEEP_NEWFOOT_ONE 全网格 (每集一条串行链, 两集并行)
 # 用法: nohup bash nlm_sweep_newfoot.sh <Town01Data_IMU_Fusion|Town10HDData_IMU_Fusion> > /tmp/xxx.log 2>&1 &
-cd /home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/quickstart
-MATLAB="/home/yangrb/下载/MATLAB/matlab_2021b_linux_clean/matlab_2021b/bin/matlab"
+cd ../07_test/test_imu_visual_slam/quickstart
+MATLAB="$HOME/下载/MATLAB/matlab_2021b_linux_clean/matlab_2021b/bin/matlab"
 DS="$1"
 if [ -z "$DS" ]; then echo "用法: $0 <dataset>"; exit 1; fi
 

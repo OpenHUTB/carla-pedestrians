@@ -4,8 +4,8 @@
 % V3 SE(3): 只用 R,t, 强制 b=1 (检验尺度是否主导校正)
 % 判据: 版本A + simple 是否稳定 < EKF(745); 各变体 per-lap oracle 是否保持 ≈ 基线(无局部畸变注入)
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt0   = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 adisk = csvread(fullfile(tar,'a_final','exp_trajectory.txt'));
 ekf   = csvread(fullfile(tar,'a_final','imu_aided_trajectory.txt'));

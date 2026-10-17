@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 
-ROOT = '/home/yangrb/openhutb/neuro/data'
+ROOT = '../data'
 SETS = [
     ('Town05Data_IMU_Fusion', 'slam_results_p2ft', 44.44),
     ('Town03Data_IMU_Fusion', 'slam_results_p2ft', 23.36),

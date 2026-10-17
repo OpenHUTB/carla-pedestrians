@@ -6,10 +6,10 @@
 # 前置: replay_depth_ab.py --depth-file depth_scale_head.txt --deadband 0.30 --tag head030
 #       已把变体存到 _p11_backup_20261014/<set>/fp_head030.txt
 set -e
-cd /home/yangrb/openhutb/neuro
+cd ../../neuro
 DATA=data
 BK=data/_p11_backup_20261014
-M=/home/yangrb/下载/MATLAB/matlab_2021b_linux_clean/matlab_2021b/bin/matlab
+M=$HOME/下载/MATLAB/matlab_2021b_linux_clean/matlab_2021b/bin/matlab
 QS=07_test/test_imu_visual_slam/quickstart
 for s in Town03 Town05 Town07 Town10HD; do
   d=${DATA}/${s}Data_IMU_Fusion

@@ -15,7 +15,7 @@ import sys
 import numpy as np
 import torch
 
-sys.path.insert(0, "/home/yangrb/openhutb/neuro/kbs")
+sys.path.insert(0, "../kbs")
 from pr_scale_head import Head, load_set, SETS, HEAD_PT  # noqa: E402
 
 NAME = "KITTI07"

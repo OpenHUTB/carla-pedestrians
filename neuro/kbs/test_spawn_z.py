@@ -2,7 +2,7 @@
 # 确认 bidir 起点 z 高度: 对候选点, 打印 waypoint 的 z, 并试
 # try_spawn 在 z=0.0 / +0.1 / +0.3 / +0.5 各偏移下是否成功。
 import sys
-sys.path.insert(0, '/home/yangrb/下载/carla/CARLA_0.9.16/PythonAPI/carla')
+sys.path.insert(0, os.path.expanduser('~/下载/carla/CARLA_0.9.16/PythonAPI/carla'))
 import carla
 
 def aslist(x):
