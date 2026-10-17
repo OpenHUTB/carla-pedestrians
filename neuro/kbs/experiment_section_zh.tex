@@ -87,7 +87,7 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
         \begin{tablenotes}
             \scriptsize
             \item 加粗 = 该口径下四种配置最优。NeuroLocMap 在两种口径下于全部五个场景上优于 EKF（Sim(3) $+$16.5\% 至 $+$59.3\%；SE(3) $+$1.5\% 至 $+$33.9\%），并在全部五个场景上优于单目VO（Sim(3) $+$33.7\% 至 $+$68.8\%）。
-            \item 漂移率（末端误差/长度）：NeuroLocMap 1.6--14.3\%（Sim(3)）与 0.2--15.2\%（SE(3)）；EKF 为 1.6--13.3\% 与 5.0--19.0\%；VO 为 9.9--24.2\% 与 13.7--17.2\%。
+            \item 漂移率（末端误差/长度）：NeuroLocMap 2.9--11.7\%（Sim(3)）与 0.2--15.2\%（SE(3)）；EKF 为 1.6--13.3\% 与 5.0--19.0\%；VO 为 9.9--24.2\% 与 13.7--17.2\%。
             \item n/a：零样本尺度头未部署于 KITTI~07（真实图像域差距；补充材料 S.1 节），KITTI 结果为 EKF 核之上的闭环线。Town07 上仅尺度支路最强（闭环贡献 $+0.85$~m）；其余场景全系统最优。
         \end{tablenotes}
     \end{threeparttable}
@@ -239,7 +239,7 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
 \textbf{与学习方法对比.} 与学习型 SLAM 方法（DROID-SLAM~\cite{teed2021droid}、TartanVO~\cite{wang2021tartanvo}、DeepVO~\cite{wang2017deepvo}）的直接定量对比受限于根本不同的评估协议与训练需求：这些方法需要大规模训练数据（如 TartanVO 训练于大规模合成基准 TartanAir）、GPU 密集推理与面向部署的领域特定微调。在数据可得处我们提供语境化对比：
 
 \begin{itemize}
-    \item \textbf{精度}：已发表数值采用 KITTI 官方子段漂移率（trel），与本文末端/长度漂移口径不同，故各自按自身口径报告。DeepVO 在真实 KITTI 序列上训练，序列 07 报告 3.91\% trel；TartanVO 纯合成数据训练、无微调迁移至 KITTI，同一序列报告 4.32\% trel。NeuroLocMap 学习组件仅在仿真上训练一次、零样本部署，KITTI~07 末端/长度漂移 9.71\%（五个测试场景 1.6--14.3\%，表~\ref{tab:results}）。
+    \item \textbf{精度}：已发表数值采用 KITTI 官方子段漂移率（trel），与本文末端/长度漂移口径不同，故各自按自身口径报告。DeepVO 在真实 KITTI 序列上训练，序列 07 报告 3.91\% trel；TartanVO 纯合成数据训练、无微调迁移至 KITTI，同一序列报告 4.32\% trel。NeuroLocMap 学习组件仅在仿真上训练一次、零样本部署，KITTI~07 末端/长度漂移 9.71\%（五个测试场景 2.9--11.7\%，表~\ref{tab:results}）。
 
     \item \textbf{计算效率}：DROID-SLAM 精度领先但仅 4--5~FPS（低于 NeuroLocMap 的 $\sim$31~FPS），限制嵌入式实时部署。
 
