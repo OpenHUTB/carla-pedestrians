@@ -133,7 +133,7 @@ The LSTM processes fused dorsal-ventral features sequentially, maintaining hidde
     \mathbf{C}_t & = f_t \odot \mathbf{C}_{t-1} + i_t \odot \tanh(\mathbf{F}^{\text{fused}}_t) \\
     \mathbf{H}_t & = o_t \odot \tanh(\mathbf{C}_t)
 \end{align}
-where $\odot$ denotes element-wise Hadamard product, $\mathbf{C}_t$ is LSTM cell state, $\mathbf{H}_t$ is temporal hidden state, and $\mathbf{F}^{\text{fused}}_t$ integrates ventral and dorsal visual features.
+where $\odot$ denotes element-wise Hadamard product, $\mathbf{C}_t$ is the LSTM cell state, $\mathbf{H}_t$ is the temporal hidden state, and $\mathbf{F}^{\text{fused}}_t$ integrates the ventral and dorsal visual features.
 
 \textbf{Comparison with Learning-Based Approaches.} Section~\ref{sec:experiments} demonstrates that our fixed-gate LSTM achieves comparable or superior per\-for\-mance to NeuroSLAM's learned LSTM (55\% improvement in RMSE) while offering zero-shot deployment. This validates that principled bio-inspired design can match or exceed data-driven learning when the underlying task structure aligns with biological mechanisms---in this case, spatial navigation where biological systems have evolved highly optimized solutions over millions of years.
 
@@ -257,11 +257,12 @@ where $\beta \ll 1$ is a small adaptation gain for online visual odometry scale 
 \textbf{Problem.} The 10th EKF state $\log s$ converges online from turn kinematics, which are observable only in turning frames (294/1101 frames on KITTI~07) and, by construction, recover only the \emph{VO-relative} scale --- the absolute scale between the visual frame and the metric world remains unrecoverable from inertial motion alone. Monocular metric-depth networks offer an independent cue, but their zero-shot predictions carry a scene-dependent bias (a preliminary study showed the raw depth scale to be unreliable across scenes), so raw depth cannot serve directly as a scale observation. Rather than trusting the depth network, we learn a lightweight \emph{calibration} that maps depth-statistics features to the true global scale: trained once on simulation, frozen at deployment.
 
 \textbf{Structure.} For each frame $t$, let $\hat z_t$ denote the metric depth map predicted by a frozen monocular depth foundation model (Depth-Anything-V2, outdoor head). We summarize it into an 8-dimensional feature vector
-\begin{equation}
-    \mathbf{f}_t = \big[\log \hat s^{\,\mathrm{dav2}}_t,\ \log d^{\mathrm{med}}_t,\ \log (d^{\mathrm{std}}_t{+}\epsilon),\ \log d^{\mathrm{p10}}_t,\ \log d^{\mathrm{p90}}_t,\ \log (\hat s^{\,\mathrm{inl}}_t{+}1),\ f_x/W,\ 1\big]^{\top},
+\begin{align}
+    \mathbf{f}_t = \big[&\log \hat s^{\,\mathrm{dav2}}_t,\ \log d^{\mathrm{med}}_t,\ \log (d^{\mathrm{std}}_t{+}\epsilon),\ \log d^{\mathrm{p10}}_t,\ \log d^{\mathrm{p90}}_t, \nonumber\\
+    &\log (\hat s^{\,\mathrm{inl}}_t{+}1),\ f_x/W,\ 1\big]^{\top},
     \label{eq:scale_feat}
-\end{equation}
-where $\hat s^{\,\mathrm{dav2}}_t$ is the windowed-median zero-shot depth scale estimate (VO displacement over median metric depth over the inter-frame interval), $d^{\mathrm{med}}, d^{\mathrm{p10}}, d^{\mathrm{p90}}, d^{\mathrm{std}}$ are the metric-depth median, percentiles, and standard deviation, $\hat s^{\,\mathrm{inl}}_t$ is the feature-inlier-consistent scale, and $f_x/W$ encodes the camera geometry. A windowed median ($W{=}50$ intervals) smooths each feature. The scale head $g_\theta$ is a compact MLP $8{\to}64{\to}64{\to}1$ (ReLU, ${\sim}4.8$k parameters) predicting the log scale
+\end{align}
+where $\hat s^{\,\mathrm{dav2}}_t$ is the windowed-median zero-shot depth scale estimate (VO displacement over median metric depth over the inter-frame interval); $d^{\mathrm{med}}, d^{\mathrm{p10}}, d^{\mathrm{p90}}, d^{\mathrm{std}}$ are the metric-depth median, percentiles, and standard deviation; $\hat s^{\,\mathrm{inl}}_t$ is the feature-inlier-consistent scale; and $f_x/W$ encodes the camera geometry. A windowed median ($W{=}50$ intervals) smooths each feature. The scale head $g_\theta$ is a compact MLP $8{\to}64{\to}64{\to}1$ (ReLU, ${\sim}4.8$k parameters) that predicts the log scale
 \begin{equation}
     \hat \ell_t = g_\theta(\mathbf{f}_t) \;\approx\; \log s^{*}_t,
     \label{eq:scale_head}
@@ -427,14 +428,14 @@ This relaxation procedure runs iteratively until convergence or a maximum number
 \textbf{Deployed Loop-Closure Line: Frame-Based Candidates.} The reported system instantiates loop-closure detection over \emph{frames} rather than experience nodes: every frame is described by a frozen DINOv2-S global scene embedding $\mathbf{e}_t$, refined by a fine-tuned head trained under the same train-once protocol as the scale branch (simulation data only). A candidate match for the current frame is the historical frame $j^{*} = \arg\max_{j} \cos(\mathbf{e}_t, \mathbf{e}_j)$ restricted to frames whose EKF-odometry arc-length separation exceeds $\mathrm{arc}_{\min}$ (50~m), which removes trivial self-matches while keeping the search exhaustive over the plausible far-history. This frame-level candidate stage decouples loop detection from experience-node creation and provides dense per-frame evidence to the gate chain.
 
 \textbf{Four-Gate Chain.} A candidate becomes an accepted loop event only if it passes four fixed gates (all thresholds set once across all five scenarios):
-\begin{equation}
-    \mathrm{accept}(t, j^{*}) \iff
-    \cos(\mathbf{e}_t, \mathbf{e}_{j^{*}}) \ge \tau
-    \;\wedge\; \mathrm{streak}(t, j^{*}) \ge 15
-    \;\wedge\; |\Delta\psi_{t j^{*}}| \le 60^{\circ}
+\begin{align}
+    \mathrm{accept}(t, j^{*}) \iff{}
+    & \cos(\mathbf{e}_t, \mathbf{e}_{j^{*}}) \ge \tau
+    \;\wedge\; \mathrm{streak}(t, j^{*}) \ge 15 \nonumber\\
+    &\;\wedge\; |\Delta\psi_{t j^{*}}| \le 60^{\circ}
     \;\wedge\; \lVert \mathbf{c}_{t j^{*}} \rVert \le 25\,\mathrm{m},
     \label{eq:pr_gates}
-\end{equation}
+\end{align}
 with a cumulative correction budget $\sum_i \lVert \mathbf{c}_i \rVert \le 35$~m across the trajectory and deduplication of historical anchors (each past frame anchors at most once). The \emph{similarity gate} ($\tau = 0.94$) is calibrated by a five-scenario sweep: observed false candidates score 0.907--0.935 while strong genuine revisits score $\ge 0.949$. The \emph{persistence gate} ($\ge 15$ consecutive candidate frames, $\pm 10$ tolerance) exploits a structural property of genuine revisits: a vehicle traversing the same street produces a sustained streak of high-similarity frames, whereas perceptual aliasing produces single-frame or short-burst excursions --- this gate is scale-free and transfers across domains unchanged. The \emph{orientation gate} ($60^{\circ}$ heading difference) admits same-direction and reversed re-visits while rejecting geometrically implausible matches. The correction budget bounds the damage of any single wrong acceptance. The chain is deliberately conservative: on KITTI~09 its sole genuine loop lies in the final two frames, where the streak can reach only $2 < 15$ and the gate correctly declines --- releasing it in hindsight would change the error by merely $-0.12$~m --- while the orientation gate rejects that sequence's two high-similarity but geometrically inconsistent candidates (Supplementary Section~S.3). Prefer silence to a wrong re-anchor.
 
 \textbf{Injection.} An accepted event injects a one-shot translation correction $\mathbf{c}_{t j^{*}}$ (step size $\beta = 1.0$) that pulls the current segment toward the matched node's map pose, writes a link edge into the experience graph, and hands the event to the full-Sim(3) re-anchoring operator described below; the corrected segment then enters the drift-field relaxation above.

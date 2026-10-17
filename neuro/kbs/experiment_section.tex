@@ -6,7 +6,7 @@
 \section{Experiments and Results}
 \label{sec:experiments}
 
-We evaluate NeuroLocMap on five scenarios spanning simulated urban driving (CARLA Town05/03/07/10HD) and real-world highway driving (KITTI~07). The full system couples the vestibular-visual EKF core with two higher-level corrections: an online monocular scale branch (a lightweight regression head over a frozen depth foundation model, trained once on simulated data and frozen at deployment) and an experience-map loop-closure line built on learned scene embeddings. All higher-level components are \emph{trained once on simulation} and deployed \emph{zero-shot} on every test sequence, including the real-world one.
+We evaluate NeuroLocMap on five scenarios spanning simulated urban driving (CARLA Town05/03/07/10HD) and real-world highway driving (KITTI~07). The full system couples the vestibular-visual EKF core with two higher-level corrections: an online monocular scale branch (a lightweight regression head over a frozen depth foundation model, trained once on simulated data and frozen at deployment), and an experience-map loop-closure line built on learned scene embeddings. All higher-level components are \emph{trained once on simulation} and deployed \emph{zero-shot} on every test sequence, including the real-world one.
 
 \subsection{Experimental Setup and Datasets}
 
@@ -80,11 +80,13 @@ without IMU fusion or loop closure. We additionally report
     \caption{Quantitative Performance Comparison Under Two Alignment Calibers (ATE RMSE, m)}
     \label{tab:results}
     \begin{threeparttable}
+        \footnotesize
+        \setlength{\tabcolsep}{3.5pt}
         \begin{tabular}{@{}l cccc cccc@{}}
             \toprule
             & \multicolumn{4}{c}{Sim(3) full refit (shape-only upper bound)} & \multicolumn{4}{c}{SE(3) rigid (metric-scale caliber)} \\
             \cmidrule(lr){2-5} \cmidrule(lr){6-9}
-            Dataset & NeuroLocMap & EKF+scale & EKF & VO & NeuroLocMap & EKF+scale & EKF & VO \\
+            Dataset & Ours & EKF+scale & EKF & VO & Ours & EKF+scale & EKF & VO \\
             \midrule
             Town05   & \textbf{18.07} & 20.10 & 44.44 & 48.26 & \textbf{32.67} & 33.26 & 49.40 & 53.86 \\
             Town03   & \textbf{15.31} & 16.07 & 23.36 & 49.10 & \textbf{17.31} & 17.47 & 23.53 & 49.15 \\

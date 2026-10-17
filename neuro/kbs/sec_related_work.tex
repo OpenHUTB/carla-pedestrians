@@ -30,20 +30,20 @@ Table~\ref{tab:comparison_bioslam} compares representative bio-inspired SLAM fra
 
 \begin{table*}[!t]
        \centering
-       \footnotesize
+       \scriptsize
        \caption{Comparison of bio-inspired navigation frameworks}
        \label{tab:comparison_bioslam}
-       \setlength{\tabcolsep}{2.2pt}
+       \setlength{\tabcolsep}{3pt}
        \begin{threeparttable}
-              \begin{tabular}{lcccccc}
+              \begin{tabular}{@{}l@{\extracolsep{\fill}}cccccc@{}}
                      \toprule
-                     Framework                         & DoF         & Spatial Cells        & Fusion Method  & Visual Process     & Loop Closure  & Temp. Model     \\
+                     Framework & DoF & Spatial Cells & Fusion & Visual Proc. & Loop Closure & Temp. Model \\
                      \midrule
-                     RatSLAM~\cite{milford2008mapping} & 2D          & PC+HDC               & Vis.           & Scanline           & Exp.          & -               \\
-                     BatSLAM~\cite{steckel2013batslam} & 2D          & PC+HDC               & Sonar          & Echo               & Exp.          & -               \\
-                     NeuroSLAM                         & 3D          & 3D-GC                & Vis.           & CNN                & Exp.          & LSTM            \\
+                     RatSLAM~\cite{milford2008mapping} & 2D & PC+HDC & Vis. & Scanline & Exp. & - \\
+                     BatSLAM~\cite{steckel2013batslam} & 2D & PC+HDC & Sonar & Echo & Exp. & - \\
+                     NeuroSLAM & 3D & 3D-GC & Vis. & CNN & Exp. & LSTM \\
                      \midrule
-                     \textbf{NeuroLocMap (Ours)}       & \textbf{4D} & \textbf{3D-GC+M-HDC} & \textbf{Comp.} & \textbf{Dual+HART} & \textbf{Exp.} & \textbf{Trans.} \\
+                     \textbf{NeuroLocMap (Ours)} & \textbf{4D} & \textbf{3D-GC+M-HDC} & \textbf{Comp.} & \textbf{Dual+HART} & \textbf{Exp.} & \textbf{Trans.} \\
                      \bottomrule
               \end{tabular}
               \begin{tablenotes}
