@@ -13,7 +13,7 @@ import math
 import sys
 import time
 
-sys.path.insert(0, '/home/yangrb/下载/carla/CARLA_0.9.16/PythonAPI/carla')
+sys.path.insert(0, os.path.expanduser('~/下载/carla/CARLA_0.9.16/PythonAPI/carla'))
 import carla  # noqa: E402
 from agents.navigation.behavior_agent import BehaviorAgent  # noqa: E402
 

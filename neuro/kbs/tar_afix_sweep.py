@@ -22,7 +22,7 @@ import sys
 import numpy as np
 from scipy.io import loadmat
 
-BASE = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion'
+BASE = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion'
 
 
 def load(p):

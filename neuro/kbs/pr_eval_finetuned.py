@@ -14,12 +14,12 @@ import torch
 import torch.nn as nn
 import scipy.io as sio
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets'
+D = '../data/01_NeuroSLAM_Datasets'
 SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
         'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion', 'KITTI09Data_IMU_Fusion']
 DARC = 50.0
 TAUS = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9]
-HEAD = '/home/yangrb/openhutb/neuro/kbs/pr_head.pt'
+HEAD = '../kbs/pr_head.pt'
 
 
 class Head(nn.Module):

@@ -1,9 +1,9 @@
 % tar_drift2.m — (1) 原Town01 论文口径复算 (2) Turnaround 逐lap尺度/旋转漂移剖面
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
 
 %% (1) 原Town01: 确认论文 NLM>EKF 前提
-t01 = '/home/yangrb/openhutb/neuro/data/Town01Data_IMU_Fusion/slam_results';
+t01 = '../data/Town01Data_IMU_Fusion/slam_results';
 gt   = csvread(fullfile(t01,'ground_truth_backup.txt'));
 ekf  = csvread(fullfile(t01,'imu_aided_trajectory.txt'));
 adisk= csvread(fullfile(t01,'exp_trajectory.txt'));
@@ -17,7 +17,7 @@ for k = 1:size(cfgs,1)
 end
 
 %% (2) Turnaround 逐lap 尺度漂移剖面
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 c2 = {'EKF', csvread(fullfile(tar,'a_final','imu_aided_trajectory.txt'));
       'a_disk(A-fix)', csvread(fullfile(tar,'a_final','exp_trajectory.txt'));

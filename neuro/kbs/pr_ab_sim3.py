@@ -1,5 +1,5 @@
 import sys, numpy as np, pandas as pd, scipy.io as sio
-D='/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/'
+D='../data/01_NeuroSLAM_Datasets/'
 def sim3_full(est, gt):
     n=min(len(est),len(gt)); est,gt=est[:n],gt[:n]
     ec,gc=est-est.mean(0),gt-gt.mean(0)

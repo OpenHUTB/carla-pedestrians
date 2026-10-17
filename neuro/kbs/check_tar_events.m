@@ -1,6 +1,6 @@
 % check_tar_events.m — 检查 Turnaround A/B 的闭环事件数与报告口径
 clear all; close all; clc;
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 for d = {'a_final', 'dc_final'}
     f = fullfile(tar, d{1}, 'loop_constraint_events.mat');
     fprintf('== %s ==\n', f);

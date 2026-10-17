@@ -16,7 +16,7 @@ import cv2
 import torch
 from transformers import AutoModel
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets'
+D = '../data/01_NeuroSLAM_Datasets'
 os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
 
 SETS = {

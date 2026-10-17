@@ -2,16 +2,16 @@
 """dc_review.py — NLM DC v3 审阅材料: 5集逐帧误差对比图(base NLM / DC v3 / EKF) + 指标汇总.
 对齐口径: 7-DoF Procrustes(与论文Table/ regen_table 一致).
 输出:
-  /home/yangrb/桌面/NLM_DCv3_review/fig_perframe_<key>.png   (逐帧误差, 2x2: 误差+末段放大+轨迹俯视)
-  /home/yangrb/桌面/NLM_DCv3_review/summary.csv              (指标汇总)
+  ~/桌面/NLM_DCv3_review/fig_perframe_<key>.png   (逐帧误差, 2x2: 误差+末段放大+轨迹俯视)
+  ~/桌面/NLM_DCv3_review/summary.csv              (指标汇总)
 """
 import numpy as np, os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-exec(open('/home/yangrb/openhutb/neuro/kbs/regen_table.py').read().split("# ---------- 口径验证")[0])
-ROOT = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets'
-OUT = '/home/yangrb/桌面/NLM_DCv3_review'
+exec(open('../kbs/regen_table.py').read().split("# ---------- 口径验证")[0])
+ROOT = '../data/01_NeuroSLAM_Datasets'
+OUT = os.path.expanduser('~/桌面/NLM_DCv3_review')
 os.makedirs(OUT, exist_ok=True)
 plt.rcParams.update({'font.size': 9, 'figure.dpi': 130})
 

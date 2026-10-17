@@ -10,7 +10,7 @@
 import shutil, os, json
 import numpy as np, scipy.io as sio, pandas as pd
 
-D = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/'
+D = '../data/01_NeuroSLAM_Datasets/'
 SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
         'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion']
 

@@ -3,9 +3,9 @@
 % 逐行复刻 A-fix 爬坡注入 + 非链式 S2, 保证与落盘 a_final 同口径.
 % 自校准: win=400 必须复现 a_final 的 anchored100=113.11 / scaleLocked2D=58.65,
 % 否则整表作废 (FAIL 退出).
-% 运行: matlab -batch "cd('/home/yangrb/openhutb/neuro/kbs'); kb_s2_winsweep_v2"
+% 运行: matlab -batch "cd('../kbs'); kb_s2_winsweep_v2"
 clear all;
-BASE = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+BASE = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt     = csvread(fullfile(BASE, 'a_final', 'ground_truth_backup.txt'));
 pres2  = csvread(fullfile(BASE, 'a_final', 'exp_trajectory_preS2.txt'));
 a_disk = csvread(fullfile(BASE, 'a_final', 'exp_trajectory.txt'));

@@ -3,8 +3,8 @@
 % 模拟 NLM 锚点节点机制: 闭环校正 = 把当前帧的漂移(全局Sim3)清零, 拉回锚点帧
 % 目标: 版本A(首100帧Sim3, 论文Table口径) ATE 从 a_disk 861m 降到 << EKF 745m
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt   = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 adisk= csvread(fullfile(tar,'a_final','exp_trajectory.txt'));
 ekf  = csvread(fullfile(tar,'a_final','imu_aided_trajectory.txt'));

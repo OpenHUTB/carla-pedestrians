@@ -1,8 +1,8 @@
 % tar_verify_town01.m — 用论文口径(版本A 首100帧Sim3) 在原Town01上复算 EKF/a_disk/dc/VO
 % 目的: 确认论文" NLM>EKF "是否真实成立, 及 a_disk(A-fix) 相对 EKF 的差距量级
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
-t01 = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01_IMU_Fusion';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
+t01 = '../data/01_NeuroSLAM_Datasets/Town01_IMU_Fusion';
 gt   = csvread(fullfile(t01,'a_final','ground_truth_backup.txt'));
 ekf  = csvread(fullfile(t01,'a_final','imu_aided_trajectory.txt'));
 adisk= csvread(fullfile(t01,'a_final','exp_trajectory.txt'));

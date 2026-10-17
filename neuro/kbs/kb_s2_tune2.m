@@ -2,9 +2,9 @@
 %                (B) 开放集 S2 中性确认: on-disk a_final(S2off) → 离线S2on, before/after
 % 关键修正: 之前 win 扫描误用"旧轨迹+新事件"错配pair → 现统一用同一次run的匹配pair。
 clear all; close all; clc;
-root = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets';
+root = '../data/01_NeuroSLAM_Datasets';
 bak  = '/tmp/turnaround_a_final_preS2_20261006';
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
 
 fprintf('=== A) win 扫描 (Turnaround matched backup pair: 旧轨迹861.48 + 旧事件, 非链式) ===\n');
 gt0   = csvread(fullfile(bak,'ground_truth_backup.txt'));

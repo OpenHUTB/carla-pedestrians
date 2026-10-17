@@ -1,8 +1,8 @@
 % crosscheck_sim3.m — 用仓库MATLAB口径(compute_metrics_with_alignment, 全轨迹Sim3)
 % 交叉核验 Python Umeyama 计算的5集 Sim(3) RMSE。运行: matlab -batch crosscheck_sim3
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/ablation');
-base = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets';
+addpath('../07_test/test_imu_visual_slam/ablation');
+base = '../data/01_NeuroSLAM_Datasets';
 sets = {'Town01Data_IMU_Fusion','Town02Data_IMU_Fusion','Town05Data_IMU_Fusion', ...
         'Town10HDData_IMU_Fusion','KITTI07Data_IMU_Fusion'};
 for k = 1:numel(sets)

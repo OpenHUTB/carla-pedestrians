@@ -13,7 +13,7 @@ import cv2
 import scipy.io as sio
 import glob, sys
 
-BASE = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion/'
+BASE = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion/'
 W, H = 160, 120
 # 与 closedloop_decisive.m 一致的内参近似 (fx=W/2)
 K = np.array([[W/2, 0, W/2], [0, W/2, H/2], [0, 0, 1.0]])

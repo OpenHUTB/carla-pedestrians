@@ -2,8 +2,8 @@
 % 与 tar_global_reanchor.m(4个lap边界)的区别: 事件集 = 系统真实记录的 NLM_LOOP_EVENTS
 % 目的: 确认 core 里用全部事件实现时机制仍成立 (事件间距323-1154帧, win=400)
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt    = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 adisk = csvread(fullfile(tar,'a_final','exp_trajectory.txt'));
 ekf   = csvread(fullfile(tar,'a_final','imu_aided_trajectory.txt'));

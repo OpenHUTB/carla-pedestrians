@@ -1,7 +1,7 @@
 % tar_drift_struct.m — 拆解 Turnaround 各轨迹的"系统性"误差成分: 尺度/旋转/平移
 % 目的: 搞清 version A(745m) 与 version B(28.7m) 的 26x 差距到底是什么
 clear all; close all; clc;
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 gt   = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 ekf  = csvread(fullfile(tar,'a_final','imu_aided_trajectory.txt'));
 dc   = csvread(fullfile(tar,'dc_final','exp_trajectory.txt'));

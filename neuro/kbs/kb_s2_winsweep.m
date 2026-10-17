@@ -3,8 +3,8 @@
 % 逻辑与 core 完全一致: 非链式; 跳过条件 numel(cWin)<30 || numel(seg)<2; 尺度门 [0.05,20]
 % 无行数门 (core 无行数门; 之前 kb_s2_tune2 加行数门是缺陷, 7事件为假象)
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
-ad = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion/a_final';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
+ad = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion/a_final';
 gt0 = csvread(fullfile(ad,'ground_truth_backup.txt'));
 base0 = csvread(fullfile(ad,'exp_trajectory_preS2.txt'));
 ekf = csvread(fullfile(ad,'imu_aided_trajectory.txt'));

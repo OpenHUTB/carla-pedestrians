@@ -1,8 +1,8 @@
 % kb_s2_dconly.m — 复现 "仅DC(无A-fix) verA = 755m" 基线, 验证论文引用数字
 % DC-only = preS2 - L_field (L_field 按 core 公式从事件重算, 确定性)
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/07_test/test_imu_visual_slam/ablation');
-ad = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion/a_final';
+addpath('../07_test/07_test/test_imu_visual_slam/ablation');
+ad = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion/a_final';
 gt0 = csvread(fullfile(ad,'ground_truth_backup.txt'));
 preS2 = csvread(fullfile(ad,'exp_trajectory_preS2.txt'));
 ekf = csvread(fullfile(ad,'imu_aided_trajectory.txt'));

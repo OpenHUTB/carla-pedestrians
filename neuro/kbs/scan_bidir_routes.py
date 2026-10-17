@@ -8,7 +8,7 @@
 import math
 import sys
 
-sys.path.insert(0, '/home/yangrb/下载/carla/CARLA_0.9.16/PythonAPI/carla')
+sys.path.insert(0, os.path.expanduser('~/下载/carla/CARLA_0.9.16/PythonAPI/carla'))
 import carla  # noqa: E402
 
 

@@ -2,8 +2,8 @@
 % 暴露中间量: procrustes 结构体字段 / 首100帧 scale / 旋转迹 / 首100帧拟合残差
 % 目的: 判定 28.7 坍缩是"函数性质"还是"transform.T/transform.c 字段缺失导致的静默错误"
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/ablation');
-tar = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
+addpath('../07_test/test_imu_visual_slam/ablation');
+tar = '../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion';
 
 gt   = csvread(fullfile(tar,'a_final','ground_truth_backup.txt'));
 ekf  = csvread(fullfile(tar,'a_final','imu_aided_trajectory.txt'));

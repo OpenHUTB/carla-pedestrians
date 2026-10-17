@@ -27,9 +27,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-NPZ_DIR = Path("/home/yangrb/openhutb/neuro/kbs/scale_p1")
-DATA = Path("/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets")
-HEAD_PT = Path("/home/yangrb/openhutb/neuro/kbs/pr_scale_head.pt")
+NPZ_DIR = Path("../kbs/scale_p1")
+DATA = Path("../data/01_NeuroSLAM_Datasets")
+HEAD_PT = Path("../kbs/pr_scale_head.pt")
 SETS = {
     "Town03":   {"dir": DATA / "Town03Data_IMU_Fusion",   "fxw": 320.0 / 640.0},
     "Town05":   {"dir": DATA / "Town05Data_IMU_Fusion",   "fxw": 320.0 / 640.0},

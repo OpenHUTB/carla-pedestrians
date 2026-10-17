@@ -1,8 +1,8 @@
 % verify_euroc.m — EuRoC MH_01/03 仓库口径(compute_metrics_with_alignment)指标
 clear all; close all; clc;
-addpath('/home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/ablation');
-for d = {'/home/yangrb/openhutb/neuro/data/02_EuRoc_Dataset/MH_01_easy', ...
-         '/home/yangrb/openhutb/neuro/data/02_EuRoc_Dataset/MH_03_medium'}
+addpath('../07_test/test_imu_visual_slam/ablation');
+for d = {'../data/02_EuRoc_Dataset/MH_01_easy', ...
+         '../data/02_EuRoc_Dataset/MH_03_medium'}
     sr = fullfile(d{1}, 'slam_results');
     T = load(fullfile(sr, 'euroc_trajectories.mat'));
     n = min([size(T.gt_aligned,1), size(T.exp_aligned,1), size(T.fusion_aligned,1), size(T.pure_visual_aligned,1)]);

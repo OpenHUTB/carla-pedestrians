@@ -70,3 +70,14 @@
 - 新版：`~/NeuroSLAM_KBS_v2/`
 - 快速 diff（在仓库根目录执行）：`diff -ru neuro/kbs ~/NeuroSLAM_KBS_v2 --exclude=fig --exclude=*.pdf`
 - PDF 中所有红色文字 = 本版相对旧版的修订/待办点；红色方括号 `[V2 ...]` = 待重算说明（定稿时删除）。
+
+## 附：脚本运行约定（路径重构后）
+
+本目录脚本中的数据路径均为相对路径（`../data/...`），依赖以下运行约定：
+
+- **Python 脚本**：默认在本目录（`neuro/kbs/`）下运行，即 `cd neuro/kbs && python xxx.py`。
+  两个论文指标入口已锚定脚本目录、任意 cwd 均可调用：
+  - `compute_final_metrics.py`（Table 1 指标）
+  - `se3_metrics.py`（SE(3)/Sim(3) 双口径指标）
+- **MATLAB 脚本**：必须先 `cd` 到本目录再运行（`../data`、`../07_test` 以 cwd 解析）。
+- **CARLA / conda 等安装目录**：以 `os.path.expanduser('~/...')` / `$HOME` 引用，不依赖 cwd。

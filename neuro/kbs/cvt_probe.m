@@ -2,7 +2,7 @@
 ok_orb = 0; ok_f = 0; ok_e = 0; ok_decomp = 0; ok_homo = 0; ok_spm = 0;
 try
     det = orb('FeaturesPerImage', 300);
-    img = imread('/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion/0001.png');
+    img = imread('../data/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion/0001.png');
     pts = extractFeatures(img, det);
     ok_orb = numel(pts);
 catch e

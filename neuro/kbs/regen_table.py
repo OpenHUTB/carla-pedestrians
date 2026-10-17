@@ -8,7 +8,7 @@
 """
 import numpy as np, os
 
-ROOT = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets'
+ROOT = '../data/01_NeuroSLAM_Datasets'
 
 def load_pos(path, poscols=None):
     """poscols=None: 自动探测(首行是表头→列1,2,3; 否则列0,1,2)。"""
