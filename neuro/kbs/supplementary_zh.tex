@@ -42,4 +42,4 @@ EKF（真 VIO 流水线，本节） & 17.75 m & 44.01 m \\
 
 \subsection*{S.4 可复现性声明}
 
-所有 CARLA 场景由公开仓库的采集器采集（智能体速度 12~km/h，20 辆自动驾驶车辆与 20 名运动学直驱行人），可由其端到端复现。KITTI~07 与 KITTI~09 由同一公开流水线处理：原始序列组装（\texttt{kitti09\_assemble\_raw.py}）后经真视觉惯性 EKF 转换为标准四文件格式（\texttt{kitti\_prepare\_fusion.py}）。KITTI~07 的两条基线并存并在 S.2 节并排报告：正文基线轨迹在发布中原样保留（\texttt{\_p11\_backup\_20261014/KITTI07/fp\_old\_synthetic.txt}），真 VIO 基线可由当前流水线从原始数据再生。论文所有指标表均由仓库中的评估脚本（\texttt{se3\_metrics.py}，双口径）从发布的轨迹文件计算，并带交叉校验以确保各表逐位一致。
+所有 CARLA 场景由公开仓库的采集器采集（智能体速度 12~km/h，20 辆自动驾驶车辆与 20 名运动学直驱行人），可由其端到端复现。KITTI~07 与 KITTI~09 由同一公开流水线处理：原始序列组装（\texttt{kitti09\_assemble\_raw.py}）后经真视觉惯性 EKF 转换为标准四文件格式（\texttt{kitti\_prepare\_fusion.py}）。KITTI~07 的两条基线并存并在 S.2 节并排报告：正文基线轨迹在发布中原样保留（\path{_p11_backup_20261014/KITTI07/fp_old_synthetic.txt}），真 VIO 基线可由当前流水线从原始数据再生。论文所有指标表均由仓库中的评估脚本（\texttt{se3\_metrics.py}，双口径）从发布的轨迹文件计算，并带交叉校验以确保各表逐位一致。
