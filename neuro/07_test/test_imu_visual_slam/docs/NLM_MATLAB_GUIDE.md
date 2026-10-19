@@ -19,6 +19,8 @@ neuro/
 
 驱动用 `mfilename('fullpath')` 相对回退定位仓库根目录（core L51-52），**无绝对路径**——仓库放在哪个盘/哪个目录都能跑，但**路径里不要有中文或空格**（Windows 下尤其容易触发 MATLAB 与 Python 脚本的各种坑）。
 
+本文所有命令均以**仓库根目录**（即 `neuro/` 的上一级）为当前目录执行，路径全部为仓库内相对路径。
+
 ## 二、环境准备（按系统二选一）
 
 **Windows**
@@ -48,7 +50,7 @@ which test_imu_visual_fusion_slam   % 路径未添加前应为空（正常）
 
 ```bash
 # Windows (cmd/PowerShell) 与 Ubuntu 相同写法
-cd <仓库>/neuro/07_test/test_imu_visual_slam/quickstart
+cd neuro/07_test/test_imu_visual_slam/quickstart
 matlab -batch P2FT94_TOWN05      # CARLA Town05（1101 帧级）
 matlab -batch P2FT94_TOWN03      # Town03
 matlab -batch P2FT94_TOWN07      # Town07
@@ -69,7 +71,7 @@ GUI 方式：打开 MATLAB → cd 到 `quickstart/` → 在命令行敲驱动名
 
 ```bash
 # 依赖（一次性）: numpy scipy pandas matplotlib opencv-python
-cd <仓库>/neuro/kbs
+cd neuro/kbs
 python compute_final_metrics.py    # Windows；Ubuntu 用 python3
 python se3_metrics.py              # 双口径 SE(3)/Sim(3)
 python check_baseline.py           # 113 项守护，任一劣化 exit 1
