@@ -1,6 +1,6 @@
 # KITTI 跑图教程（KITTI07 / KITTI09，τ=0.94 论文口径）
 
-复跑论文两个 KITTI 真实车载序列的完整流程。KITTI 数据不走 CARLA 采集链，全部计算在 MATLAB 内完成（Linux + MATLAB 2021b 验证环境）。
+复跑论文两个 KITTI 真实车载序列的完整流程。KITTI 数据不走 CARLA 采集链，全部计算在 MATLAB 内完成（Ubuntu 与 Windows 双系统验证，MATLAB 2021b）。命令默认 Ubuntu 写法，Windows 差异（`python`/`python3`、`xcopy`/`cp`）集中见 `NLM_MATLAB_GUIDE.md` 第五节速查表与本篇标注。
 
 | 序列 | 帧数 | 论文位置 | 驱动 | 论文数字 |
 |---|---|---|---|---|
@@ -19,6 +19,8 @@
 which matlab
 # 预期: .../matlab_2021b/bin/matlab
 ```
+
+Windows 下无需 `which`：在 cmd/PowerShell 确认 `matlab` 命令可用（R2019a+ 支持 `-batch`），MATLAB 内 `which imresize` 有返回（Image Processing Toolbox 在位）即可。
 
 **2. 数据集在位**（图像帧在数据目录顶层，无 images/ 子目录）
 
@@ -153,6 +155,7 @@ python3 check_baseline.py    # 113 项冻结指标任一劣化则 exit 1
 | 无头跑出现 figure 告警 | 正常现象，仅绘图被跳过，数值与文件输出不受影响 |
 | 指标与论文对不上 | 确认用的是 `P2FT94_*` 驱动、结果目录是 `slam_results_p2ft_t94/`；再不对则查 `final_metrics.json` / `se3_metrics.json` 与 `check_baseline.py` 定位漂移项 |
 | MATLAB 卡住不动 | `-batch` 模式下不要关终端；确认没有另一个 MATLAB 进程占用同一结果目录 |
+| Windows 下 `python3` 报"不是内部或外部命令" | Windows 用 `python`；`cp -r` 换 `xcopy /E /I`，其余命令写法一致 |
 | 首次下载 raw 失败 | KITTI 官网需注册登录；wget 失败时手动浏览器下载后解压 |
 
 **IMU 数据格式（OXTS）**：位置 GPS (lat/lon/alt)、姿态 Roll/Pitch/Yaw、速度 North/East/Forward、加速度 ax/ay/az、角速度 wx/wy/wz。系统提取加速度与角速度用于惯性融合。
