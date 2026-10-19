@@ -102,6 +102,7 @@ This will automatically:
 | `python main.py` | Full pipeline: collect + evaluate |
 | `python main.py --skip-collect` | Skip collection, only evaluate existing data |
 | `python main.py --collect-only` | Only collect data, skip evaluation |
+| `python main.py --keep` | Keep existing data, re-collect new data (append instead of deleting old data) |
 | `python main.py --host 192.168.1.1` | Connect to remote CARLA server |
 
 ### Core Components (Python)

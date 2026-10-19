@@ -8,6 +8,7 @@ NeuroSLAM — 一键运行入口 (根目录)
     python main.py --setup              # 安装所有依赖
     python main.py --collect-only       # 仅数据采集（需CARLA）
     python main.py --skip-collect       # 跳过采集，只评估（使用已有数据）
+    python main.py --keep               # 保留已有数据，重新采集新数据（追加，不删旧数据）
     python main.py --host 192.168.1.1   # 指定CARLA服务器地址
 """
 
