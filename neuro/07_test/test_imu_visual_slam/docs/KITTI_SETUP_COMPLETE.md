@@ -37,10 +37,12 @@
 
 ## 🚀 立即开始（三选一）
 
+以下命令均以**仓库根目录**（`neuro/` 的上一级）为当前目录执行，全部为仓库内相对路径。
+
 ### 方案A: 一键完成（推荐）⭐
 
 ```bash
-cd /home/dream/neuro_1newest/carla-pedestrians/neuro/07_test/test_imu_visual_slam/scripts
+cd neuro/07_test/test_imu_visual_slam/scripts
 bash setup_kitti_complete.sh
 ```
 
@@ -51,14 +53,14 @@ bash setup_kitti_complete.sh
 ### 方案B: 分步执行
 
 ```bash
-cd scripts
+cd neuro/07_test/test_imu_visual_slam/scripts
 
 # 1. 下载数据
 bash download_kitti_raw.sh
 
 # 2. 转换格式
 python3 convert_kitti_to_neuro.py \
-    --input ~/neuro_1newest/datasets/kitti_raw/2011_09_26/2011_09_26_drive_0001_sync
+    --input neuro/data/kitti_raw/2011_09_26/2011_09_26_drive_0001_sync
 
 # 3. 运行测试
 cd ../quickstart
@@ -70,7 +72,7 @@ matlab -batch "RUN_SLAM_KITTI"
 ### 方案C: 只查看可用序列
 
 ```bash
-cd scripts
+cd neuro/07_test/test_imu_visual_slam/scripts
 bash download_kitti_raw.sh --list
 ```
 
@@ -175,22 +177,23 @@ pip3 install numpy pillow scipy
 ## 📁 文件位置
 
 ```
-/home/dream/neuro_1newest/
-├── datasets/
-│   ├── kitti_raw/              # 原始下载
-│   │   └── 2011_09_26/
-│   │       └── 2011_09_26_drive_0001_sync/
-│   │           ├── image_02/
-│   │           └── oxts/
-│   │
-│   └── kitti_converted/        # 转换后数据
-│       └── 2011_09_26_drive_0001/
-│           ├── images/
-│           ├── imu_data.mat
-│           └── slam_results/   # 测试结果
-│
-└── carla-pedestrians/neuro/07_test/test_imu_visual_slam/
-    └── scripts/                # 工具脚本
+仓库根目录/
+└── neuro/
+    ├── data/
+    │   ├── kitti_raw/              # 原始下载
+    │   │   └── 2011_09_26/
+    │   │       └── 2011_09_26_drive_0001_sync/
+    │   │           ├── image_02/
+    │   │           └── oxts/
+    │   │
+    │   └── kitti_converted/        # 转换后数据
+    │       └── 2011_09_26_drive_0001/
+    │           ├── images/
+    │           ├── imu_data.mat
+    │           └── slam_results/   # 测试结果
+    │
+    └── 07_test/test_imu_visual_slam/
+        └── scripts/                # 工具脚本
 ```
 
 ---
@@ -201,16 +204,16 @@ pip3 install numpy pillow scipy
 
 **路径1: 快速验证**
 ```bash
-bash scripts/setup_kitti_complete.sh
+bash neuro/07_test/test_imu_visual_slam/scripts/setup_kitti_complete.sh
 # 10-20分钟完成，获得初步结果
 ```
 
 **路径2: 系统测试**
 ```bash
 # 测试多个序列
-bash scripts/setup_kitti_complete.sh 2011_09_26_drive_0001
-bash scripts/setup_kitti_complete.sh 2011_09_26_drive_0005
-bash scripts/setup_kitti_complete.sh 2011_09_26_drive_0011
+bash neuro/07_test/test_imu_visual_slam/scripts/setup_kitti_complete.sh 2011_09_26_drive_0001
+bash neuro/07_test/test_imu_visual_slam/scripts/setup_kitti_complete.sh 2011_09_26_drive_0005
+bash neuro/07_test/test_imu_visual_slam/scripts/setup_kitti_complete.sh 2011_09_26_drive_0011
 
 # 批量对比分析
 matlab -batch "compare_kitti_results"
@@ -219,10 +222,10 @@ matlab -batch "compare_kitti_results"
 **路径3: 消融实验**
 ```bash
 # 先完成数据处理
-bash scripts/setup_kitti_complete.sh 2011_09_26_drive_0005
+bash neuro/07_test/test_imu_visual_slam/scripts/setup_kitti_complete.sh 2011_09_26_drive_0005
 
 # 运行消融实验
-cd ablation
+cd neuro/07_test/test_imu_visual_slam/ablation
 matlab -batch "RUN_COMPLETE_ABLATION"
 ```
 
