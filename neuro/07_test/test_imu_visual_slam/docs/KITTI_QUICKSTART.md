@@ -1,245 +1,185 @@
-# KITTI Raw Dataset 快速开始指南
+# KITTI 跑图教程（KITTI07 / KITTI09，τ=0.94 论文口径）
 
-真实车载城市道路场景 - 惯视融合系统测试
+复跑论文两个 KITTI 真实车载序列的完整流程。KITTI 数据不走 CARLA 采集链，全部计算在 MATLAB 内完成（Linux + MATLAB 2021b 验证环境）。
 
----
+| 序列 | 帧数 | 论文位置 | 驱动 | 论文数字 |
+|---|---|---|---|---|
+| KITTI07 | 1101 | 主表 Table 1（现实验证行） | `P2FT94_KITTI07.m` | NLM 18.45 m / EKF 22.09 m |
+| KITTI09 | 1591 | 补充材料 S.2（零样本迁移） | `P2FT94_KITTI09.m` | EKF 17.75/44.01 m，NLM 闭环 23.12/40.99 m（Sim(3)/SE(3)） |
 
-## 📋 数据集简介
-
-**KITTI Raw Dataset**
-- **场景：** 德国城市道路（类似CARLA Town）
-- **传感器：** RGB单目相机 + GPS/INS (IMU)
-- **采集平台：** 改装的VW Passat B6
-- **频率：** 10Hz (相机和IMU同步)
-- **IMU数据：** 完整的加速度和角速度测量
-
-**推荐序列（城市场景）：**
-- `2011_09_26_drive_0001` - 短序列，快速测试
-- `2011_09_26_drive_0005` - 中等长度，完整测试
-- `2011_09_26_drive_0011` - 动态物体多，挑战性高
+**数据集背景**：KITTI Raw Dataset，真实德国城市道路（改装 VW Passat B6 采集），RGB 单目相机 + GPS/INS，10 Hz 同步。本系统使用 `image_02`（左侧彩色相机转灰度，与 CARLA 数据一致）和 OXTS 惯导的加速度/角速度。
 
 ---
 
-## 🚀 快速开始（三步走）
+## 一、前置条件检查
 
-### 步骤1️⃣: 下载KITTI Raw数据
+**1. MATLAB 可用**
 
 ```bash
-cd /home/dream/neuro_1newest/carla-pedestrians/neuro/07_test/test_imu_visual_slam/scripts
-
-# 方法A: 下载推荐序列（默认）
-bash download_kitti_raw.sh
-
-# 方法B: 下载指定序列
-bash download_kitti_raw.sh 2011_09_26_drive_0005
-
-# 方法C: 查看可用序列
-bash download_kitti_raw.sh --list
+which matlab
+# 预期: .../matlab_2021b/bin/matlab
 ```
 
-**下载位置：** `/home/dream/neuro_1newest/datasets/kitti_raw/`
-
-**⚠️ 注意：** 
-- 首次下载需要在KITTI官网注册账号
-- 如果wget下载失败，可能需要手动登录下载
-- 每个序列约1-3GB
-
----
-
-### 步骤2️⃣: 转换数据格式
+**2. 数据集在位**（图像帧在数据目录顶层，无 images/ 子目录）
 
 ```bash
-# 转换KITTI格式 -> NeuroSLAM格式
-python3 scripts/convert_kitti_to_neuro.py \
-    --input /home/dream/neuro_1newest/datasets/kitti_raw/2011_09_26/2011_09_26_drive_0001_sync
+cd neuro/data/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion
+ls *.png | wc -l                                   # 预期 1101
+ls aligned_imu.txt ground_truth.txt
+
+cd ../KITTI09Data_IMU_Fusion
+ls *.png | wc -l                                   # 预期 1591
+ls aligned_imu.txt ground_truth.txt
 ```
 
-**转换内容：**
-- ✅ 图像：PNG → 灰度图 (640x480)
-- ✅ IMU：OXTS格式 → 标准格式 (accel + gyro)
-- ✅ 时间戳：同步对齐
-
-**输出位置：** `/home/dream/neuro_1newest/datasets/kitti_converted/2011_09_26_drive_0001/`
-
-**目录结构：**
-```
-2011_09_26_drive_0001/
-├── images/
-│   ├── 000000.png
-│   ├── 000001.png
-│   └── ...
-├── imu_data.mat          # IMU数据（MATLAB格式）
-└── metadata.json         # 元数据
-```
-
----
-
-### 步骤3️⃣: 运行SLAM测试
+**3. PR 嵌入文件在位（易踩坑）**
 
 ```bash
-cd /home/dream/neuro_1newest/carla-pedestrians/neuro/07_test/test_imu_visual_slam/quickstart
-
-# 运行KITTI SLAM测试
-matlab -batch "RUN_SLAM_KITTI"
+ls KITTI07Data_IMU_Fusion/slam_results/pr_embeddings_ft.mat
+ls KITTI09Data_IMU_Fusion/slam_results/pr_embeddings_ft.mat
 ```
 
-**输出结果：**
-```
-kitti_converted/2011_09_26_drive_0001/slam_results/
-├── trajectories.mat          # 轨迹数据
-└── kitti_slam_results.png    # 可视化结果
-```
+（以下相对路径均以 `neuro/data/01_NeuroSLAM_Datasets/` 为基。）驱动从各数据集的**基础结果目录 `slam_results/`** 读取该嵌入文件作为闭环输入（core 驱动 L426），而本次输出写到 `slam_results_p2ft_t94/`。**`slam_results/` 是输入依赖，任何时候不要删除或改名。**
 
 ---
 
-## 📊 结果说明
+## 二、运行
 
-### 保存的轨迹数据
-
-| 变量名 | 含义 | 用途 |
-|--------|------|------|
-| `pure_visual_trajectory` | 纯视觉里程计 | 消融实验 - w/o IMU |
-| `odo_trajectory` | IMU-VO融合里程计 | 中间结果 |
-| `exp_trajectory` | 经验地图轨迹 | 完整系统输出 |
-| `imu_data` | IMU原始数据 | 分析参考 |
-
-### 可视化图表
-
-1. **轨迹对比** - 三种方法的2D轨迹
-2. **轨迹长度** - 累积距离曲线
-3. **IMU数据** - 角速度和加速度
-4. **融合改进** - 位置差异分析
-
----
-
-## 🔧 批量处理
-
-### 处理多个序列
-
-创建批量脚本 `process_all_kitti.sh`:
+无头模式（推荐，与论文批次一致，跑完自动退出）：
 
 ```bash
-#!/bin/bash
-# 批量处理KITTI序列
+cd neuro/07_test/test_imu_visual_slam/quickstart
+matlab -batch P2FT94_KITTI07     # 跑 07，约数分钟
+matlab -batch P2FT94_KITTI09     # 跑 09，1591 帧稍慢
+```
 
-SEQUENCES=(
-    "2011_09_26_drive_0001"
-    "2011_09_26_drive_0005"
-    "2011_09_26_drive_0011"
-)
+GUI 模式（想看图时）：打开 MATLAB，cd 到 `quickstart/`，运行对应驱动。
 
-for seq in "${SEQUENCES[@]}"; do
-    echo "处理序列: $seq"
-    
-    # 转换格式
-    python3 scripts/convert_kitti_to_neuro.py \
-        --input "/home/dream/neuro_1newest/datasets/kitti_raw/2011_09_26/${seq}_sync"
-    
-    # 运行SLAM
-    matlab -batch "KITTI_DATA_PATH='/home/dream/neuro_1newest/datasets/kitti_converted/$seq'; test_kitti_fusion_slam"
-done
+关于驱动脚本的四点说明：
+
+1. **必须用 `P2FT94_*` 系列驱动**。同目录的 `P2FT_KITTI07.m` 是 τ 收紧前的旧口径（0.907–0.935 区间会放进假闭环），结果不可混用。
+2. **不要手动把 07 驱动里的 `DATASET_NAME` 改成 09 来跑**——两序列帧数不同（1101 vs 1591），手改容易漏 `FAST_TEST_FRAMES` 等全局量；09 有现成驱动。
+3. 驱动头注释里写的 `matlab -batch P2FT_KITTI07` 是旧名，以实际文件名为准。
+4. 口径已内置且两序列完全一致（09 为零样本迁移，不动任何参数）：τ=0.94、`NLM_USE_EKF_ODO=true`、Sim(3) 重锚关闭、嵌入文件 `pr_embeddings_ft.mat`、结果子目录 `slam_results_p2ft_t94`。
+
+---
+
+## 三、输出物
+
+结果写入各自数据集目录下的 `slam_results_p2ft_t94/`：
+
+| 文件 | 内容 |
+|---|---|
+| `trajectories.mat` | 各轨迹（GT / EKF / 纯视觉 / NLM），指标脚本的输入 |
+| `performance_report.txt` | 轨迹长度与漂移百分比摘要（人读） |
+| `experiences.mat` | 经验地图节点与边 |
+| `loop_constraint_events.mat` | 闭环事件记录 |
+| `match_log.mat` | 逐帧匹配日志 |
+
+重跑会**原地覆盖**该目录（07 与 09 在各自数据集目录下，互不覆盖）。论文定稿数字如需保留，先备份：
+
+```bash
+cd neuro/data/01_NeuroSLAM_Datasets
+cp -r KITTI07Data_IMU_Fusion/slam_results_p2ft_t94 KITTI07Data_IMU_Fusion/slam_results_p2ft_t94_paper
+cp -r KITTI09Data_IMU_Fusion/slam_results_p2ft_t94 KITTI09Data_IMU_Fusion/slam_results_p2ft_t94_paper
 ```
 
 ---
 
-## 📈 消融实验
+## 四、结果核对
 
-使用KITTI数据进行消融实验：
+**0. 关键前提：规范目录 vs 复跑目录。** 指标脚本（`compute_final_metrics.py`、`se3_metrics.py`）读取的 NLM 闭环线是各数据集下的 **`slam_results/trajectories.mat`（规范目录，论文数字出自这里）**，不是复跑输出目录 `slam_results_p2ft_t94/`。复跑后若要让新结果进入指标口径：
 
-```matlab
-% 编辑 ablation/RUN_COMPLETE_ABLATION.m
-datasets = {
-    'kitti_converted/2011_09_26_drive_0001', 'KITTI_0001', 450.0;
-    'kitti_converted/2011_09_26_drive_0005', 'KITTI_0005', 680.0;
-};
+```bash
+cd neuro/data/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion
+cp slam_results/trajectories.mat slam_results/trajectories.mat.bak      # 先备份规范文件
+cp slam_results_p2ft_t94/trajectories.mat slam_results/trajectories.mat # 再替换
+```
 
-% 运行消融实验
-cd ../ablation
-matlab -batch "RUN_COMPLETE_ABLATION"
+只验证复现、不动规范目录时，直接对比两目录的 `trajectories.mat` 即可。替换后必跑 `check_baseline.py`（见第 4 步）。
+
+**1. 快看摘要**——`performance_report.txt` 的"轨迹长度"一节。07 参考量级（论文批次实测）：GT 694.70 m，EKF 前端 434.53 m（漂移 37.45%），NLM 经验地图 486.59 m（漂移 29.96%）。
+
+**2. KITTI07 对主表**：
+
+```bash
+cd neuro/kbs
+python3 compute_final_metrics.py
+```
+
+打印 Table 1（含 KITTI07 行 NLM/EKF/VO 三列）并写入 `final_metrics.json`。07 行论文数字：**NLM 18.45 m / EKF 22.09 m**。
+
+**3. KITTI09 对补充材料 S.2**：
+
+```bash
+cd neuro/kbs
+python3 se3_metrics.py
+```
+
+打印六集 SE(3)/Sim(3) 双口径摘要（含 KITTI09 行）并写入 `se3_metrics.json`。09 的 S.2 论文数字：EKF（真 VIO）**17.75 m（Sim(3)）/ 44.01 m（SE(3)）**，NLM 闭环线 **23.12 m / 40.99 m**。
+
+S.2 读法：Sim(3) 口径下 NLM 闭环线（23.12 m）不敌真 VIO EKF（17.75 m）是**原理性的**——Sim(3) 对齐会把该序列的主导误差（全局尺度约 1.8）重新拟合吸收掉；SE(3) 刚性口径下 NLM 40.99 m 优于 EKF 44.01 m（**−6.8%**），这才是论文的度量主张口径。09 不进 Table 1（五主集为 Town05/03/07/10HD + KITTI07），`compute_final_metrics.py` 输出没有 09 行是正常的。
+
+**4. 过基线守护**（替换规范目录或改过任何代码后必跑）：
+
+```bash
+cd neuro/kbs
+python3 check_baseline.py    # 113 项冻结指标任一劣化则 exit 1
 ```
 
 ---
 
-## ❓ 常见问题
+## 五、首次组装（历史参考，复跑跳过）
 
-### Q1: 下载失败，提示需要登录？
+数据已按 NeuroSLAM 格式组装完毕，仅在新机器/新序列时需要重走本节。
 
-**解决：**
-1. 访问 http://www.cvlibs.net/datasets/kitti/raw_data.php
-2. 注册账号并登录
-3. 手动下载需要的序列（.zip文件）
-4. 解压到 `/home/dream/neuro_1newest/datasets/kitti_raw/`
+1. **下载 raw 序列**：在 KITTI 官网注册后从 http://www.cvlibs.net/datasets/kitti/raw_data.php 下载（每个序列 1–3 GB；07 对应 `2011_09_26_drive_0007`，09 对应 `2011_09_26_drive_0009`）。
+2. **组装脚本位置**：
+   - KITTI07：`neuro/data/kitti07_assemble.py`
+   - KITTI09：`neuro/kbs/kitti09_assemble_raw.py` + `neuro/kbs/kitti_prepare_fusion.py`
 
-### Q2: IMU数据格式是什么？
-
-**KITTI OXTS数据包含：**
-- 位置：GPS (lat/lon/alt)
-- 姿态：Roll/Pitch/Yaw (rad)
-- 速度：North/East/Forward (m/s)
-- **加速度：** ax, ay, az (m/s²) ⭐
-- **角速度：** wx, wy, wz (rad/s) ⭐
-
-我们提取加速度和角速度用于惯性融合。
-
-### Q3: 为什么使用image_02（左侧相机）？
-
-KITTI有4个相机：
-- `image_00/01`: 左右灰度立体
-- `image_02/03`: 左右彩色立体
-
-我们使用 `image_02` (左侧彩色) 并转换为灰度，与CARLA数据保持一致。
-
-### Q4: KITTI vs CARLA 有什么区别？
-
-| 特性 | KITTI | CARLA |
-|------|-------|-------|
-| 场景 | 真实城市 | 仿真城市 |
-| 噪声 | 真实传感器噪声 | 可配置噪声 |
-| Ground Truth | GPS/INS | 完美真值 |
-| 挑战性 | 高（天气、光照） | 可控 |
-
-KITTI用于**真实场景验证**，CARLA用于**算法开发**。
+组装内容：图像 PNG 化转灰度、OXTS 惯导提取为 `aligned_imu.txt`（加速度 + 角速度，10 Hz 同步）、GPS/INS 作为 `ground_truth.txt`。
 
 ---
 
-## 🎯 推荐工作流
+## 六、常见问题
 
-**开发阶段：**
-1. 使用CARLA快速迭代算法
-2. 批量测试Town01/02/10
-3. 进行消融实验
+| 现象 | 原因与处理 |
+|---|---|
+| 找不到数据集目录 | 驱动按 `neuro/data/01_NeuroSLAM_Datasets/<DATASET_NAME>` 定位（L231），从 `quickstart/` 目录启动即可；不要移动数据目录 |
+| 报错缺 `pr_embeddings_ft.mat` | 基础目录 `slam_results/` 被动过；从备份或复现资产包恢复该文件 |
+| 复跑后指标数字没变 | 指标脚本读的是 `slam_results/` 规范目录；按第四节第 0 步替换 `trajectories.mat` 后重算 |
+| 09 的 Sim(3) 口径 NLM 输给 EKF | 原理性现象，不是 bug；看 SE(3) 刚性口径（−6.8%），读法见第四节第 3 步 |
+| 无头跑出现 figure 告警 | 正常现象，仅绘图被跳过，数值与文件输出不受影响 |
+| 指标与论文对不上 | 确认用的是 `P2FT94_*` 驱动、结果目录是 `slam_results_p2ft_t94/`；再不对则查 `final_metrics.json` / `se3_metrics.json` 与 `check_baseline.py` 定位漂移项 |
+| MATLAB 卡住不动 | `-batch` 模式下不要关终端；确认没有另一个 MATLAB 进程占用同一结果目录 |
+| 首次下载 raw 失败 | KITTI 官网需注册登录；wget 失败时手动浏览器下载后解压 |
 
-**验证阶段：**
-1. 使用KITTI真实数据测试
-2. 对比仿真vs真实性能
-3. 分析真实场景下的问题
+**IMU 数据格式（OXTS）**：位置 GPS (lat/lon/alt)、姿态 Roll/Pitch/Yaw、速度 North/East/Forward、加速度 ax/ay/az、角速度 wx/wy/wz。系统提取加速度与角速度用于惯性融合。
 
-**论文写作：**
-- CARLA结果展示算法有效性
-- KITTI结果验证真实场景适用性
-- 对比分析提升说服力
+**为什么用 image_02**：`image_00/01` 为左右灰度立体，`image_02/03` 为左右彩色立体；用 `image_02`（左侧彩色）转灰度，与 CARLA 数据管道保持一致。
+
+**KITTI vs CARLA**：KITTI 提供真实传感器噪声与真实场景挑战性（光照、天气），用于真实场景验证；CARLA 提供完美真值与可控条件，用于算法开发与消融。
 
 ---
 
-## 📚 参考资料
+## 七、一页速查
 
-**KITTI官方：**
-- 数据集主页: http://www.cvlibs.net/datasets/kitti/
+```bash
+# 跑（quickstart 目录下二选一或都跑）
+cd neuro/07_test/test_imu_visual_slam/quickstart
+matlab -batch P2FT94_KITTI07
+matlab -batch P2FT94_KITTI09
+
+# 核（kbs 目录下）
+cd neuro/kbs
+python3 compute_final_metrics.py   # 07 → Table 1 (18.45 / 22.09)
+python3 se3_metrics.py             # 09 → S.2 双口径 (17.75/44.01 vs 23.12/40.99)
+python3 check_baseline.py          # 替换规范目录后必跑
+```
+
+## 参考资料
+
+- KITTI 数据集主页: http://www.cvlibs.net/datasets/kitti/
 - Raw Data: http://www.cvlibs.net/datasets/kitti/raw_data.php
 - 论文: "Vision meets Robotics: The KITTI Dataset" (IJRR 2013)
-
-**工具库：**
-- pykitti: https://github.com/utiasSTARS/pykitti
-- kitti2bag: https://github.com/tomas789/kitti2bag
-
----
-
-## 📞 技术支持
-
-遇到问题？检查：
-1. 数据路径是否正确
-2. Python依赖是否安装 (`pip install numpy pillow scipy`)
-3. MATLAB路径是否设置 (`addpath`)
-4. IMU数据文件是否生成
-
-Good luck! 🚗💨
