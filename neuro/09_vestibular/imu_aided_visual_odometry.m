@@ -74,7 +74,7 @@ function [transV, yawRotV, heightV] = imu_aided_visual_odometry(rawImg, imu_data
     end
     
     % IMU-视觉融合策略
-    % 使用互补滤波器融合IMU和视觉里程计
+    % 固定权重凸组合 + 活动门控: 视觉活动越阈值按权混合, 低于阈值整路交给更可信一方
     
     % 偏航速度融合 (IMU更可靠用于旋转)
     alpha_yaw = 0.7;  % IMU权重
