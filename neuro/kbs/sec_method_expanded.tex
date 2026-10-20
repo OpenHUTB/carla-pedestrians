@@ -312,11 +312,11 @@ the excitatory update is:
 \end{equation}
 where $\langle \cdot \rangle_N$ denotes modulo-$N$ wrapping for periodic boundary conditions. In our implementation $\sigma_x = \sigma_y = \sigma_z = 1.5$ cells with a $7\times7\times7$ kernel.
 
-\textbf{(2) Global inhibition and normalization.} Uniform global inhibition subtracts the mean activity, while rectification and normalization maintain a single stable bump:
+\textbf{(2) Global inhibition and normalization.} Uniform global inhibition subtracts a fixed threshold $\theta_g$ with rectification, which suppresses weak background activity while preserving the bump:
 \begin{equation}
-    A^\mathrm{g}_{i,j,k}\leftarrow \big[A^\mathrm{g}_{i,j,k}+\Delta A^\mathrm{g}_{i,j,k}-\lambda\,\bar A^\mathrm{g}\big]_+,\quad \bar A^\mathrm{g}=\frac{1}{N_xN_yN_z}\sum_{p,q,r}A^\mathrm{g}_{p,q,r}
+    A^\mathrm{g}_{i,j,k}\leftarrow \big[A^\mathrm{g}_{i,j,k}+\Delta A^\mathrm{g}_{i,j,k}-\theta_g\big]_+,\quad [\cdot]_+ = \max(0, \cdot)
 \end{equation}
-where $[\cdot]_+ = \max(0, \cdot)$ is rectification and $\lambda$ controls inhibition strength (typically $\lambda=1.0$). After inhibition, the activity is $L_1$-normalized:
+In our implementation $\theta_g = 2\times10^{-4}$. After inhibition, the activity is $L_1$-normalized:
 \begin{equation}
     A^\mathrm{g}\leftarrow \frac{A^\mathrm{g}}{\lVert A^\mathrm{g}\rVert_1}=\frac{A^\mathrm{g}}{\sum_{i,j,k}|A^\mathrm{g}_{i,j,k}|}
 \end{equation}
@@ -347,9 +347,9 @@ where $\eta$ is Hebbian learning rate, $\rho$ is spatial correction strength, an
 \begin{equation}
     \Delta A^\mathrm{h}_{\psi,h}=\sum_{u,v}A^\mathrm{h}_{u,v}\,\mathcal{K}^\mathrm{h}_{\langle \psi-u\rangle_{N_\psi},\langle h-v\rangle_{N_h}}
 \end{equation}
-followed by inhibition and normalization:
+followed by fixed-threshold global inhibition ($\theta_h = 2\times10^{-4}$, the same rectify-and-subtract form as above) and $L_1$ normalization:
 \begin{equation}
-    A^\mathrm{h}\leftarrow \frac{[A^\mathrm{h}+\Delta A^\mathrm{h}-\lambda_h\,\bar A^\mathrm{h}]_+}{\lVert A^\mathrm{h}\rVert_1}
+    A^\mathrm{h}\leftarrow \frac{\tilde{A}^\mathrm{h}}{\lVert \tilde{A}^\mathrm{h}\rVert_1},\qquad \tilde{A}^\mathrm{h}=\big[A^\mathrm{h}+\Delta A^\mathrm{h}-\theta_h\big]_+
 \end{equation}
 Path integration shifts the activity bump according to yaw rate $r^f$ and vertical velocity $v^f_z$:
 \begin{equation}
