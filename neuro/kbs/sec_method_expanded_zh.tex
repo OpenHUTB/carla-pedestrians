@@ -309,11 +309,11 @@ LSTM按序处理融合后的背侧-腹侧特征，跨时间步维持隐藏状态
 \end{equation}
 其中 $\langle \cdot \rangle_N$ 表示周期性边界条件下的模 $N$ 卷绕。本实现取 $\sigma_x = \sigma_y = \sigma_z = 1.5$ 个细胞，核大小为 $7\times7\times7$。
 
-\textbf{(2) 全局抑制与归一化.} 均匀全局抑制减去平均活动，整流与归一化维持单一稳定凸起：
+\textbf{(2) 全局抑制与归一化.} 均匀全局抑制以带整流的方式减去固定阈值 $\theta_g$，压制微弱背景活动同时保持凸起：
 \begin{equation}
-    A^\mathrm{g}_{i,j,k}\leftarrow \big[A^\mathrm{g}_{i,j,k}+\Delta A^\mathrm{g}_{i,j,k}-\lambda\,\bar A^\mathrm{g}\big]_+,\quad \bar A^\mathrm{g}=\frac{1}{N_xN_yN_z}\sum_{p,q,r}A^\mathrm{g}_{p,q,r}
+    A^\mathrm{g}_{i,j,k}\leftarrow \big[A^\mathrm{g}_{i,j,k}+\Delta A^\mathrm{g}_{i,j,k}-\theta_g\big]_+,\quad [\cdot]_+ = \max(0, \cdot)
 \end{equation}
-其中 $[\cdot]_+ = \max(0, \cdot)$ 为整流，$\lambda$ 控制抑制强度（典型 $\lambda=1.0$）。抑制之后，活动做 $L_1$ 归一化：
+本实现取 $\theta_g = 2\times10^{-4}$。抑制之后，活动做 $L_1$ 归一化：
 \begin{equation}
     A^\mathrm{g}\leftarrow \frac{A^\mathrm{g}}{\lVert A^\mathrm{g}\rVert_1}=\frac{A^\mathrm{g}}{\sum_{i,j,k}|A^\mathrm{g}_{i,j,k}|}
 \end{equation}
@@ -344,9 +344,9 @@ LSTM按序处理融合后的背侧-腹侧特征，跨时间步维持隐藏状态
 \begin{equation}
     \Delta A^\mathrm{h}_{\psi,h}=\sum_{u,v}A^\mathrm{h}_{u,v}\,\mathcal{K}^\mathrm{h}_{\langle \psi-u\rangle_{N_\psi},\langle h-v\rangle_{N_h}}
 \end{equation}
-随后进行抑制与归一化：
+随后进行固定阈值全局抑制（$\theta_h = 2\times10^{-4}$，与上式相同的整流相减形式）与 $L_1$ 归一化：
 \begin{equation}
-    A^\mathrm{h}\leftarrow \frac{[A^\mathrm{h}+\Delta A^\mathrm{h}-\lambda_h\,\bar A^\mathrm{h}]_+}{\lVert A^\mathrm{h}\rVert_1}
+    A^\mathrm{h}\leftarrow \frac{\tilde{A}^\mathrm{h}}{\lVert \tilde{A}^\mathrm{h}\rVert_1},\qquad \tilde{A}^\mathrm{h}=\big[A^\mathrm{h}+\Delta A^\mathrm{h}-\theta_h\big]_+
 \end{equation}
 路径积分按偏航角速度 $r^f$ 与垂向速度 $v^f_z$ 移动活动凸起：
 \begin{equation}
