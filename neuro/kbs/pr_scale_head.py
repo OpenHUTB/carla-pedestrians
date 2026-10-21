@@ -93,12 +93,6 @@ class Head(nn.Module):
         return self.net(x).squeeze(-1)
 
 
-def ols(X):
-    c, *_ = np.linalg.lstsq(X, np.ones(len(X)) * 0 + np.zeros(len(X)), rcond=None)
-    # 占位, 实际在评估里用 y 拟合
-    return c
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-write", action="store_true")
