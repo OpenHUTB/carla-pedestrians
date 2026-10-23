@@ -10,7 +10,7 @@ We evaluate NeuroLocMap on five scenarios spanning simulated urban driving (CARL
 
 \subsection{Experimental Setup and Datasets}
 
-\textbf{Implementation Details.} All experiments are conducted on a laptop workstation equipped with an Intel Core i5-12450H CPU (12th Gen, 8~cores), 16~GB RAM, and NVIDIA GeForce RTX 4050 Laptop GPU. The visual processing pipeline leverages GPU acceleration for HART-like feature extraction and Trans\-form\-er-in\-spired encoding (using simplified self-attention via global statistical modulation), while spatial cell computations run on CPU. The LSTM temporal module uses manually-tuned fixed gate values (input=0.5, forget=0.5, output=0.9) rather than learned parameters. The framework achieves real-time per\-for\-mance at $\sim$31~FPS on average across all test scenarios.
+\textbf{Implementation Details.} All experiments are conducted on a single laptop workstation (Intel Core i9-14900HX CPU, 32~GB RAM, NVIDIA GeForce RTX 5070 Laptop GPU); the entire SLAM pipeline runs on CPU, and no GPU is used anywhere in the reported results. The LSTM temporal module uses manually-tuned fixed gate values (input=0.5, forget=0.5, output=0.9) rather than learned parameters. Measured end-to-end throughput of the full pipeline (including final evaluation and plotting) is 67--76~FPS on the four CARLA towns and 39~FPS on KITTI~07, whose denser map (964 templates) makes template matching the dominant growing cost.
 
 \textbf{Baseline Methods.} We compare NeuroLocMap against two baseline approaches:
 (1) EKF Fusion --- a loosely-coupled 10-state Extended Kalman Filter
@@ -112,11 +112,11 @@ On the real-world 692~m highway (KITTI~07), NeuroLocMap runs with the loop-closu
 
 \textbf{Framework Internal Representations.} The topological structure of the experience maps varies with scene revisiting structure: the CARLA maps hold 91--481 experience nodes (Town05: 175, Town03: 91, Town07: 270, Town10HD: 481) with 91--481 visual templates and 1--7 accepted PR links, while the KITTI~07 highway map is far denser (964 nodes, 964 templates over 692~m, $\sim$1.4 templates per meter), reflecting the high sampling rate of a visually distinctive, non-repeating scene. On loop-rich urban maps, the accepted re-anchors provide the global constraints that relax accumulated drift between revisits. The bio-inspired spatial cell representations demonstrate characteristic periodic firing patterns at different spatial scales (1.5~m to 12~m wavelength) for grid cells, and orientation-selective neural activity for head direction cells, confirming successful integration of ves\-tib\-u\-lar (IMU) signals for orientation estimation.
 
-\textbf{Computational Performance and Complexity Analysis.} Table~\ref{tab:runtime} details per-module timing analysis. NeuroLocMap achieves real-time per\-for\-mance at $\sim$31~FPS average, with total pipeline latency of 32.1~ms. The grid cell update dominates computation (58\% of total time) due to 3D continuous attractor network dynamics, while experience map update (15\%) and visual template matching (7\%) remain lightweight. Visual processing achieves high throughput (2.1~ms, 469~Hz) despite dual-stream architecture, benefiting from the simplified $\mathcal{O}(N)$ self-attention implementation (global statistical modulation rather than full QKV operations) and efficient feature caching. The deep components add negligible cost: the frozen depth backbone and the scale head run outside the 31-FPS critical path (the head itself is $<$1~ms per frame on CPU), and the loop-closure line consumes precomputed frame embeddings.
+\textbf{Computational Performance and Complexity Analysis.} Table~\ref{tab:runtime} details per-module timing measured with the MATLAB profiler on KITTI~07 (250-frame subset; the densest map, hence the heaviest template-matching load). End-to-end wall-clock over the full sequences --- including final evaluation and plotting --- measures 67--76~FPS on the four CARLA towns (14.1~ms per frame on average) and 39~FPS on KITTI~07 (25.6~ms per frame). The grid cell update dominates the per-frame critical path ($\sim$49\% of profiled time) due to the 3D continuous attractor dynamics, followed by ventral template extraction ($\sim$20\%) and image input with CLAHE enhancement ($\sim$22\%); dorsal scanline VO, HDC update, and the experience-map update with pose readout each stay below 5\%, and the vestibular-visual fusion step is negligible ($<$0.1~ms). The deep components add negligible cost: the frozen depth backbone and the scale head run outside the real-time critical path (the head itself is $<$1~ms per frame on CPU), and the loop-closure line consumes precomputed frame embeddings.
 
 \textbf{Theoretical Complexity.} The framework's computational complexity scales as: (1) Visual processing: $\mathcal{O}(HW)$ for image preprocessing plus $\mathcal{O}(N_f)$ for feature extraction, where $H \times W = 640 \times 480$ and $N_f \approx 300$ features; (2) Grid cell update: $\mathcal{O}(N_x N_y N_z)$ for 3D attractor dynamics with $30 \times 30 \times 10 = 9000$ cells; (3) Template matching: $\mathcal{O}(M \cdot d)$ where $M$ is template count (91--964) and $d$ is descriptor dimension (4096); (4) Experience map: $\mathcal{O}(K)$ for graph traversal with $K$ nodes (91--964). Total complexity is $\mathcal{O}(HW + N_x N_y N_z + Md)$, dominated by grid cell dynamics. Compared to learning-based methods requiring GPU matrix operations ($\mathcal{O}(N^2)$ for attention), our $\mathcal{O}(N)$ approximation enables CPU-only real-time execution.
 
-\textbf{Hardware Requirements and Deployment.} The framework runs on commodity hardware without GPU acceleration for the SLAM pipeline itself: Intel Core i5-12450H CPU (8~cores, 2.0--4.4~GHz), 16~GB RAM, consuming $\sim$2~GB memory, dominated by the runtime state of the 3D grid-cell attractor network (visual template storage is $\sim$16~MB even in the densest map: 964~templates $\times$ 4096-dim descriptors $\times$ 4~bytes, plus experience map overhead). Peak CPU utilization reaches 45--60\% during grid cell updates, leaving headroom for concurrent processes. This lightweight footprint enables deployment on embedded platforms (e.g., NVIDIA Jetson Nano, Raspberry Pi 4) where learning-based SLAM methods requiring GPU inference (DROID-SLAM: 8~GB VRAM, TartanVO: 6~GB VRAM) are infeasible. Power consumption is estimated at 15--20~W (CPU-only) vs 50--80~W for GPU-accelerated methods, critical for battery-powered mobile robots.
+\textbf{Hardware Requirements and Deployment.} The framework runs its entire pipeline on CPU: on the test laptop (Intel Core i9-14900HX, 32~GB RAM) the full system processes the evaluation sequences at 39--76~FPS end-to-end with no GPU involvement, and memory is dominated by the runtime state of the 3D grid-cell attractor network together with the visual template store. This lightweight footprint enables deployment on embedded platforms (e.g., NVIDIA Jetson Nano, Raspberry Pi 4) where learning-based SLAM methods requiring GPU inference (DROID-SLAM: 8~GB VRAM, TartanVO: 6~GB VRAM) are infeasible.
 
 \begin{figure*}[!t]
     \centering
@@ -129,20 +129,21 @@ On the real-world 692~m highway (KITTI~07), NeuroLocMap runs with the loop-closu
     \centering
     \setlength{\tabcolsep}{3pt}
     \footnotesize
-    \caption{Runtime Performance Analysis (Averaged Across the Four CARLA Towns)}
+    \caption{Per-module runtime measured with the MATLAB profiler (KITTI~07, 250-frame subset, densest map). Profiler overhead inflates absolute values; end-to-end wall-clock on this sequence is 25.6~ms/frame (39~FPS).}
     \label{tab:runtime}
     \begin{tabular}{lcc}
         \toprule
-        Component                       & Mean (ms)     & Frequency (Hz) \\
+        Component                            & Mean (ms/frame) & Share          \\
         \midrule
-        Visual processing (dual-stream) & 2.1           & 469            \\
-        Visual template matching        & 2.3           & 429            \\
-        Vestibular-visual fusion        & 1.9           & 527            \\
-        Grid cell update (3D CAN)       & 18.5          & 54             \\
-        HDC update                      & 1.5           & 661            \\
-        Experience map update           & 4.7           & 213            \\
+        Image input + CLAHE enhancement      & 7.5             & 22\%           \\
+        Ventral template extraction \& matching & 6.9          & 20\%           \\
+        Dorsal scanline visual odometry      & 1.5             & 4\%            \\
+        Vestibular-visual fusion             & 0.06            & $<$0.2\%       \\
+        Grid cell update (3D CAN)            & 16.8            & 49\%           \\
+        HDC update                           & 0.9             & 3\%            \\
+        Experience map update + pose readout & 0.8             & 2\%            \\
         \midrule
-        \textbf{Total pipeline}         & \textbf{32.1} & \textbf{31.2}  \\
+        \textbf{Total (profiled)}            & \textbf{34.4}   & \textbf{100\%} \\
         \bottomrule
     \end{tabular}
 \end{table*}
@@ -252,7 +253,7 @@ Two honest observations follow. First, every scale-consistent published system s
 \begin{itemize}
     \item \textbf{Accuracy}: published values use the official KITTI subsegment drift rate (trel), a different protocol from our terminal/length drift, so each is reported under its own protocol. DeepVO, trained on real KITTI sequences, reports 3.91\% trel on sequence~07; TartanVO, trained purely on synthetic data and transferred to KITTI without fine-tuning, reports 4.32\% trel on the same sequence. NeuroLocMap, with its learned components trained once on simulation and deployed zero-shot, attains 9.71\% terminal/length drift on KITTI~07 (2.9--11.7\% across the five test scenarios, Table~\ref{tab:results}).
 
-    \item \textbf{Computational Efficiency}: DROID-SLAM achieves state-of-the-art accuracy but runs at 4--5~FPS (slower than NeuroLocMap's $\sim$31~FPS), limiting real-time deployment on embedded platforms.
+    \item \textbf{Computational Efficiency}: DROID-SLAM achieves state-of-the-art accuracy but runs at 4--5~FPS (slower than NeuroLocMap's measured 39--76~FPS), limiting real-time deployment on embedded platforms.
 
     \item \textbf{Interpretability}: NeuroLocMap's bio-inspired components (grid cells, HDC, experience map) offer explicit spatial representations that can be visualized and debugged, unlike black-box deep networks.
 
