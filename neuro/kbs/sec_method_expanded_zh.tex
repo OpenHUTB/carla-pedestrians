@@ -69,17 +69,17 @@
 \textbf{阶段2：初级视觉皮层（V1-V4）处理.} 中层处理对表征进行归一化与标准化：
 \begin{align}
      & \text{动态范围归一化：}\quad \tilde V_t = \frac{V_t-\min(V_t)}{\max(V_t)-\min(V_t)}     \\
-     & \text{空间标准化：}\quad Z_t = \mathcal{D}(\tilde V_t)\in\mathbb{R}^{64\times64}        \\
-     & \text{局部均值减去：}\quad Z_t(i,j)\leftarrow Z_t(i,j)-\frac{1}{64}\sum_{k=1}^{64}Z_t(i,k)
+     & \text{空间标准化：}\quad Z_t = \mathcal{D}(\tilde V_t)\in\mathbb{R}^{12\times16}        \\
+     & \text{全局均值减去：}\quad Z_t(i,j)\leftarrow Z_t(i,j)-\frac{1}{192}\sum_{k=1}^{12}\sum_{l=1}^{16}Z_t(k,l)
 \end{align}
-其中 $\mathcal{D}$ 为下采样算子（双线性插值）。按行减去均值可去除全局强度变化同时保留局部空间结构，类似于V1与V2中的除性归一化。
+其中 $\mathcal{D}$ 为下采样算子（双线性插值）。全局均值减去可去除整体强度变化同时保留空间结构，类似于V1与V2中的除性归一化。
 
 \textbf{阶段3：颞下（IT）表征.} 最终表征为紧凑的向量化描述子：
 \begin{equation}
-    \boldsymbol{\phi}_t=\mathrm{vec}(Z_t)\in\mathbb{R}^{4096}
+    \boldsymbol{\phi}_t=\mathrm{vec}(Z_t)\in\mathbb{R}^{192}
 \end{equation}
 其中 $\mathrm{vec}(\cdot)$ 表示将二维特征图映射为一维描述子的向量化算子，$\boldsymbol{\phi}_t$ 为时间戳 $t$ 处的整体场景特征向量。
-该 $64 \times 64 = 4096$ 维特征向量作为整体场景描述子，类似于IT皮层中视图选择、位置不变的表征。
+该 $12 \times 16 = 192$ 维特征向量作为整体场景描述子，类似于IT皮层中视图选择、位置不变的表征。
 
 \textbf{视觉模板匹配与地点识别.} 地点识别通过基于余弦相似度的模板匹配实现，其鲁棒性优于绝对差之和（SAD）等基于强度的度量：
 \begin{equation}
@@ -366,7 +366,7 @@ LSTM按序处理融合后的背侧-腹侧特征，跨时间步维持隐藏状态
 
 在大脑中，海马体将地点表征链接为遍历空间的情节记忆，其重放与再巩固支撑记忆引导的导航。多层经验地图正对应这一组织：它将3D空间经验表示为图结构，提供一种混合拓扑-度量表征，兼具离散基于地点的地图（拓扑鲁棒性、闭环）与连续度量表征（精确定位）的优点。
 
-\textbf{经验表征.} 每个经验节点 $\mathcal{E}_i$ 编码一段独立的空间情节，包含激活的视觉模板与描述子 $(VT_i,\,\boldsymbol{\phi}_i\in\mathbb{R}^{4096})$、同步的空间细胞编码 $\mathbf{P}^{gc}_i=\mathbf{A}^\mathrm{g}_i\in\mathbb{R}^{N_x\times N_y\times N_z}$ 与 $\mathbf{P}^{hdc}_i=\mathbf{A}^\mathrm{h}_i\in\mathbb{R}^{N_\psi\times N_h}$、从这些活动解码出的度量位姿 $(x_i, y_i, z_i, \psi_i)$，以及用于时序排序的时间戳 $t_i$。
+\textbf{经验表征.} 每个经验节点 $\mathcal{E}_i$ 编码一段独立的空间情节，包含激活的视觉模板与描述子 $(VT_i,\,\boldsymbol{\phi}_i\in\mathbb{R}^{192})$、同步的空间细胞编码 $\mathbf{P}^{gc}_i=\mathbf{A}^\mathrm{g}_i\in\mathbb{R}^{N_x\times N_y\times N_z}$ 与 $\mathbf{P}^{hdc}_i=\mathbf{A}^\mathrm{h}_i\in\mathbb{R}^{N_\psi\times N_h}$、从这些活动解码出的度量位姿 $(x_i, y_i, z_i, \psi_i)$，以及用于时序排序的时间戳 $t_i$。
 这种丰富的多模态编码通过视觉匹配实现鲁棒的闭环检测，同时通过空间细胞编码保持度量信息。
 
 \textbf{经验创建与连接.} 随着机器人导航，当当前空间表征与所有现有经验都足够不同时，创建新经验。创建准则综合视觉与空间细胞相似度：
