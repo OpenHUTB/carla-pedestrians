@@ -69,17 +69,17 @@ where $\mathcal{G}$ is the grayscale conversion operator, $\mathcal{C}_\lambda$ 
 \textbf{Stage 2: Primary Visual Cortex (V1-V4) Processing.} Mid-level processing normalizes and standardizes the representation:
 \begin{align}
      & \text{Dynamic range normalization:}\quad \tilde V_t = \frac{V_t-\min(V_t)}{\max(V_t)-\min(V_t)}     \\
-     & \text{Spatial standardization:}\quad Z_t = \mathcal{D}(\tilde V_t)\in\mathbb{R}^{64\times64}        \\
-     & \text{Local mean subtraction:}\quad Z_t(i,j)\leftarrow Z_t(i,j)-\frac{1}{64}\sum_{k=1}^{64}Z_t(i,k)
+     & \text{Spatial standardization:}\quad Z_t = \mathcal{D}(\tilde V_t)\in\mathbb{R}^{12\times16}        \\
+     & \text{Global mean subtraction:}\quad Z_t(i,j)\leftarrow Z_t(i,j)-\frac{1}{192}\sum_{k=1}^{12}\sum_{l=1}^{16}Z_t(k,l)
 \end{align}
-where $\mathcal{D}$ is the downsampling operator (bilinear interpolation). Row-wise mean subtraction removes global intensity variations while preserving local spatial structure, analogous to divisive normalization in V1 and V2.
+where $\mathcal{D}$ is the downsampling operator (bilinear interpolation). Global mean subtraction removes overall intensity variations while preserving spatial structure, analogous to divisive normalization in V1 and V2.
 
 \textbf{Stage 3: Inferotemporal (IT) Representation.} The final representation is a compact vectorized descriptor:
 \begin{equation}
-    \boldsymbol{\phi}_t=\mathrm{vec}(Z_t)\in\mathbb{R}^{4096}
+    \boldsymbol{\phi}_t=\mathrm{vec}(Z_t)\in\mathbb{R}^{192}
 \end{equation}
 where $\mathrm{vec}(\cdot)$ denotes vectorization operator mapping 2D feature map to one-dimensional descriptor, and $\boldsymbol{\phi}_t$ is holistic scene feature vector at timestamp $t$.
-This $64 \times 64 = 4096$-dimensional feature vector serves as a holistic scene descriptor analogous to the view-selective, position-invariant representations in IT cortex.
+This $12 \times 16 = 192$-dimensional feature vector serves as a holistic scene descriptor analogous to the view-selective, position-invariant representations in IT cortex.
 
 \textbf{Visual Template Matching and Place Recognition.} Place recognition is achieved through template matching using cosine similarity, which is more robust than intensity-based metrics like sum-of-absolute-differences (SAD):
 \begin{equation}
@@ -368,7 +368,7 @@ This decoding naturally handles the circular topology of orientation (using $\ma
 
 In the brain, the hippocampus links place representations into episodic memories of traversed space, and their replay and re-consolidation underpin memory-guided navigation. The multilayered experience map mirrors this organization: it represents 3D spatial experiences as a graph structure, providing a hybrid topological-metric representation that combines the benefits of discrete place-based maps (topological robustness, loop closure) and continuous metric representations (accurate localization).
 
-\textbf{Experience Representation.} Each experience node $\mathcal{E}_i$ encodes a distinct spatial episode comprising the active visual template and descriptor $(VT_i,\,\boldsymbol{\phi}_i\in\mathbb{R}^{4096})$, the concurrent spatial-cell codes $\mathbf{P}^{gc}_i=\mathbf{A}^\mathrm{g}_i\in\mathbb{R}^{N_x\times N_y\times N_z}$ and $\mathbf{P}^{hdc}_i=\mathbf{A}^\mathrm{h}_i\in\mathbb{R}^{N_\psi\times N_h}$, the metric pose $(x_i, y_i, z_i, \psi_i)$ decoded from these activities, and the timestamp $t_i$ for temporal ordering.
+\textbf{Experience Representation.} Each experience node $\mathcal{E}_i$ encodes a distinct spatial episode comprising the active visual template and descriptor $(VT_i,\,\boldsymbol{\phi}_i\in\mathbb{R}^{192})$, the concurrent spatial-cell codes $\mathbf{P}^{gc}_i=\mathbf{A}^\mathrm{g}_i\in\mathbb{R}^{N_x\times N_y\times N_z}$ and $\mathbf{P}^{hdc}_i=\mathbf{A}^\mathrm{h}_i\in\mathbb{R}^{N_\psi\times N_h}$, the metric pose $(x_i, y_i, z_i, \psi_i)$ decoded from these activities, and the timestamp $t_i$ for temporal ordering.
 This rich multimodal encoding enables robust loop closure detection through visual matching while maintaining metric information through the spatial cell codes.
 
 \textbf{Experience Creation and Linking.} As the robot navigates, new experiences are created when the current spatial representation differs sufficiently from all existing experiences. The creation criterion combines visual and spatial cell similarity:
