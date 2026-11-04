@@ -247,7 +247,7 @@ class ScaleEstimator:
         scale = imu_norm / visual_norm
         
         # 更严格的尺度限制（防止崩溃）
-        scale = np.clip(scale, 0.05, 5.0)  # 从[0.1,10]改为[0.5,2]
+        scale = np.clip(scale, 0.05, 5.0)  
         
         # 更保守的平滑更新
         self.current_scale = self.alpha * self.current_scale + (1 - self.alpha) * scale
