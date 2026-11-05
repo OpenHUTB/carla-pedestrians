@@ -129,7 +129,7 @@ MAX_SAVE_IMG = 5000
 OUTPUT_DIR = os.path.join(current_dir, '..', 'data', f'{TARGET_MAP}Data_IMU_Fusion')
 
 # IMU-视觉融合参数
-IMU_SAMPLE_RATE = 60       # Hz
+IMU_SAMPLE_RATE = 20       # Hz (对齐后逐帧采样, 实测 aligned_imu 间隔 0.05s)
 CAMERA_SAMPLE_RATE = 20    # Hz (1/0.05)
 
 EXPOSURE_MODE = "manual"
