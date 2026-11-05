@@ -314,7 +314,7 @@ class World(object):
         # IMU传感器
         self.imu_sensor = safe_destroy_actor(self.imu_sensor)
         imu_bp = bp_lib.find("sensor.other.imu")
-        imu_bp.set_attribute('sensor_tick', '0.1')
+        # 注: 同步模式下传感器逐 tick 出数 (20Hz), sensor_tick 节流不生效, 故不设置
         imu_std_dev_a = 0.1
         imu_std_dev_g = 0.001
         imu_bp.set_attribute('noise_accel_stddev_x', str(imu_std_dev_a))
