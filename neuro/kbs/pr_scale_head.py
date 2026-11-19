@@ -36,9 +36,10 @@ SETS = {
     "Town07":   {"dir": DATA / "Town07Data_IMU_Fusion",   "fxw": 320.0 / 640.0},
     "Town10HD": {"dir": DATA / "Town10HDData_IMU_Fusion", "fxw": 320.0 / 640.0},
     "KITTI07":  {"dir": DATA / "KITTI07Data_IMU_Fusion",  "fxw": 707.0912 / 1242.0},
+    "KITTI09":  {"dir": DATA.parent / "_kitti09_fusion",  "fxw": 707.0912 / 1226.0},
 }
 TRAIN = ["Town03", "Town05", "Town07"]
-ALL = ["Town03", "Town05", "Town07", "Town10HD", "KITTI07"]
+ALL = ["Town03", "Town05", "Town07", "Town10HD", "KITTI07", "KITTI09"]
 N_FEAT = 8
 WIN = 50
 
@@ -98,12 +99,18 @@ def main():
     ap.add_argument("--no-write", action="store_true")
     ap.add_argument("--epochs", type=int, default=300)
     ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--ft-kitti", action="store_true",
+                    help="按域微调: 把 KITTI07 加入训练集 (2026-11-16 导师批准)")
+    ap.add_argument("--ft-kitti09", action="store_true",
+                    help="9c协议: 把 KITTI09 加入训练集, KITTI07 保持零样本评估 (2026-11-17)")
     args = ap.parse_args()
 
     data = {s: load_set(s) for s in ALL}
-    Xtr = np.concatenate([data[s][0][data[s][3]] for s in TRAIN])
-    ytr = np.concatenate([data[s][1][data[s][3]] for s in TRAIN])
-    print(f"[train] {len(TRAIN)} 集有效区间 {len(ytr)}")
+    train_sets = TRAIN + (["KITTI07"] if args.ft_kitti else []) \
+                     + (["KITTI09"] if args.ft_kitti09 else [])
+    Xtr = np.concatenate([data[s][0][data[s][3]] for s in train_sets])
+    ytr = np.concatenate([data[s][1][data[s][3]] for s in train_sets])
+    print(f"[train] {len(train_sets)} 集有效区间 {len(ytr)}")
 
     # 特征标准化: 只用训练集 (防泄漏); test 时复用同参数
     mu = Xtr.mean(0)

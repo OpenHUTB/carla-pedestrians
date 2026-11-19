@@ -130,10 +130,13 @@ function normImg = hart_transformer_extractor(img)
         lstm_c = ventral_features;
     end
     
-    % LSTM门控（Plan B配置）
-    input_gate = 0.5;     % 输入门
-    forget_gate = 0.5;    % 遗忘门
-    output_gate = 0.9;    % 输出门
+    % LSTM门控（Plan B配置; 2026-11-16 导师批准: 网格搜索经环境变量覆盖, 缺省为原值）
+    input_gate = str2double(getenv('HART_INPUT_GATE'));
+    if isnan(input_gate), input_gate = 0.5; end
+    forget_gate = str2double(getenv('HART_FORGET_GATE'));
+    if isnan(forget_gate), forget_gate = 0.5; end
+    output_gate = str2double(getenv('HART_OUTPUT_GATE'));
+    if isnan(output_gate), output_gate = 0.9; end
     
     % 输入调制（ventral + transformer）
     combined_input = 0.6 * ventral_features + 0.4 * transformer_features;
