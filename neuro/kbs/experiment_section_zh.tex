@@ -14,7 +14,7 @@
 
 \subsection{实验设置与数据集}
 
-\textbf{实现细节.} 所有实验均在一台笔记本电脑工作站上完成（Intel Core i9-14900HX CPU、32~GB 内存、NVIDIA GeForce RTX 5070 笔记本GPU）；整个 SLAM 流水线运行于 CPU，全部报告结果未使用 GPU。LSTM时序模块使用人工调定的固定门值（输入=0.5、遗忘=0.5、输出=0.9）而非学习参数。全流水线端到端实测吞吐（含最终评估与绘图）为四个 CARLA 城镇 67--76~FPS、KITTI~07 39~FPS——后者地图最稠密（964 模板），模板匹配成为随地图增长的主导开销。
+\textbf{实现细节.} 所有实验均在一台笔记本电脑工作站上完成（Intel Core i9-14900HX CPU、32~GB 内存、NVIDIA GeForce RTX 5070 笔记本GPU）；整个 SLAM 流水线运行于 CPU，全部报告结果未使用 GPU。LSTM时序模块使用人工调定的固定门值（输入=0.5、遗忘=0.5、输出=0.9）而非学习参数。\textcolor{red}{参考实现}端到端实测吞吐（含最终评估与绘图）为四个 CARLA 城镇 67--76~FPS、KITTI~07 39~FPS——后者地图最稠密（964 模板），模板匹配成为随地图增长的主导开销。
 
 \textbf{基线方法.} 我们将 NeuroLocMap 与两种基线方案对比：
 (1) EKF融合——一个松耦合的10状态扩展卡尔曼滤波
@@ -71,7 +71,7 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
     \caption{两种对齐口径下的定量性能对比（ATE RMSE，m）}
     \label{tab:results}
     \begin{threeparttable}
-        \begin{tabular}{@{}l cccc cccc@{}}
+        \scriptsize\begin{tabular}{@{}l cccc cccc@{}}
             \toprule
             & \multicolumn{4}{c}{Sim(3) 全重拟合（仅形状上界）} & \multicolumn{4}{c}{SE(3) 刚性（度量尺度口径）} \\
             \cmidrule(lr){2-5} \cmidrule(lr){6-9}
@@ -101,11 +101,11 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
 
 \textbf{框架内部表征.} 经验地图的拓扑结构随场景重访结构变化：CARLA 地图含 91--481 个经验节点（Town05: 175、Town03: 91、Town07: 270、Town10HD: 481）、91--481 个视觉模板与 1--7 条接受 PR link，而 KITTI~07 高速公路地图稠密得多（692~m 上 964 节点、964 模板，$\sim$1.4 模板/米），反映视觉特征鲜明、不重复场景的高采样率。在闭环丰富的城市地图上，接受的重锚定提供了在重访间松弛累积漂移的全局约束。受生物启发的空间细胞表征在网格细胞上表现出特征性的周期性发放模式（空间尺度 1.5~m 至 12~m 波长），头方向细胞表现出朝向选择性神经活动，证实了前庭（IMU）信号用于朝向估计的成功集成。
 
-\textbf{计算性能与复杂度分析.} 表~\ref{tab:runtime} 给出了用 MATLAB profiler 在 KITTI~07 上实测的分模块计时（250 帧子集；该序列地图最稠密、模板匹配负载最重）。全序列端到端墙钟实测（含最终评估与绘图）为四个 CARLA 城镇 67--76~FPS（平均每帧 14.1~ms）、KITTI~07 39~FPS（每帧 25.6~ms）。网格细胞更新主导逐帧关键路径（约占剖析时间 49\%），源于 3D 连续吸引子动力学；其后为腹侧模板提取与匹配（约 20\%）与图像读入及 CLAHE 增强（约 22\%）；背侧扫描线 VO、HDC 更新与经验地图更新（含位姿读出）各低于 5\%，前庭-视觉融合步可忽略（$<$0.1~ms）。深度组件的开销可忽略：冻结深度主干与尺度头运行在实时关键路径之外（头本身逐帧 $<$1~ms CPU），闭环线消费预计算的逐帧嵌入。
+\textbf{计算性能与复杂度分析.} 表~\ref{tab:runtime} 给出了用 MATLAB profiler 在 KITTI~07 上实测的分模块计时（250 帧子集；该序列地图最稠密、模板匹配负载最重）。\textcolor{red}{表~\ref{tab:runtime} 的全部分模块计时均针对 MATLAB 参考实现（固定权重前庭融合基线）；部署的 Python 前端（ORB + RANSAC）不在该表覆盖范围内。}全序列端到端墙钟实测（含最终评估与绘图）为四个 CARLA 城镇 67--76~FPS（平均每帧 14.1~ms）、KITTI~07 39~FPS（每帧 25.6~ms）。\textcolor{red}{这些吞吐数字仅表征 MATLAB 参考实现；部署的 Python 前端（ORB + RANSAC）未在本工作中做基准测试。}网格细胞更新主导逐帧关键路径（约占剖析时间 49\%），源于 3D 连续吸引子动力学；其后为腹侧模板提取与匹配（约 20\%）与图像读入及 CLAHE 增强（约 22\%）；背侧扫描线 VO、HDC 更新与经验地图更新（含位姿读出）各低于 5\%，前庭-视觉融合步可忽略（$<$0.1~ms）。深度组件的开销可忽略：冻结深度主干与尺度头运行在实时关键路径之外（头本身逐帧 $<$1~ms CPU），闭环线消费预计算的逐帧嵌入。
 
-\textbf{理论复杂度.} 框架的计算复杂度为：(1) 视觉处理：图像预处理与扫描线剖面匹配的 $\mathcal{O}(HW)$，$H \times W$ 为输入分辨率；(2) 网格细胞更新：3D 吸引子动力学的 $\mathcal{O}(N_x N_y N_z)$，$36 \times 36 \times 36 = 46656$ 个细胞；(3) 模板匹配：$\mathcal{O}(M \cdot d)$，$M$ 为模板数（91--964），$d$ 为描述子维度（$12 \times 16 = 192$）；(4) 经验地图：图遍历 $\mathcal{O}(K)$，$K$ 个节点（91--964）。总复杂度 $\mathcal{O}(HW + N_x N_y N_z + Md)$，由网格细胞动力学主导。与需要 GPU 矩阵运算的学习方法（注意力 $\mathcal{O}(N^2)$）相比，我们的 $\mathcal{O}(N)$ 近似支持纯 CPU 实时运行。
+\textbf{理论复杂度.} 框架的计算复杂度为：(1) 视觉处理：图像预处理与扫描线剖面匹配的 $\mathcal{O}(HW)$\textcolor{red}{（MATLAB 参考实现；部署的 Python 前端执行稀疏 ORB 匹配，$\mathcal{O}(N_f \cdot d)$，$N_f$ 为特征数、$d$ 为描述子维度）}，$H \times W$ 为输入分辨率；(2) 网格细胞更新：3D 吸引子动力学的 $\mathcal{O}(N_x N_y N_z)$，$36 \times 36 \times 36 = 46656$ 个细胞；(3) 模板匹配：$\mathcal{O}(M \cdot d)$，$M$ 为模板数（91--964），$d$ 为描述子维度（$12 \times 16 = 192$）；(4) 经验地图：图遍历 $\mathcal{O}(K)$，$K$ 个节点（91--964）。总复杂度 $\mathcal{O}(HW + N_x N_y N_z + Md)$，由网格细胞动力学主导。与需要 GPU 矩阵运算的学习方法（注意力 $\mathcal{O}(N^2)$）相比，我们的 $\mathcal{O}(N)$ 近似支持纯 CPU 实时运行。
 
-\textbf{硬件需求与部署.} 全流水线运行于 CPU：在测试笔记本（Intel Core i9-14900HX、32~GB 内存）上，全系统以 39--76~FPS 端到端处理全部评估序列，全程无 GPU 参与；内存由 3D 网格细胞吸引子网络的运行时状态与视觉模板库主导。这一轻量足迹使其可部署于嵌入式平台（如 NVIDIA Jetson Nano、树莓派 4）——需要 GPU 推理的学习型 SLAM 方法（DROID-SLAM：8~GB 显存；TartanVO：6~GB 显存）在此类平台上不可行。
+\textbf{硬件需求与部署.} 全流水线运行于 CPU：在测试笔记本（Intel Core i9-14900HX、32~GB 内存）上，\textcolor{red}{参考实现}以 39--76~FPS 端到端处理全部评估序列，全程无 GPU 参与；内存由 3D 网格细胞吸引子网络的运行时状态与视觉模板库主导。这一轻量足迹使其可部署于嵌入式平台（如 NVIDIA Jetson Nano、树莓派 4）——需要 GPU 推理的学习型 SLAM 方法（DROID-SLAM：8~GB 显存；TartanVO：6~GB 显存）在此类平台上不可行。
 
 \begin{figure*}[!t]
     \centering
@@ -126,7 +126,7 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
         \midrule
         图像读入 + CLAHE 增强            & 7.5            & 22\%           \\
         腹侧模板提取与匹配               & 6.9            & 20\%           \\
-        背侧扫描线视觉里程计             & 1.5            & 4\%            \\
+        背侧扫描线视觉里程计\textcolor{red}{（MATLAB 参考实现）}             & 1.5            & 4\%            \\
         前庭-视觉融合                    & 0.06           & $<$0.2\%       \\
         网格细胞更新（3D CAN）           & 16.8           & 49\%           \\
         HDC 更新                         & 0.9            & 3\%            \\
@@ -242,7 +242,7 @@ MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018} 家族中一个具有代表性的经
 \begin{itemize}
     \item \textbf{精度}：已发表数值采用 KITTI 官方子段漂移率（trel），与本文末端/长度漂移口径不同，故各自按自身口径报告。DeepVO 在真实 KITTI 序列上训练，序列 07 报告 3.91\% trel；TartanVO 纯合成数据训练、无微调迁移至 KITTI，同一序列报告 4.32\% trel。NeuroLocMap 学习组件仅在仿真上训练一次、零样本部署，KITTI~07 末端/长度漂移 9.71\%（五个测试场景 2.9--11.7\%，表~\ref{tab:results}）。
 
-    \item \textbf{计算效率}：DROID-SLAM 精度领先但仅 4--5~FPS（低于 NeuroLocMap 的实测 39--76~FPS），限制嵌入式实时部署。
+    \item \textbf{计算效率}：DROID-SLAM 精度领先但仅 4--5~FPS（低于\textcolor{red}{我们参考实现}的实测 39--76~FPS），限制嵌入式实时部署。
 
     \item \textbf{可解释性}：NeuroLocMap 的脑启发组件（网格细胞、HDC、经验地图）提供可可视化、可调试的显式空间表征，不同于黑箱深度网络。
 
