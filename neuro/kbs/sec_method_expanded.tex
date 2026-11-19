@@ -96,19 +96,19 @@ The threshold $\tau_{vt}=0.08$ is significantly lower than the traditional value
 \textbf{Dual-Stream Visual Processing.}
 Following the dual-stream theory of biological vision~\cite{Goodale1992, Mishkin1983}, we explicitly model two parallel processing path\-ways from V1 outputs:
 
-\textbf{Dorsal Stream} (``where'' pathway, V1$\rightarrow$MT$\rightarrow$MST): Processes spatial location and motion information through gradient-based features:
+\textbf{Oriented-Gradient Channel} (spatial-layout branch, V1$\rightarrow$V4): Processes spatial location and appearance structure through gradient-based features:
 \begin{equation}
-    \mathbf{F}^{\text{dorsal}}_t = 0.6 \cdot \|\nabla Z_t\| + 0.4 \cdot Z_t
+    \mathbf{F}^{\text{grad}}_t = 0.6 \cdot \|\nabla Z_t\| + 0.4 \cdot Z_t
 \end{equation}
-where $\|\nabla Z_t\|$ is the gradient magnitude computed via Sobel operators, capturing edge orientation and motion direction analogous to MT/MST neurons.
+where $\|\nabla Z_t\|$ is the gradient magnitude computed via Sobel operators, capturing edge orientation analogous to orientation-selective V4 responses. The channel implements the V1$\rightarrow$V4 stage of the hierarchy: the gradient magnitude plays the role of the orientation-selective responses of V1 simple cells, and the weighted sum aggregates them into a compact spatial-layout map that feeds the temporal model. The weights $0.6/0.4$ are fixed heuristic constants chosen once at implementation and shared by all scenes; the gradient term dominates because edge structure carries the spatial-layout evidence.
 
-\textbf{Ventral Stream} (``what'' pathway, V1$\rightarrow$V4$\rightarrow$IT): Processes object identity and scene features through texture and contrast:
+\textbf{Ventral Channel} (``what'' pathway, V1$\rightarrow$V4$\rightarrow$IT): Processes object identity and scene features through texture and contrast:
 \begin{equation}
     \mathbf{F}^{\text{ventral}}_t = 0.4 \cdot Z_t + 0.3 \cdot \sigma_{\text{local}}(Z_t) + 0.3 \cdot \mathcal{C}_\lambda(Z_t)
 \end{equation}
 where $\sigma_{\text{local}}$ computes local standard deviation (texture features) and $\mathcal{C}_\lambda$ provides contrast enhancement, mimicking V4's selectivity for complex features and IT's invariant object representations.
 
-The dual streams are then integrated through a lightweight global-local feature modulation mechanism (detailed in Section~\ref{sec:related_learning}) that approximates self-attention effects using global statistics rather than full Query-Key-Value operations, maintaining $\mathcal{O}(N)$ complexity for real-time per\-for\-mance.
+The dual streams are then integrated through a lightweight global-local feature modulation mechanism that approximates self-attention effects using global statistics rather than full Query-Key-Value operations, maintaining $\mathcal{O}(N)$ complexity for real-time per\-for\-mance.
 
 \textbf{Fixed-Gate LSTM for Zero-Shot Temporal Modeling.}
 Unlike conventional data-driven LSTMs that require extensive training on do\-main-spe\-cif\-ic datasets, our temporal module employs manually-tuned fixed gate values inspired by biological ves\-tib\-u\-lar-visual integration principles~\cite{Angelaki2004, Cullen2012}:
@@ -126,54 +126,34 @@ This design offers three critical advantages for SLAM applications:
 
 \textbf{(2) Biological interpretability:} Gate values reflect em\-pir\-i\-cal\-ly-val\-i\-dat\-ed principles from neuroscience. The forget gate ($f_t=0.5$) implements short-term spatial memory retention consistent with hippocampal replay dynamics, where recent experiences are preferentially retained for path integration. The high output gate ($o_t=0.9$) prioritizes current sensory input, mimicking the ves\-tib\-u\-lar system's emphasis on immediate self-motion cues for balance and navigation. The moderate input gate ($i_t=0.5$) balances novelty detection with stability.
 
-\textbf{(3) Computational efficiency:} Eliminates training overhead (no backpropagation, no gradient computation) while maintaining real-time per\-for\-mance (39--76~FPS measured on CPU). Fixed gates can be directly implemented in hardware (e.g., FPGAs, neuromorphic chips) without weight storage or update logic, enabling deployment on resource-constrained platforms.
+\textbf{(3) Computational efficiency:} Eliminates training overhead (no backpropagation, no gradient computation) while maintaining real-time per\-for\-mance (39--76~FPS, MATLAB reference implementation, CPU). Fixed gates can be directly implemented in hardware (e.g., FPGAs, neuromorphic chips) without weight storage or update logic, enabling deployment on resource-constrained platforms.
 
-The LSTM processes fused dorsal-ventral features sequentially, maintaining hidden state $\mathbf{H}_t$ and cell state $\mathbf{C}_t$ across timesteps:
+The LSTM processes fused gradient-ventral features sequentially, maintaining hidden state $\mathbf{H}_t$ and cell state $\mathbf{C}_t$ across timesteps:
 \begin{align}
     \mathbf{C}_t & = f_t \odot \mathbf{C}_{t-1} + i_t \odot \tanh(\mathbf{F}^{\text{fused}}_t) \\
     \mathbf{H}_t & = o_t \odot \tanh(\mathbf{C}_t)
 \end{align}
-where $\odot$ denotes element-wise Hadamard product, $\mathbf{C}_t$ is the LSTM cell state, $\mathbf{H}_t$ is the temporal hidden state, and $\mathbf{F}^{\text{fused}}_t$ integrates the ventral and dorsal visual features.
+where $\odot$ denotes element-wise Hadamard product, $\mathbf{C}_t$ is the LSTM cell state, $\mathbf{H}_t$ is the temporal hidden state, and $\mathbf{F}^{\text{fused}}_t$ integrates the oriented-gradient and ventral appearance features.
 
 \textbf{Comparison with Learning-Based Approaches.} Section~\ref{sec:experiments} demonstrates that our fixed-gate LSTM achieves comparable or superior per\-for\-mance to NeuroSLAM's learned LSTM (55\% improvement in RMSE) while offering zero-shot deployment. This validates that principled bio-inspired design can match or exceed data-driven learning when the underlying task structure aligns with biological mechanisms---in this case, spatial navigation where biological systems have evolved highly optimized solutions over millions of years.
 
-\textbf{Visual Motion Extraction.} In addition to scene recognition, the visual front-end extracts ego-motion cues from optical flow, mimicking the dorsal stream processing in area MST (medial superior temporal).
+\textbf{Visual Motion Extraction.} In addition to scene recognition, the visual front-end extracts ego-motion cues from inter-frame feature correspondences, mimicking the dorsal stream processing in area MST (medial superior temporal).
 
-\textbf{Feature Tracking and Flow Computation.} Let $\mathbf{K}\in\mathbb{R}^{3\times 3}$ be the camera intrinsic matrix. We track $N$ feature points $\mathbf{p}_i^t\in\mathbb{R}^2$ (e.g., using KLT tracking) between consecutive frames. Normalize tracked points to camera coordinates:
+\textbf{Sparse Feature Correspondence.} Let $\mathbf{K}\in\mathbb{R}^{3\times 3}$ be the camera intrinsic matrix. Each frame is described by $N$ ORB keypoints ($N{=}2000$) with rotated-BRIEF descriptors; putative correspondences are established by k-nearest-neighbour matching with the Lowe ratio test ($k{=}2$, ratio $0.7$). Matched points are normalized to camera coordinates:
 \begin{equation}
     \tilde{\mathbf{q}}_i^t = \mathbf{K}^{-1}\begin{bmatrix}\mathbf{p}_i^t\\ 1\end{bmatrix},\qquad \mathbf{q}_i^t = \pi(\tilde{\mathbf{q}}_i^t)=\frac{1}{\tilde{q}_{i,3}^t}\begin{bmatrix}\tilde{q}_{i,1}^t\\ \tilde{q}_{i,2}^t\end{bmatrix}
 \end{equation}
-where $\pi$ is perspective projection. Compute image plane flow:
-\begin{equation}
-    \mathbf{f}_i=\mathbf{q}_i^t-\mathbf{q}_i^{t-1},\quad \mathbf{q}_i\equiv\mathbf{q}_i^{t-1}
-\end{equation}
+where $\pi$ is perspective projection.
 
-\textbf{Rotation Estimation.} For small inter-frame rotation, the yaw-induced flow at normalized point $\mathbf{q}=(x,y)$ is $\Delta t\,r\,[-y,\,x]^\top$. We estimate the visual yaw rate by weighted least squares:
+\textbf{Rotation--Translation Estimation.} The normalized correspondences $\{(\mathbf{q}_i^{t-1},\,\mathbf{q}_i^{t})\}$ satisfy the epipolar constraint
 \begin{equation}
-    r^\mathrm{vis}_t=\frac{\sum_{i=1}^N w_i(x_i f_{i,y}-y_i f_{i,x})}{\Delta t\,\sum_{i=1}^N w_i(x_i^2+y_i^2)}
+    {\mathbf{q}_i^{t}}^{\top}\,\mathbf{E}\,\mathbf{q}_i^{t-1}=0,\qquad \mathbf{E}=[\mathbf{t}]_{\times}\mathbf{R},
 \end{equation}
-where $w_i$ stands for Huber robust weight to suppress outlier feature points, $N$ is total tracked feature count, and $r_t^\mathrm{vis}$ denotes visual estimated yaw rate.
+where $\mathbf{E}$ is the essential matrix and $[\mathbf{t}]_{\times}$ the skew-symmetric matrix of the translation vector. $\mathbf{E}$ is estimated by a RANSAC-wrapped minimal solver (confidence $0.999$, inlier threshold $1.0$~px) and decomposed via $\mathrm{recoverPose}$ into the inter-frame rotation $\mathbf{R}$ and the translation direction. Robustness is enforced at two levels: descriptor-level uniqueness (Lowe ratio test) and geometric-level consensus (the RANSAC consensus set). The visual yaw rate $r_t^{\mathrm{vis}}$ is extracted from the ZYX Euler decomposition of $\mathbf{R}$ (with a gimbal-lock guard); the translation is returned as a unit-norm direction $\hat{\mathbf{t}}$ --- monocular decomposition determines the direction only, never the magnitude.
 
-\textbf{Translation Estimation.} Remove rotation component to obtain trans\-la\-tion-dom\-i\-nant residual flow:
-\begin{equation}
-    \mathbf{f}_i^{\perp}=\mathbf{f}_i-\Delta t\,r^\mathrm{vis}_t\begin{bmatrix}-y_i\\ x_i\end{bmatrix}
-\end{equation}
-Assuming a dominant ground plane with inverse depth $\lambda_i\approx 1/Z_g$ for inliers, the translational flow model is:
-\begin{equation}
-    \mathbf{f}_i^{\perp}\approx \Delta t\,\lambda_i\,\underbrace{\begin{bmatrix}-1 & 0 & x_i\\ 0 & -1 & y_i\end{bmatrix}}_{\mathbf{A}_i}\,\mathbf{v}^\mathrm{vis}_t,\quad \mathbf{v}^\mathrm{vis}_t=(v_x^\mathrm{vis}, v_y^\mathrm{vis}, v_z^\mathrm{vis})^\top
-\end{equation}
-The weighted least-squares solution with robust weights $w_i$ is:
-\begin{equation}
-    \bar{\mathbf{v}}^\mathrm{vis}_t=\Big(\sum_i w_i\,(\Delta t\,\lambda_i)^2\,\mathbf{A}_i^\top\mathbf{A}_i\Big)^{-1}\,\sum_i w_i\,(\Delta t\,\lambda_i)\,\mathbf{A}_i^\top\mathbf{f}_i^{\perp}
-\end{equation}
-The final visual odometry velocity incorporates a scale factor $\kappa_t$:
-\begin{equation}
-    \mathbf{v}^\mathrm{vis}_t=\kappa_t\,\bar{\mathbf{v}}^\mathrm{vis}_t
-    \label{eq:vis_scale}
-\end{equation}
-where $\lambda_i$ is inverse depth of feature point $i$, matrix $\mathbf{A}_i$ is geometric projection matrix, $\bar{\mathbf{v}}_t^\mathrm{vis}$ is raw translational velocity solved from optical flow, and $\kappa_t$ is online scale correction factor for visual odometry.
+\textbf{Scale Ambiguity and Observation Injection.} Because $\hat{\mathbf{t}}_t$ is unit-norm, the decomposition carries no metric magnitude: the metric displacement over one inter-frame interval is $\Delta\mathbf{p}^{\mathrm{vis}}_t = s_t\,\hat{\mathbf{t}}_t$, where $s_t = \exp(\log s_t)$ is the online scale state maintained by the EKF (Section~\ref{sec:scale_recovery}), expressed in metres per unit VO displacement; a single symbol $s$ is used for this quantity throughout. The EKF converts this displacement into a velocity over the true inter-update interval (Section 4.1). The inlier consensus doubles as a degeneracy gate: below 20 correspondences the frame is treated as degenerate and is not treated as a reliable motion measurement; the zero-displacement placeholder returned by the front-end enters the filter with its observation noise inflated by the same quality factor, so it acts as a no-motion prior rather than as an independent velocity measurement. Otherwise the inlier count maps to a quality factor $q_f$ (interpolating 60 inliers $\to q_f{=}1$ and 20 inliers $\to q_f{=}3$) that inflates the EKF observation covariance, clamped to $[0.008,10]$.
 
-Beyond this motion stream, the dorsal front-end also provides the pixel-level metric depth field $\hat z_t$ (frozen DAv2 backbone) and the learned scene embeddings $\boldsymbol{e}_t$ consumed by the two higher-level corrections (Section~\ref{sec:scale_recovery}); depth estimation and scene recognition stay decoupled from the velocity estimation above.
+Beyond this motion stream, the visual front-end also provides the pixel-level metric depth field $\hat z_t$ (frozen DAv2 backbone) and the learned scene embeddings $\boldsymbol{e}_t$ consumed by the two higher-level corrections (Section~\ref{sec:scale_recovery}); the motion pathway above never consumes depth --- $\hat z_t$ and $\boldsymbol{e}_t$ are inferred asynchronously and cached, entering only the scale branch and the loop-closure line, outside the real-time critical path.
 
 \subsection{Vestibular System}
 \label{sec:vestibular}
@@ -199,7 +179,7 @@ where $g=9.81\,\mathrm{m/s^2}$ is gravitational acceleration, $k_t, k_z$ are con
 \subsection{Vestibular-Visual Complementary Fusion}
 \label{sec:fusion}
 
-Visual and inertial modalities provide complementary information: visual odometry offers accurate low-frequency position estimates but drifts over long horizons, while IMU integration provides reliable high-frequency motion cues but accumulates bias drift. Com\-ple\-men\-tary filtering exploits this frequency-domain separation to achieve robust fusion without requiring complex nonlinear optimization or Extended Kalman Filtering. Figure~\ref{fig:imu_visual_fusion} illustrates the frequency-domain characteristics of this complementary fusion strategy and its biological analog in ves\-tib\-u\-lar-visual integration.
+Visual and inertial modalities provide complementary information: visual odometry offers accurate low-frequency position estimates but drifts over long horizons, while IMU integration provides reliable high-frequency motion cues but accumulates bias drift. Com\-ple\-men\-tary filtering exploits this frequency-domain separation to achieve robust fusion without requiring complex nonlinear optimization. Figure~\ref{fig:imu_visual_fusion} illustrates the frequency-domain characteristics of this complementary fusion strategy and its biological analog in ves\-tib\-u\-lar-visual integration. The complementary-filter formulation below describes the bio-inspired fusion principle and its frequency-domain interpretation; the deployed system realizes this principle as the 10-state EKF core of Section 4.1, and all reported results come from that filter.
 
 \begin{figure*}[!t]
     \centering
@@ -243,13 +223,9 @@ With $\tau = 0.1$s, the cutoff frequency is $\omega_c = 10$ rad/s ($\approx 1.6$
 \begin{equation}
     \eta_t = f(\sigma^\mathrm{vis}_t, \sigma^\mathrm{imu}_t),\quad \text{e.g.} \quad \eta_t = \frac{\sigma^\mathrm{vis}_t}{\sigma^\mathrm{vis}_t + \sigma^\mathrm{imu}_t}
 \end{equation}
-where $\sigma_t^\mathrm{vis}$ and $\sigma_t^\mathrm{imu}$ are real-time uncertainty estimations of visual and inertial measurements, and $\eta_t$ is time-varying fusion weight.
+where $\sigma_t^\mathrm{vis}$ and $\sigma_t^\mathrm{imu}$ are real-time uncertainty estimations of visual and inertial measurements, and $\eta_t$ is time-varying fusion weight. This adaptive extension is \emph{not enabled} in the reported experiments: all results use the fixed-weight convex combination with activity gating, with IMU-side weights $\eta_r = 0.7$ (yaw), $\eta = 0.3$ (translation), and $0.5$ (height).
 
-Additionally, the visual odometry scale factor $\kappa_t$ in Eq.~\eqref{eq:vis_scale} can be adapted to maintain consistency between visual and inertial velocity magnitudes:
-\begin{equation}
-    \kappa_{t+1} = \kappa_t \cdot \left(1 + \beta \frac{\lVert\mathbf{v}^\mathrm{imu}_t\rVert - \lVert\kappa_t \bar{\mathbf{v}}^\mathrm{vis}_t\rVert}{\lVert\kappa_t \bar{\mathbf{v}}^\mathrm{vis}_t\rVert}\right)
-\end{equation}
-where $\beta \ll 1$ is a small adaptation gain for online visual odometry scale correction (e.g., $\beta=0.01$). This online scale adaptation compensates for systematic errors in the assumed ground plane depth or camera calibration inaccuracies.
+The online scale update is realized inside the EKF as a log-domain, chi-square-gated observation of the scale state (Section~\ref{sec:scale_recovery}); the exponential-recursion formulation of an earlier draft is superseded by that mechanism and is no longer used in any reported experiment.
 
 \subsection{Monocular Scale Recovery Branch}
 \label{sec:scale_recovery}
@@ -332,12 +308,13 @@ where $\gamma_x,\gamma_y,\gamma_z$ are metric-to-index gain factors converting p
 \end{equation}
 This discrete shifting operation efficiently implements path integration on the toroidal network topology.
 
-\textbf{Visual Anchoring and Drift Correction.} Pure path integration accumulates drift over time. To prevent unbounded error, the grid cell activity is anchored to visual landmarks through learned associations. Let $\Xi_{m,i,j,k}$ store the association strength between visual template $m$ and grid cell $(i,j,k)$. For each active visual template $m \in \mathcal{S}_{active}$, update associations and inject corrective activity:
-\begin{align}
-     & \text{Hebbian learning: } \Xi_{m,i,j,k}^{t+1}=\max\big(\eta\,VT_m\,A^\mathrm{g}_{i,j,k},\ \Xi_{m,i,j,k}^{t}\big)                                             \\
-     & \text{Corrective injection: } \Delta A^\mathrm{g}_{i,j,k} \mathrel{+}= \frac{\rho}{|\mathcal{S}_{active}|}\sum_{m\in\mathcal{S}_{active}}VT_m\,\Xi_{m,i,j,k}
-\end{align}
-where $\eta$ is Hebbian learning rate, $\rho$ is spatial correction strength, and $\mathcal{S}_{active}$ is set of currently matched visual templates.
+\textbf{Visual Anchoring and Drift Correction.} Pure path integration accumulates drift over time. To prevent unbounded error, the grid cell activity is anchored to visual landmarks through a static, creation-time association: each visual template $m$ records the grid-cell coordinates $(g^x_m,g^y_m,g^z_m)$ and head-direction heading of its creation instant, i.e., the path-integration state at that moment. When template $m$ is matched by a later frame, corrective activity is injected at its recorded coordinates:
+\begin{equation}
+    \Delta A^\mathrm{g}_{g^x_m,g^y_m,g^z_m} \mathrel{+}= E_0\cdot\frac{30-e^{1.2 d_m}}{30},\qquad d_m\in[0,d_{\max}]
+\end{equation}
+where $E_0$ is the baseline injection energy and $d_m$ is the template activity level: it is reset to the cap $d_{\max}$ upon each match and decays linearly over time. The injected amplitude grows as a template remains unmatched for longer, from $\approx E_0/3$ at $d_m=d_{\max}$ toward $E_0$ as $d_m\to 0$. This decayed, weak injection is a RatSLAM-style anti-capture design: a single spurious match (e.g., during agent stasis) cannot capture the grid-cell network; a consistent injection from multiple visual templates is required to form an effective anchoring.
+
+We note that in the final system configuration, this template-level injection pathway is deactivated (the deployed visual-template implementation never clears its first-match flag, so the injection condition is never met); visually driven drift correction in the deployed system is carried entirely by the anchoring--re-anchoring mechanism of the experience map.
 
 \textbf{Multilayered Head Direction Cells.} The multilayered head direction cell (HDC) network represents the robot's orientation using a 2D MD-CAN with dimensions $N_\psi \times N_h$ (azimuth bins by height layers). Different height layers allow representation of heading at various vertical positions, supporting 3D operation where orientation may vary with altitude.
 

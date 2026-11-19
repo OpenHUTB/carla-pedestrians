@@ -23,11 +23,11 @@
       "sim3_fitted_scale": 1.4913
     },
     "NLM-闭环线": {
-      "se3_rmse": 46.37,
-      "se3_drift": 11.26,
-      "sim3_rmse": 41.14,
-      "sim3_drift": 14.3,
-      "sim3_fitted_scale": 1.4229
+      "se3_rmse": 49.58,
+      "se3_drift": 10.39,
+      "sim3_rmse": 44.72,
+      "sim3_drift": 13.18,
+      "sim3_fitted_scale": 1.4421
     },
     "NLM-全系统": {
       "se3_rmse": 32.67,
@@ -113,11 +113,11 @@
       "sim3_fitted_scale": 0.879
     },
     "NLM-闭环线": {
-      "se3_rmse": 42.87,
-      "se3_drift": 18.86,
-      "sim3_rmse": 39.49,
-      "sim3_drift": 13.17,
-      "sim3_fitted_scale": 0.7715
+      "se3_rmse": 41.87,
+      "se3_drift": 17.55,
+      "sim3_rmse": 39.99,
+      "sim3_drift": 13.28,
+      "sim3_fitted_scale": 0.8188
     },
     "NLM-全系统": {
       "se3_rmse": 31.51,
@@ -196,11 +196,11 @@
       "sim3_fitted_scale": 0.8083
     },
     "NLM-闭环线": {
-      "se3_rmse": 29.99,
-      "se3_drift": 13.09,
-      "sim3_rmse": 18.45,
-      "sim3_drift": 9.71,
-      "sim3_fitted_scale": 0.7905
+      "se3_rmse": 29.82,
+      "se3_drift": 11.74,
+      "sim3_rmse": 21.45,
+      "sim3_drift": 8.77,
+      "sim3_fitted_scale": 0.8103
     },
     "ORB-only": {
       "se3_rmse": 29.82,

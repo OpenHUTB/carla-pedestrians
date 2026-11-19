@@ -67,6 +67,12 @@ SEQUENCES = {
         "K": K_KITTI, "carla": False, "img": r"(\d+)\.png",
         "img_dir": "image_0", "img_fmt": "{:06d}", "img_off": 0,
     },
+    "KITTI09": {
+        "dir": BASE / "_kitti09_fusion",   # [2026-11-17] kitti_prepare_fusion 转换 (真EKF重放, 微调源)
+        "gt": "ground_truth.txt", "vo": "visual_odometry.txt", "imu": "aligned_imu.txt",
+        "K": K_KITTI, "carla": True, "img": r"(\d+)\.png",
+        "img_dir": "image_0", "img_fmt": "{:06d}", "img_off": 0,
+    },
 }
 
 
