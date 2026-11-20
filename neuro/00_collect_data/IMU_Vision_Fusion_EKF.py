@@ -200,7 +200,7 @@ DEPTH_SCALE_PERIOD = 5       # 深度尺度观测更新周期(帧, 与运动学�
 DEPTH_SCALE_MIN_SAMPLES = 5  # 深度尺度窗内最少有效样本(不足则冻结)
 DEPTH_SCALE_R = 0.05         # 深度尺度观测噪声(log 域; 逐帧比运动学更噪, 放宽)
 DEPTH_SCALE_VMIN = 0.3       # 深度样本速度门(记录单位/s, 与运动学同口径; 慢帧 |dVO|→0 比值发散, 弃)
-DEPTH_SCALE_DEADBAND = 0.35  # 死区(log, ≈1.42x): 状态偏离深度中值超过此值才纠偏, 否则冻结
+DEPTH_SCALE_DEADBAND = 0.30  # 死区(log, ≈1.35x): 状态偏离深度中值超过此值才纠偏, 否则冻结(报告结果用扫参选定0.30, fp_head030)
                              # (漂移校正器语义: 短稳序列自洽尺度已优, 纠偏反扰动 → 免扰动)
 SCALE_MIN_DISP = 0.5         # 窗口内最小 VO 记录位移(0.10 尺度单位)
 SCALE_VMIN = 0.2             # 窗口内最小平均速度(记录单位 ≈2 m/s 真实)
