@@ -179,7 +179,7 @@ where $g=9.81\,\mathrm{m/s^2}$ is gravitational acceleration, $k_t, k_z$ are con
 \subsection{Vestibular-Visual Complementary Fusion}
 \label{sec:fusion}
 
-Visual and inertial modalities provide complementary information: visual odometry offers accurate low-frequency position estimates but drifts over long horizons, while IMU integration provides reliable high-frequency motion cues but accumulates bias drift. Com\-ple\-men\-tary filtering exploits this frequency-domain separation to achieve robust fusion without requiring complex nonlinear optimization. Figure~\ref{fig:imu_visual_fusion} illustrates the frequency-domain characteristics of this complementary fusion strategy and its biological analog in ves\-tib\-u\-lar-visual integration. The complementary-filter formulation below describes the bio-inspired fusion principle and its frequency-domain interpretation; the deployed system realizes this principle as the 10-state EKF core of Section 4.1, and all reported results come from that filter.
+Visual and inertial modalities provide complementary information: visual odometry offers accurate low-frequency position estimates but drifts over long horizons, while IMU integration provides reliable high-frequency motion cues but accumulates bias drift. Com\-ple\-men\-tary filtering exploits this frequency-domain separation to achieve robust fusion without requiring tightly-coupled joint nonlinear optimization. This principle is directly realized as a fixed-weight convex combination in the MATLAB reference implementation (Section 4.2); the deployed system instantiates the same principle as a loosely-coupled error-state EKF, described in detail below, and all reported results come from that implementation. Figure~\ref{fig:imu_visual_fusion} illustrates the frequency-domain characteristics of this complementary fusion strategy and its biological analog in ves\-tib\-u\-lar-visual integration.
 
 \begin{figure*}[!t]
     \centering
@@ -188,25 +188,17 @@ Visual and inertial modalities provide complementary information: visual odometr
     \label{fig:imu_visual_fusion}
 \end{figure*}
 
-\textbf{Filter Design.} Let $\mathcal{L}_\tau$ denote a low-pass filter with time constant $\tau$, and $\mathcal{H}_\tau$ denote the complementary high-pass filter satisfying $\mathcal{L}_\tau + \mathcal{H}_\tau = \mathrm{Id}$ (identity). The fused velocity and yaw rate are:
+\subsubsection{Biological Principle and Frequency-Domain Complementarity}
+
+\textbf{Filter Design.} Let $\mathcal{L}_\tau$ denote a low-pass filter with time constant $\tau$, and $\mathcal{H}_\tau$ denote the complementary high-pass filter satisfying $\mathcal{L}_\tau + \mathcal{H}_\tau = \mathrm{Id}$ (identity):
 \begin{align}
     \text{Low-pass: }  & \;L_t = \alpha L_{t-1} + (1-\alpha) x_t,\quad L_0=0 \\
     \text{High-pass: } & \;H_t = x_t - L_t
 \end{align}
 where $\alpha$ is IIR filter forgetting factor, $L_t$ stores low-frequency smoothed signal, and $H_t$ stores residual high-frequency signal component.
-\textbf{Biological Analogy.} This fusion strategy mirrors multisensory integration in the ves\-tib\-u\-lar nuclei and posterior parietal cortex (area 7a), where visual and ves\-tib\-u\-lar signals are combined to estimate self-motion. Neurons in these regions exhibit weighted combinations of visual and ves\-tib\-u\-lar tuning, with dynamic weighting depending on signal reliability---analogous to our fixed weighting parameters $\eta$ and $\eta_r$.
+\textbf{Biological Analogy.} This fusion strategy mirrors multisensory integration in the ves\-tib\-u\-lar nuclei and posterior parietal cortex (area 7a), where visual and ves\-tib\-u\-lar signals are combined to estimate self-motion. Neurons in these regions exhibit weighted combinations of visual and ves\-tib\-u\-lar tuning, with dynamic weighting depending on signal reliability.
 
-\textbf{Discrete-Time Implementation.} With sampling interval $\Delta t$, we implement first-order IIR (infinite impulse response) filters. Choose forgetting factors $\alpha=\exp(-\Delta t/\tau)$ and $\alpha_r=\exp(-\Delta t/\tau_r)$. For any input sequence $x_t$, define:
-\begin{align}
-    \text{Low-pass: }  & \;L_t = \alpha L_{t-1} + (1-\alpha) x_t,\quad L_0=0 \\
-    \text{High-pass: } & \;H_t = x_t - L_t
-\end{align}
-Then the fused cues are computed as:
-\begin{align}
-    \mathbf{v}^\mathrm{f}_t & = (1-\eta)\,L^\mathrm{vis}_t + \eta\,H^\mathrm{imu}_t \\
-    r^\mathrm{f}_t          & = (1-\eta_r)\,L^{r,vis}_t + \eta_r\,H^{r}_t
-\end{align}
-where $L^\mathrm{vis}_t$ and $H^\mathrm{imu}_t$ denote the low-pass filtered visual velocity and high-pass filtered IMU velocity, respectively, and similarly for the yaw rates.
+\textbf{Discrete-Time Implementation.} With sampling interval $\Delta t$, we implement first-order IIR (infinite impulse response) filters. Choose forgetting factors $\alpha=\exp(-\Delta t/\tau)$ and $\alpha_r=\exp(-\Delta t/\tau_r)$.
 
 \textbf{Frequency-Domain Transfer Functions.} In the Laplace domain with $s = j\omega$ (frequency variable), the first-order low-pass and high-pass filters have transfer functions:
 \begin{align}
@@ -217,15 +209,55 @@ satisfying $H_{LP}(s) + H_{HP}(s) = 1$ (unity gain at all frequencies). The cuto
 
 With $\tau = 0.1$s, the cutoff frequency is $\omega_c = 10$ rad/s ($\approx 1.6$ Hz), ensuring IMU handles high-frequency motion ($>$2 Hz, e.g., vibrations, rapid turns) while vision corrects low-frequency drift ($<$1 Hz). This mimics biological ves\-tib\-u\-lar-visual integration where ves\-tib\-u\-lar organs respond to frequencies 0.1-10 Hz and visual motion perception dominates below 0.5 Hz \cite{Angelaki2004}.
 
-\textbf{Computational Efficiency.} This implementation requires only two state variables per signal (current low-pass filter state $L_t$ and previous value $L_{t-1}$) and involves simple scalar multiplications and additions. The computational cost is $\mathcal{O}(1)$ per update, making it suitable for real-time embedded implementation---a stark contrast to the $\mathcal{O}(n^3)$ matrix inversions required by Extended Kalman Filters for tightly-coupled visual-inertial odometry.
+\subsubsection{Temporal Alignment}
 
-\textbf{Adaptive Weighting.} While our baseline implementation uses fixed fusion weights $\eta$ and $\eta_r$, the framework naturally extends to adaptive weighting based on signal reliability. For instance, during aggressive maneuvers or rapid lighting changes, visual odometry may become unreliable, warranting increased reliance on IMU ($\eta \to 1$). Conversely, during slow motion where IMU integration accumulates bias, visual odometry should dominate ($\eta \to 0$). Adaptive schemes can be implemented by:
+Before fusion, the camera and IMU streams are temporally aligned. Under the synchronous acquisition mode, both sensors are driven by a single 20~Hz cadence ($\Delta t = 0.05$~s); a lightweight aligner pairs each camera frame with the nearest IMU sample within a $0.02$~s tolerance using greedy one-to-one matching (each IMU sample is consumed at most once). The aligned streams are stored row-level aligned on disk --- 5000 frames at a strict $0.05$~s interval with no dropped frames (verified) --- so the fusion operates on pre-aligned samples and requires no intra-frame interpolation.
+
+\subsubsection{Deployed Implementation: Loosely-Coupled Error-State EKF}
+
+\textbf{State Vector.} The deployed fusion core is a loosely-coupled error-state EKF whose state
+\begin{equation}
+    \mathbf{x}_t = \big[x,\ y,\ z,\ v_x,\ v_y,\ v_z,\ \phi,\ \theta,\ \psi,\ \log s_t\big]^{\top}
+\end{equation}
+comprises position, velocity, Euler attitude, and a tenth state $\log s_t$ --- the online scale factor that links the VO-relative frame to the metric world (cf.\ the notation of Section 3.1; the scale-recovery branch is described in Section~\ref{sec:scale_recovery}).
+
+\textbf{Prediction.} Between observations the state is propagated by IMU kinematics: the gyroscope integrates the attitude (with Euler-angle wrapping), the accelerometer --- gravity-compensated and rotated to the world frame --- integrates the velocity and position, and the covariance is propagated in continuous time, $\mathbf{P} \mathrel{+}= \mathbf{Q}\,\Delta t$. A pure-IMU dead-reckoning copy is maintained in parallel as an ablation baseline, and the gyroscope biases are estimated once from the first 200 initialization samples.
+
+\textbf{Gated Observation Branches.} Five chi-square-gated observation branches update the state, each with independent outlier rejection and a Joseph-form covariance update:
+\begin{enumerate}
+    \item \textbf{Turn-kinematic heading rate}: the lateral-acceleration-to-velocity ratio $a_{\mathrm{lat}}/v$ yields a yaw-rate cue that is immune to gyroscope biases, guarded by hard kinematic consistency checks; gate $\chi^2(1, 0.95) = 3.84$;
+    \item \textbf{Velocity amplitude}: the VO displacement magnitude scaled by the online scale, projected onto the EKF heading; gate $\chi^2(2, 0.99) = 9.21$;
+    \item \textbf{Attitude}: roll and pitch from the vestibular cue (yaw excluded to avoid VO heading drift); gate $\chi^2(2, 0.99)$;
+    \item \textbf{Scale}: a dual-path log-domain observation --- the calibrated depth scale of Section~\ref{sec:scale_recovery} takes precedence, with the kinematic turning cue $a_{\mathrm{lat}}/(\omega v)$ as fallback --- subject to a $0.35$ dead band; gate $\chi^2(1, 0.99) = 6.63$;
+    \item \textbf{Relative position}: a short-window anchor (reset every 30 frames, 1.5~s) bounds VO heading drift; gate $\chi^2(2, 0.999) = 13.82$, complemented by a weak height prior ($R = 25$~m$^2$) acting as a soft constraint.
+\end{enumerate}
+
+\textbf{Quality-Adaptive Noise.} The VO inlier count maps to a quality factor $q_f$ (60 inliers $\to q_f{=}1$; 20 inliers $\to q_f{=}3$) that inflates the observation noise covariance $\mathbf{R}$, clamped to $[0.008, 10]$ --- so degraded frames contribute less, and degenerate frames contribute nothing beyond an inflated no-motion prior.
+
+\textbf{Numerical Stability.} All covariance updates use the Joseph form to preserve symmetry and positive definiteness, with additional covariance regularization and eigenvalue clamping.
+
+\subsubsection{Reference Baseline: Fixed-Weight Convex Combination}
+
+The MATLAB reference implementation realizes the complementary-filter principle directly as a fixed-weight convex combination with binary activity gating: applying the low-pass filters of Section 3.5.1 to the visual channel and the high-pass filters to the IMU channel, the fused cues are
+\begin{align}
+    \mathbf{v}^\mathrm{f}_t & = (1-\eta)\,L^\mathrm{vis}_t + \eta\,H^\mathrm{imu}_t \\
+    r^\mathrm{f}_t          & = (1-\eta_r)\,L^{r,vis}_t + \eta_r\,H^{r}_t
+\end{align}
+where $L^\mathrm{vis}_t$ and $H^\mathrm{imu}_t$ denote the low-pass filtered visual velocity and high-pass filtered IMU velocity, respectively, and similarly for the yaw rates. The IMU-side weights are $\eta_r = 0.7$ (yaw), $\eta = 0.3$ (translation), and $0.5$ (height) --- when the visual channel is active the two cues are blended with these weights; otherwise the more trustworthy channel passes through, with the IMU translation cue derived heuristically ($\max(0, (\lVert\mathbf{a}_t\rVert - g)\,\Delta t\cdot 0.5)$) and velocity clamps bounding extreme estimates. This baseline isolates the contribution of the probabilistic fusion core and serves as the fixed-weight reference of the experiments (the MATLAB reference implementation benchmarked in Table 4); it is not the source of the main results. It is also the lightest component of the pipeline: each fused signal requires only two state variables (the current low-pass filter state $L_t$ and its previous value $L_{t-1}$), involving simple scalar multiplications and additions at $\mathcal{O}(1)$ per update, making it suitable for real-time embedded implementation.
+
+\subsubsection{Framework Extension: Adaptive Weighting}
+
+\textbf{Adaptive Weighting.} While the fixed-weight reference implementation uses constant fusion weights $\eta$ and $\eta_r$, the framework naturally extends to adaptive weighting based on signal reliability. For instance, during aggressive maneuvers or rapid lighting changes, visual odometry may become unreliable, warranting increased reliance on IMU ($\eta \to 1$). Conversely, during slow motion where IMU integration accumulates bias, visual odometry should dominate ($\eta \to 0$). Adaptive schemes can be implemented by:
 \begin{equation}
     \eta_t = f(\sigma^\mathrm{vis}_t, \sigma^\mathrm{imu}_t),\quad \text{e.g.} \quad \eta_t = \frac{\sigma^\mathrm{vis}_t}{\sigma^\mathrm{vis}_t + \sigma^\mathrm{imu}_t}
 \end{equation}
-where $\sigma_t^\mathrm{vis}$ and $\sigma_t^\mathrm{imu}$ are real-time uncertainty estimations of visual and inertial measurements, and $\eta_t$ is time-varying fusion weight. This adaptive extension is \emph{not enabled} in the reported experiments: all results use the fixed-weight convex combination with activity gating, with IMU-side weights $\eta_r = 0.7$ (yaw), $\eta = 0.3$ (translation), and $0.5$ (height).
+where $\sigma_t^\mathrm{vis}$ and $\sigma_t^\mathrm{imu}$ are real-time uncertainty estimations of visual and inertial measurements, and $\eta_t$ is time-varying fusion weight. This adaptive extension is \emph{not enabled} in the reported experiments: all results use the fixed-weight convex combination with activity gating.
 
 The online scale update is realized inside the EKF as a log-domain, chi-square-gated observation of the scale state (Section~\ref{sec:scale_recovery}); the exponential-recursion formulation of an earlier draft is superseded by that mechanism and is no longer used in any reported experiment.
+
+\subsubsection{Computational Efficiency}
+
+The deployed filter carries a fixed $10 \times 10$ covariance, so the per-update cost is a constant-size matrix operation ($\mathcal{O}(n^3)$ with $n{=}10$), independent of the number of visual features---a stark contrast to the $\mathcal{O}(N \cdot n^3)$ cost of tightly-coupled visual-inertial estimators (e.g., MSCKF, VINS-Mono), where the filter state grows with the number of tracked features.
 
 \subsection{Monocular Scale Recovery Branch}
 \label{sec:scale_recovery}
