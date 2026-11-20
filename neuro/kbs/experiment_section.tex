@@ -13,32 +13,38 @@ We evaluate NeuroLocMap on five scenarios spanning simulated urban driving (CARL
 \textbf{Implementation Details.} All experiments are conducted on a single laptop workstation (Intel Core i9-14900HX CPU, 32~GB RAM, NVIDIA GeForce RTX 5070 Laptop GPU); the entire SLAM pipeline runs on CPU, and no GPU is used anywhere in the reported results. The LSTM temporal module uses manually-tuned fixed gate values (input=0.5, forget=0.5, output=0.9) rather than learned parameters. Measured end-to-end throughput of the reference implementation (including final evaluation and plotting) is 67--76~FPS on the four CARLA towns and 39~FPS on KITTI~07, whose denser map (964 templates) makes template matching the dominant growing cost.
 
 \textbf{Baseline Methods.} We compare NeuroLocMap against two baseline approaches:
-(1) EKF Fusion --- a loosely-coupled 10-state Extended Kalman Filter
+(1) EKF core only --- the same 10-state loosely-coupled error-state filter of
+Section 3.5.3 (state
 $(x,y,z,v_x,v_y,v_z,\phi,\theta,\psi,\log s)^\top$, where the 10th state
-$\log s$ is the online-estimated logarithm of the monocular VO scale
-(initialized to 0 and converging online from inertial observability). The state
+$\log s$ is the online-estimated logarithm of the monocular VO scale,
+initialized to 0 and converging online from inertial observability), with the
+same five gated observation branches, but without the deep scale head and the
+experience map: this is the ablation of our spatial modules, not a separate
+method. The state
 is propagated with the IMU (gyroscope attitude integration plus bias-compensated
 accelerometer dead reckoning, with a static-startup bias estimate) and corrected
-with monocular visual-odometry measurements through four gated observation
-branches: (i) a 1-D horizontal velocity-magnitude observation (VO inter-frame
-displacement $\times$ online scale, over the true inter-update interval of IMU
-step count $\times\Delta t$) that drives velocity correction and, when the
-innovation exceeds the gate, directly reinitializes the velocity state;
-(ii) a roll/pitch attitude observation; (iii) a short-window relative position
-observation re-anchored to the current filter position every 30 frames, built
-from the gyro-integrated heading direction $\times$ VO displacement magnitude
-$\times$ online scale, so that the global VO heading drift does not enter the
-fused position; and (iv) an independent scale observation estimating $\log s$
-from turn kinematics (lateral specific force over yaw rate,
-$|a_{\text{lat}}|/|\omega|$, normalized by the recorded VO speed, windowed
-median). Each branch is guarded by a per-branch Mahalanobis chi-square gate
-(0.99--0.999 level) to reject outliers. The observation noise matrix $R$ is
+with monocular visual-odometry measurements through five gated observation
+branches: (i) a 1-D velocity-amplitude observation (the VO displacement
+magnitude scaled by the online scale and projected onto the EKF heading) that
+drives velocity correction and, when the innovation exceeds the gate, directly
+reinitializes the velocity state; (ii) a roll/pitch attitude observation;
+(iii) a short-window relative position observation re-anchored to the current
+filter position every 30 frames, built from the gyro-integrated heading
+direction $\times$ VO displacement magnitude $\times$ online scale, so that the
+global VO heading drift does not enter the fused position; (iv) an independent
+scale observation estimating $\log s$ from turn kinematics (lateral specific
+force over yaw rate, $|a_{\text{lat}}|/|\omega|$, normalized by the recorded VO
+speed, windowed median); and (v) a turn-kinematic heading-rate observation
+($|a_{\text{lat}}|/v$, immune to gyroscope biases), gated at
+$\chi^2(1,0.95)=3.84$. Each branch is guarded by a per-branch Mahalanobis
+chi-square gate (0.99--0.999 level) to reject outliers. The observation noise matrix $R$ is
 residual-adaptive (sliding-window smoothed innovation mapped to
 $[R_{\min},R_{\max}]$, combined with a VO inlier-count quality factor), and the
 covariance is updated in Joseph form with post-update regularization
 (symmetrization + minimum-eigenvalue clamping). This is a representative classic
-visual--inertial filter estimator in the family of
-MSCKF/VINS-Mono~\cite{Mourikis2007,Qin2018}; and (2) Visual
+loosely-coupled visual--inertial filter estimator; tightly-coupled estimators in
+the MSCKF/VINS-Mono family~\cite{Mourikis2007,Qin2018} additionally anchor
+visual features in the filter state, which this baseline deliberately avoids; and (2) Visual
 Odometry (VO) --- a feature-based monocular VO baseline using ORB features
 with epipolar-geometry pose recovery (Essential matrix + \texttt{recoverPose}),
 without IMU fusion or loop closure. We additionally report
