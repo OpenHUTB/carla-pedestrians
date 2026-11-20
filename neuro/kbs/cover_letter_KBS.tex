@@ -6,7 +6,7 @@
 
 \begin{document}
 
-\noindent October 17, 2026
+\noindent November 20, 2026
 
 \vspace{1.5em}
 
@@ -23,7 +23,7 @@ We are pleased to submit our manuscript entitled ``\textbf{Brain-Inspired 4-DoF 
 
 \vspace{0.6em}
 
-Autonomous localization today is dominated by black-box learning pipelines whose failures are hard to diagnose and whose resource demands are hard to justify. Our manuscript develops an interpretable alternative grounded in explicitly represented spatial knowledge: a brain-inspired localization-mapping framework (NeuroLocMap) that couples dual-stream visual processing with vestibular IMU fusion on a 10-state EKF core, represents space through 3D grid cells and multilayered head direction cells, and stores spatial experience in a multilayer cognitive map whose topology is directly inspectable. On top of this core, two lightweight learned corrections --- a scale-only calibration head over a frozen monocular depth foundation model and a learned-embedding loop-closure line --- are trained once on simulation and deployed zero-shot.
+Autonomous localization today is dominated by black-box learning pipelines whose failures are hard to diagnose and whose resource demands are hard to justify. Our manuscript develops an interpretable alternative grounded in explicitly represented spatial knowledge: a brain-inspired localization-mapping framework (NeuroLocMap) that couples dual-stream visual processing with vestibular IMU fusion on a 10-state EKF core, represents space through 3D grid cells and multilayered head direction cells, and stores spatial experience in a multilayer cognitive map whose topology is directly inspectable. On top of this core, two lightweight learned corrections --- a scale-only calibration head over a frozen monocular depth foundation model and a learned-embedding loop-closure line --- are trained once on simulation and deployed without per-domain retraining; we report where they do and do not transfer across the sim-to-real boundary instead of claiming universal zero-shot success.
 
 \vspace{0.6em}
 
@@ -37,11 +37,11 @@ We believe this work fits the scope of \emph{Knowledge-Based Systems} for the fo
 
 \vspace{0.6em}
 
-The full system outperforms a 10-state EKF visual-inertial baseline on all five evaluation scenarios (four simulated urban routes and the real-world KITTI 07 sequence) under both calibers, runs at 39--76 FPS on CPU (measured, no GPU), and produces an interpretable topological experience map as a by-product of localization.
+The full system outperforms a 10-state EKF visual-inertial baseline on all five evaluation scenarios (four simulated urban routes and the real-world KITTI 07 sequence) under both calibers, runs at 39--76 FPS on CPU (measured, no GPU), recovers $9\times$ more accumulated drift than the filter core on a dedicated closed-loop benchmark, and produces an interpretable topological experience map as a by-product of localization.
 
 \vspace{0.8em}
 
-We confirm that this manuscript is original, has not been published previously, and is not under consideration by any other journal. All authors have approved the manuscript and agree with its submission. The authors declare no competing interests. Datasets, code, and trained models are publicly available at \url{https://github.com/OpenHUTB/carla-pedestrians}.
+We confirm that this manuscript is original, has not been published previously, and is not under consideration by any other journal. All authors have approved the manuscript and agree with its submission. The authors declare no competing interests. Datasets, code, and trained models are publicly available at \url{https://github.com/82540295/carla-pedestrians}.
 
 \vspace{0.8em}
 
