@@ -16,7 +16,7 @@
     \caption{所提出的多模态视觉-惯性框架的自包含端到端数据流。原始输入为单目RGB图像与IMU测量值。视觉模块将信号分为场景识别与运动估计两支路；前庭模块输出高频惯性运动。两种模态通过频域互补滤波融合。融合后的运动学驱动空间网络更新统一定义于式~\eqref{eq:global_state} 的4自由度全局状态 $\mathbf{X}_t$。经验图模块执行闭环松弛以消除长期轨迹漂移。所有子模块共享本小节提出的标准化状态空间变量。}
     \label{fig:system_overview}
 \end{figure*}
-本工作为机器人定位设计了一个多模态视觉-惯性信号处理系统，它由三个紧耦合的功能子系统组成：分层多尺度视觉特征算子、前庭-惯性传感器状态估计器、度量空间状态编码网络。与传统的基于EKF的松耦合框架不同，所提出的系统采用频域互补融合来解耦低频视觉观测噪声与高频惯性瞬态噪声，并通过连续吸引子空间网络更新全局度量状态以抑制长期轨迹漂移。
+本工作为机器人定位设计了一个多模态视觉-惯性信号处理系统，它由三个紧耦合的功能子系统组成：分层多尺度视觉特征算子、前庭-惯性传感器状态估计器、度量空间状态编码网络。\textcolor{red}{而非在联合非线性优化中对视觉特征做边缘化处理，所提出的系统将融合核保持在固定状态维数：两种模态的频域分工实例化为带五个门控观测分支（第3.5节）的10状态松耦合EKF，其每次更新的代价与跟踪特征数量无关}，并通过连续吸引子空间网络更新全局度量状态以抑制长期轨迹漂移。
 
 \subsubsection{全局离散状态空间模型}
 为后续所有子模块推导提供统一的数学基础，我们首先定义 $t$ 时刻系统的离散状态空间表示。
@@ -173,12 +173,12 @@ LSTM按序处理融合后的\textcolor{red}{梯度-腹侧}特征，跨时间步�
 \end{align}
 其中 $g=9.81\,\mathrm{m/s^2}$ 为重力加速度，$k_t, k_z$ 为与实现常数匹配的常值缩放增益，$\Delta t$ 为帧采样间隔。这避免了显式偏置/重力向量估计，同时提供随后通过互补融合与视觉里程计结合的高频运动线索。
 
-\textbf{偏置估计.} 基线实现不进行在线偏置或重力向量估计。更先进的偏置/重力补偿可作为未来工作集成，但对于此处报告的互补融合结果并非必需。
+\textbf{偏置处理.} \textcolor{red}{前庭前端输出原始角速度与比力。进入运动学线索的加速度计与陀螺仪零偏由静态启动标定一次性估计——平台静止，对每条序列的前 200 个样本执行一次（见3.5.3小节），随后保持常数；不进行在线重力向量估计，比力补偿采用常数重力模。这使前端无需额外的滤波器状态，在全文采用的 20~Hz 采样节拍下已然充分；固定重力模的残余影响作为失效模式在 §4.4 中分析。}
 
-\subsection{前庭-视觉互补融合}
+\subsection{前庭-视觉融合：频域原理与部署滤波器}
 \label{sec:fusion}
 
-视觉与惯性模态提供互补信息：视觉里程计提供精确的低频位置估计但长期会漂移，而IMU积分提供可靠的高频运动线索但会累积偏置漂移。互补滤波利用这种频域分离，无需复杂非线性优化即可实现鲁棒融合。图~\ref{fig:imu_visual_fusion} 展示了该互补融合策略的频域特性及其在前庭-视觉整合中的生物学对应。\textcolor{red}{下文的互补滤波表述描述的是仿生融合原理及其频域解释；部署系统将该原理实现为第4.1节的10状态EKF核，全部报告结果均来自该滤波器。}
+视觉与惯性模态提供互补信息：视觉里程计给出精确的低频运动估计但长期会漂移，而IMU积分提供可靠的高频运动线索但会累积偏置漂移。利用这种频域分离可实现鲁棒融合，而无需对视觉特征做联合非线性优化。\textcolor{red}{该框架以两种明确分离的形式承载这一原理。MATLAB参考实现将其直接落地为互补低通与高通通道的固定权重凸组合（第3.5.5小节）；部署系统将其实例化为状态维数固定的松耦合EKF——惯性通道提供高频预测，视觉通道提供低频门控校正，第3.5.3小节的五个观测分支在观测域表达同样的分工。本文报告的全部结果均由部署滤波器产生；固定权重组合仅作为消融参考保留，并作为§4.3逐模块运行时测量的对象。}图~\ref{fig:imu_visual_fusion} 展示了该互补融合策略的频域特性及其在前庭-视觉整合中的生物学对应。
 
 \begin{figure*}[!t]
     \centering
@@ -187,26 +187,18 @@ LSTM按序处理融合后的\textcolor{red}{梯度-腹侧}特征，跨时间步�
     \label{fig:imu_visual_fusion}
 \end{figure*}
 
-\textbf{滤波器设计.} 设 $\mathcal{L}_\tau$ 表示时间常数为 $\tau$ 的低通滤波器，$\mathcal{H}_\tau$ 表示满足 $\mathcal{L}_\tau + \mathcal{H}_\tau = \mathrm{Id}$（单位算子）的互补高通滤波器。融合后的速度与偏航角速度为：
+\subsubsection{生物学原理与频域互补}
+
+\textbf{滤波器设计.} 设 $\mathcal{L}_\tau$ 表示时间常数为 $\tau$ 的低通滤波器，$\mathcal{H}_\tau$ 表示满足 $\mathcal{L}_\tau + \mathcal{H}_\tau = \mathrm{Id}$（$\mathrm{Id}$ 即单位算子）的互补高通滤波器：
 \begin{align}
     \text{低通: }  & \;L_t = \alpha L_{t-1} + (1-\alpha) x_t,\quad L_0=0 \\
     \text{高通: } & \;H_t = x_t - L_t
 \end{align}
 其中 $\alpha$ 为IIR滤波器遗忘因子，$L_t$ 存储低频平滑信号，$H_t$ 存储残余高频信号分量。
 
-\textbf{生物学类比.} 该融合策略镜像了前庭核与后顶叶皮层（7a区）中的多感官整合，视觉与前庭信号在此结合以估计自运动。这些区域的神经元表现出视觉与前庭调制的加权组合，且权重随信号可靠性动态变化——类似于我们的固定权重参数 $\eta$ 与 $\eta_r$。
+\textbf{生物学类比.} 这是前庭核与后顶叶皮层（7a区）多感官整合的离散对应物：视觉与前庭信号在此结合以估计自运动。这些区域的神经元表现出两种调制特性的加权组合，且权重随信号可靠性动态变化。
 
-\textbf{离散时间实现.} 在采样间隔 $\Delta t$ 下，我们实现一阶IIR（无限脉冲响应）滤波器。选取遗忘因子 $\alpha=\exp(-\Delta t/\tau)$ 与 $\alpha_r=\exp(-\Delta t/\tau_r)$。对任意输入序列 $x_t$，定义：
-\begin{align}
-    \text{低通: }  & \;L_t = \alpha L_{t-1} + (1-\alpha) x_t,\quad L_0=0 \\
-    \text{高通: } & \;H_t = x_t - L_t
-\end{align}
-则融合线索计算如下：
-\begin{align}
-    \mathbf{v}^\mathrm{f}_t & = (1-\eta)\,L^\mathrm{vis}_t + \eta\,H^\mathrm{imu}_t \\
-    r^\mathrm{f}_t          & = (1-\eta_r)\,L^{r,vis}_t + \eta_r\,H^{r}_t
-\end{align}
-其中 $L^\mathrm{vis}_t$ 与 $H^\mathrm{imu}_t$ 分别表示低通滤波后的视觉速度与高通滤波后的IMU速度，偏航角速度同理。
+\textbf{离散时间实现.} 在采样间隔 $\Delta t$ 下，我们实现一阶IIR（无限脉冲响应）滤波器，并由目标时间常数给出遗忘因子 $\alpha=\exp(-\Delta t/\tau)$ 与 $\alpha_r=\exp(-\Delta t/\tau_r)$，使式(27)的模拟截止频率在本文的 20~Hz 节拍下得以复现。
 
 \textbf{频域传递函数.} 在 $s = j\omega$（频率变量）的拉普拉斯域中，一阶低通与高通滤波器的传递函数为：
 \begin{align}
@@ -217,20 +209,74 @@ LSTM按序处理融合后的\textcolor{red}{梯度-腹侧}特征，跨时间步�
 
 取 $\tau = 0.1$ s 时，截止频率为 $\omega_c = 10$ rad/s（$\approx 1.6$ Hz），确保IMU处理高频运动（$>$2 Hz，如振动、快速转弯），而视觉校正低频漂移（$<$1 Hz）。这模仿了生物学前庭-视觉整合，其中前庭器官响应0.1-10 Hz的频率，而低于0.5 Hz时视觉运动感知占主导 \cite{Angelaki2004}。
 
-\textbf{计算效率.} 该实现每个信号只需两个状态变量（当前低通滤波器状态 $L_t$ 与前值 $L_{t-1}$），仅涉及简单的标量乘法与加法。每次更新计算代价为 $\mathcal{O}(1)$，适合实时嵌入式实现——这与紧耦合视觉-惯性里程计的扩展卡尔曼滤波所需的 $\mathcal{O}(n^3)$ 矩阵求逆形成鲜明对比。
+\subsubsection{时间对齐}
 
-\textbf{自适应加权.} 虽然基线实现使用固定融合权重 $\eta$ 与 $\eta_r$，但该框架可自然扩展到基于信号可靠性的自适应加权。例如，在激烈机动或光照快速变化时，视觉里程计可能不可靠，应增加对IMU的依赖（$\eta \to 1$）。反之，在IMU积分累积偏置的慢速运动中，视觉里程计应占主导（$\eta \to 0$）。自适应方案可实现为：
+\textcolor{red}{融合之前，两条数据流已完成时间对齐。在20~Hz同步采集设置下，两个传感器由统一节拍驱动（$\Delta t = 0.05$~s）；轻量对齐器以$0.02$~s容差、贪心一对一匹配的方式将每帧相机图像配对到最近的IMU采样（每个IMU样本至多消费一次）。对齐数据流逐帧核验了时间戳连续性——全部5000帧无间隙、无丢帧——因此融合在预对齐样本上进行，无需帧内插值。}
+
+\subsubsection{部署实现：全状态EKF与误差形式协方差}
+
+\textcolor{red}{\textbf{状态向量.} 部署融合核为全状态（total-state）EKF、协方差以误差状态形式传播，状态为}
 \begin{equation}
-    \eta_t = f(\sigma^\mathrm{vis}_t, \sigma^\mathrm{imu}_t),\quad \text{例如} \quad \eta_t = \frac{\sigma^\mathrm{vis}_t}{\sigma^\mathrm{vis}_t + \sigma^\mathrm{imu}_t}
+    \mathbf{x}_t = \big[x,\ y,\ z,\ v_x,\ v_y,\ v_z,\ \phi,\ \theta,\ \psi,\ \log s_t\big]^{\top}
 \end{equation}
-其中 $\sigma_t^\mathrm{vis}$ 与 $\sigma_t^\mathrm{imu}$ 为视觉与惯性测量的实时不确定性估计，$\eta_t$ 为时变融合权重。\textcolor{red}{该自适应扩展在本文报告的实验中\emph{未启用}：所有结果均采用带活动门控的固定权重凸组合，IMU 侧权重为 $\eta_r = 0.7$（偏航）、$\eta = 0.3$（平移）、$0.5$（高度）。}
+\textcolor{red}{即位置、速度、欧拉姿态与第十个状态 $\log s_t$——连接VO坐标系与米制世界的在线尺度因子（符号定义见第3.1节；尺度支路详见第~\ref{sec:scale_recovery}节）。}
 
-\textcolor{red}{在线尺度更新在 EKF 内以对数域卡方门控的尺度状态观测实现（第~\ref{sec:scale_recovery}节）；早期草稿中的指数递推公式已被该机制取代，任何报告的实验均不再使用。}
+\textcolor{red}{\textbf{预测步.} 观测之间，状态由IMU运动学传播：}
+\begin{equation}
+    \boldsymbol{\Theta}_{t+1} = \mathrm{wrap}\!\left(\boldsymbol{\Theta}_t + (\boldsymbol{\omega}_t - \mathbf{b}_g)\,\Delta t\right),\quad
+    \mathbf{v}_{t+1} = \mathbf{v}_t + \mathbf{R}(\boldsymbol{\Theta}_t)(\mathbf{a}_t - \mathbf{b}_a)\,\Delta t + \mathbf{g}_w\,\Delta t,
+\end{equation}
+\textcolor{red}{$\mathbf{p}_{t+1} = \mathbf{p}_t + \mathbf{v}_t\,\Delta t + \tfrac{1}{2}\mathbf{a}^w_t\,\Delta t^2$，其中 $\mathbf{g}_w = [0, 0, -9.81]^\top$~m/s$^2$ 为常数重力向量，欧拉角做环绕处理以避免分支歧义。协方差按}
+\begin{equation}
+    \mathbf{P}_{t+1} = \mathbf{F}_t \mathbf{P}_t \mathbf{F}_t^\top + \mathbf{Q}_c\,\Delta t
+\end{equation}
+\textcolor{red}{传播，过程噪声与初始协方差对所有序列一次性固定：$\mathbf{Q}_c = \mathrm{diag}(0.18, 0.18, 0.09,\ 0.72, 0.72, 0.36,\ 7.2{\times}10^{-3},\ 7.2{\times}10^{-3},\ 1.8{\times}10^{-2},\ 2.0{\times}10^{-5})$，$\mathbf{P}_0 = \mathrm{diag}(2, 2, 0.5,\ 2, 2, 1,\ 0.05, 0.05, 0.05,\ 0.64)$，按 $(\mathbf{p}, \mathbf{v}, \boldsymbol{\Theta}, \log s)$ 顺序排列，单位分别为 m$^2$/s、(m/s)$^2$/s、rad$^2$/s 与 rad$^2$；尺度方差 0.64 对应 $\sigma_0 = 0.8$ 的对数域先验，$\log s$ 初始化为 0（单位尺度），仅经分支 4 更新。并行维护一份纯IMU航位推算副本作为消融基线。}
+
+\textcolor{red}{\textbf{门控观测更新.} 每个分支产生新息 $\mathbf{y} = \mathbf{z} - h(\hat{\mathbf{x}})$，协方差 $\mathbf{S} = \mathbf{H}\mathbf{P}\mathbf{H}^\top + \mathbf{R}$，仅当}
+\begin{equation}
+    \mathbf{y}^\top \mathbf{S}^{-1} \mathbf{y} < \chi^2(d;\ \alpha)
+\end{equation}
+\textcolor{red}{时接受，并以保持对称正定性的Joseph形式应用：}
+\begin{equation}
+    \mathbf{P}_+ = (\mathbf{I} - \mathbf{K}\mathbf{H})\mathbf{P}(\mathbf{I} - \mathbf{K}\mathbf{H})^\top + \mathbf{K}\mathbf{R}\mathbf{K}^\top, \quad \mathbf{K} = \mathbf{P}\mathbf{H}^\top\mathbf{S}^{-1}.
+\end{equation}
+\textcolor{red}{各分支的观测模型与部署门限列于表~\ref{tab:gating}。分支1从转弯运动学恢复偏航：在平均速度超过 3~m/s、$|a_\perp| > 0.3$~m/s$^2$ 且 $|\omega_z| < 1.2$~rad/s 的帧上，比值 $a_\perp/|v|$ 被积分到独立于陀螺仪与当前航向估计的航向基上，得到带每帧 0.26~rad（约 15°）硬步长限制的偏航角观测。分支4为双路径对数域尺度观测：第~\ref{sec:scale_recovery}节的标定深度尺度优先，在 $0.35$ 死区内冻结（约 1.42 倍尺度，即状态已与深度线索一致时保持不动）；当深度路径不可用、被跳过或被门控剔除时，采用运动学线索 $|a_\perp|/(|\omega|v)$。\textcolor{red}{需要说明的是：分支1为编译开关控制的实现项，在全部报告运行中默认关闭（其门限未参与任何报告结果）；表~\ref{tab:gating}列出该行仅为架构完整性。}}
+
+\begin{table*}[!t]
+\caption{10状态融合核的部署观测分支（门限为所有报告运行所用）}
+\label{tab:gating}
+\centering
+\begin{tabular}{clccc}
+\toprule
+\# & 观测 $\mathbf{z}$（维数） & $h(\hat{\mathbf{x}})$ & $\chi^2(d;\alpha)$ & $R_{\mathrm{nom}}$ \\
+\midrule
+1 & 转弯帧上 $\int a_\perp/|v|\,\mathrm{d}t$ 得到的偏航 (1)（\textcolor{red}{报告运行中关闭}） & $\psi$ & 3.84 (1;0.95) & 0.05 \\
+2 & VO位移 $\times s$，投影到航向 (1) & $\|\mathbf{v}\|$ & 9.21 (2;0.99) & 0.20 \\
+3 & 来自前庭线索的roll/pitch (2) & $(\phi,\theta)$ & 9.21 (2;0.99) & $\mathrm{diag}(0.05, 0.50)$ \\
+4 & 对数尺度：深度中值或 $|a_\perp|/(|\omega|v)$ (1) & $\log s$ & 6.63 (1;0.99) & 0.05/0.02 \\
+5 & 重锚定VO增量 $\times s$，30帧 (2) & $(x,y)$ & 13.82 (2;0.999) & $\mathrm{diag}(0.06, 0.06)$ \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\textcolor{red}{分支5伴随弱高度先验（$R = 25$~m$^2$）。分支2将2自由度门限用于标量残差（刻意放宽）。每个 $R$ 均按下述因子缩放；门限与协方差在消融运行前一次性固定，五个序列完全一致。}
+
+\textcolor{red}{\textbf{质量自适应噪声.} VO内点数 $n_{\mathrm{inl}}$ 给出 $q_f = \mathrm{clip}(60/n_{\mathrm{inl}},\ 1/3,\ 3)$，上一窗口的新息给出平滑残差因子 $\rho = \mathrm{clip}\!\left(q_f\,[\,0.05 + (d/\mathrm{dof})^{1.5}\,],\ 0.008,\ 10\right)$，其中 $d$ 为归一化Mahalanobis距离；表~\ref{tab:gating}的名义协方差乘以 $\rho$。退化帧因此贡献更小，完全退化的帧只贡献一个放大噪声的无运动先验。}
+
+\textcolor{red}{\textbf{数值稳定性与消融完整性.} 所有更新采用式(33)的Joseph形式并做更新后正则化（对称化加最小特征值钳位），使协方差在5000帧序列上保持正定而无需重新初始化。由于每个分支都是独立的门控项，关闭任一分支后其余计算逐位不变——这正是§4.3消融矩阵成立的前提。}
+
+\subsubsection{计算代价}
+
+\textcolor{red}{部署滤波器携带固定的 $10 \times 10$ 协方差，每次更新因此是常数尺寸的矩阵运算（$\mathcal{O}(10^3)$），与视觉特征数量无关——这与给状态增补特征克隆的滤波器（MSCKF、VINS-Mono）的 $\mathcal{O}(N n^3)$ 代价形成对比；MATLAB前端的逐模块计时见表4。}
+
+\subsubsection{参考实现：固定权重凸组合（仅消融）}
+
+\textcolor{red}{MATLAB参考实现将第3.5.1小节的原理直接落地为带二值活动门控的固定权重凸组合：平移用 $\eta = 0.3$、偏航用 $\eta_r = 0.7$、高度用 $0.5$，回退线索在视觉通道不活跃时取自重力补偿比力幅值。权重与钳位对所有序列一次性固定、保持一致，无逐序列调参；其具体形式见 Supplementary S.2。该组件作为消融中的固定权重参考与运行时测量的对象，不是主结果的来源。其每次更新的代价为 $\mathcal{O}(1)$，每路融合信号只需两个标量状态，是流水线中最轻的组件。}
 
 \subsection{单目尺度恢复支路}
 \label{sec:scale_recovery}
 
-\textbf{问题.} EKF 第 10 个状态 $\log s$ 在线从转弯运动学收敛，但转弯运动学仅在转弯帧可观测（KITTI~07 上 294/1101 帧），且按构造只能恢复\emph{VO 相对}尺度——视觉帧与度量世界之间的绝对尺度无法仅从惯性运动恢复。单目度量深度网络提供了独立线索，但其零样本预测带场景相关偏置（初步研究表明原始深度尺度跨场景不可靠），因此原始深度不能直接作为尺度观测。我们不直接信任深度网络，而是学习一个轻量\emph{标定}：把深度统计特征映射到真实全局尺度——仅在仿真上训练一次，部署时冻结。
+\textbf{问题.} \textcolor{red}{EKF 第十个状态 $\log s$ 由两条线索驱动：其一为转弯运动学——仅在转弯帧可观测（KITTI~07 上 294/1101 帧），且按构造只能恢复 \emph{VO 相对}尺度；其二为部署配置下本节的标定深度路径——只要可用即优先（见3.5.3小节分支4）。两条线索各自都无法单独确定视觉帧与米制世界之间的绝对尺度。}单目度量深度网络提供了独立线索，但其零样本预测带场景相关偏置（初步研究表明原始深度尺度跨场景不可靠），因此原始深度不能直接作为尺度观测。我们不直接信任深度网络，而是学习一个轻量\emph{标定}：把深度统计特征映射到真实全局尺度——仅在仿真上训练一次，部署时冻结。
 
 \textbf{结构.} 对每帧 $t$，设 $\hat z_t$ 为冻结的单目深度基础模型（Depth-Anything-V2，户外头）预测的度量深度图。将其归纳为 8 维特征向量
 \begin{align}

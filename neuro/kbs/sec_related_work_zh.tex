@@ -9,7 +9,7 @@
 
 视觉SLAM在过去二十年中取得了重大进展。Mur-Artal 等人提出了 ORB-SLAM~\cite{mur2015orb}，它提取稀疏 ORB 关键点以实现鲁棒的实时位姿估计，已成为该领域广泛使用的基线。Engel 等人开发了 LSD-SLAM~\cite{engel2014lsd} 与 DSO~\cite{engel2018direct}，它们直接在像素强度上运算而无需特征提取，在纹理丰富的环境中实现半稠密重建。在闭环检测方面，Cummins 与 Newman 提出了基于词袋模型的概率方法 FAB-MAP~\cite{Cummins2008}，而 Arandjelovic 等人引入了 NetVLAD~\cite{Arandjelovic2016}，通过端到端学习地点描述子实现鲁棒的地点识别。然而，这些方法存在关键局限：ORB-SLAM 需要足够的纹理（通常每帧 $>$100 个特征点），在弱纹理环境中会失效；而 DSO 等直接法对运动模糊敏感且需要光度标定。两类方法都有相当高的计算开销——ORB-SLAM 的特征提取与匹配主导了处理时间，而 DSO 的稠密光度优化限制了其在嵌入式平台上的实时性能。
 
-将 IMU 与相机集成，通过提供与光照无关的运动估计来弥补视觉SLAM的局限。Mourikis 与 Roumeliotis 提出了 MSCKF~\cite{Mourikis2007}，这是一种紧耦合视觉-惯性估计器，通过多状态约束优化实现高精度。Qin 等人开发了 VINS-Mono~\cite{Qin2018}，将紧耦合优化与闭环相结合，实现鲁棒的单目视觉-惯性里程计。Mahony 等人~\cite{Mahony2008} 与 Madgwick 等人~\cite{Madgwick2011} 提出了利用频域传感器特性的互补滤波方法——视觉里程计提供精确的低频估计，而IMU捕获高频动力学。然而，MSCKF 与 VINS-Mono 这类紧耦合方法需要仔细初始化 IMU 偏置与尺度，涉及复杂的雅可比推导，且缺乏生物学可解释性。为克服这些局限，我们采用一种受生物启发的互补滤波策略，模仿生物的前庭-视觉整合~\cite{Angelaki2004, Cullen2012}，以最少参数调优提供可解释的传感器融合，并避免联合非线性优化的计算负担。
+将 IMU 与相机集成，通过提供与光照无关的运动估计来弥补视觉SLAM的局限。Mourikis 与 Roumeliotis 提出了 MSCKF~\cite{Mourikis2007}，这是一种紧耦合视觉-惯性估计器，通过多状态约束优化实现高精度。Qin 等人开发了 VINS-Mono~\cite{Qin2018}，将紧耦合优化与闭环相结合，实现鲁棒的单目视觉-惯性里程计。Mahony 等人~\cite{Mahony2008} 与 Madgwick 等人~\cite{Madgwick2011} 提出了利用频域传感器特性的互补滤波方法——视觉里程计提供精确的低频估计，而IMU捕获高频动力学。然而，MSCKF 与 VINS-Mono 这类紧耦合方法需要仔细初始化 IMU 偏置与尺度，涉及复杂的雅可比推导，且缺乏生物学可解释性。为克服这些局限，\textcolor{red}{我们采用受生物启发的频域融合策略，镜像生物的前庭-视觉整合~\cite{Angelaki2004, Cullen2012}，并将其实例化为固定维数（10状态）松耦合EKF。这保留了可解释的低/高频分工，同时使每次更新的代价与特征状态数量无关——特征上的紧耦合优化无法提供这一点。}
 
 \subsection{受脑启发的空间认知}
 \label{sec:related_bio}
