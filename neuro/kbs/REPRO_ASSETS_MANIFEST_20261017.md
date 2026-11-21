@@ -1,4 +1,10 @@
-# NeuroLocMap 论文复现资产包
+# NeuroLocMap 论文复现资产包（2026-10 初版）
+
+> **状态：已被取代（superseded）。** 本文件描述 2026-10-17 的初版资产包
+> （六集完整 `datasets/`，约 1.61 GB，代码快照 `c4d6c77`）。2026-11 起对外发布的是
+> 最小资产包 `NLM_Repro_Assets_*`（约 45 MB，含 GT / EKF / VO / 闭环线轨迹 + Town01 折返集），
+> 现行口径见 [`../../README.md`](../../README.md) 第 3 节与 [`REPRODUCE.md`](REPRODUCE.md)。
+> 下表仅作历史归档，**不要**据此判断当前发布内容。
 
 打包日期：2026-10-17。对应论文：NeuroLocMap（投稿 Knowledge-Based Systems）。
 代码快照 commit：`c4d6c77c054882030589589d71edc86a593dde01`（分支 hutb，仓库 OpenHUTB/carla-pedestrians）。
