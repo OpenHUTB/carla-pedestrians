@@ -15,6 +15,13 @@ the two learned heads; `transformers` only for DINOv2 embeddings).
 |---|---|---|
 | dataset structure | `python3 neuro/kbs/check_datasets.py` | the five per-sequence files the metrics need (`ground_truth.txt`, `fusion_pose.txt`, `visual_odometry.txt`, `slam_results/trajectories.mat`, `slam_results/experiences.mat`); exit code 0 = ready |
 
+Re-run log against the released bundle (2026-11, six sequences): `check_datasets.py`
+passes on all; `compute_final_metrics.py` and `se3_metrics.py` reproduce the
+committed numbers **cell for cell** — loop-line 41.14 / 22.91 / 39.49 / 18.61 /
+18.45 m (Sim(3)), `EKF` and `VO` columns identical to Table 3, cross-check
+`PASS`, closed-loop terminal drift 842.54 → 55.92 m (15.07×). What the bundle
+does *not* contain is listed in §1, "What the released asset bundle covers".
+
 ---
 
 ## 1. Table by table
@@ -56,6 +63,45 @@ Consequently `final_metrics.json` reports the **loop-line** value (Town05:
 read from `se3_metrics.json`. Run both scripts, and compare against
 `se3_metrics.json` for Table 3 and against `final_metrics.json` only for the
 Table 1 counts and the "loop line over the unscaled EKF core" ablation row.
+
+Data roots are overridable, so the released asset bundle can be evaluated
+without copying it into `neuro/data/`:
+
+```bash
+NLM_DATA_ROOT=/path/NLM_Repro_Assets_*/datasets \
+NLM_BACKUP_ROOT=/path/_p11_backup_20261014 \
+python3 neuro/kbs/se3_metrics.py
+```
+
+### What the released asset bundle covers (checked 2026-11)
+
+`se3_metrics.json` marks every cell it computed from the data root with no
+flag, and every cell carried over from an earlier batch with `"carried": true`
+(listed in `_meta.configs_carried`). Running `se3_metrics.py` over
+`NLM_Repro_Assets_*` reproduces, cell by cell:
+
+| column | status in the asset bundle | note |
+|---|---|---|
+| `EKF`, `VO` (both calibers) | **recomputed** | 15 cells, all match Table 3 to the printed precision |
+| `NLM-闭环线` (both calibers) | **recomputed** | 41.14 / 46.37 (Town05), 18.45 / 29.99 (KITTI 07) — this is also the `Ours` cell on KITTI 07 |
+| `Ours` on 4 CARLA sets (18.07 / 15.31 / 28.75 / 14.44 Sim(3)) | carried | needs `slam_results_scale_nlm/`, not in the bundle |
+| `EKF+尺度` (20.10 / 16.07 / 27.90 / 14.44) | carried | needs `_p11_backup_20261014/<seq>/fp_head030.txt` |
+| `ORB-only` (44.72 on Town05) | carried | needs `slam_results_orbonly/` |
+| KITTI 09 row (Supplementary S.2) | carried | KITTI 09 is not in the bundle at all |
+
+To close the three carried groups, run this on the machine that holds the
+original run tree — it copies only the missing artifacts, verifies row counts
+against the ground truth, and writes a sha256 manifest:
+
+```bash
+python3 neuro/kbs/export_repro_bundle.py --src /path/to/runs --out /path/to/NLM_Repro_Assets_full
+python3 neuro/kbs/export_repro_bundle.py --src /path/to/runs --out /path/to/NLM_Repro_Assets_full --check-only  # dry run
+```
+
+The expected `--src` layout is documented in the script header
+(`01_NeuroSLAM_Datasets/<seq>/slam_results_*` plus `_p11_backup_20261014/<short>/fp_head030.txt`).
+Once those artifacts exist, the `carried` cells turn into recomputed cells on
+the next `se3_metrics.py` run — no edits to the JSON are needed.
 
 MATLAB cross-check of the same two calibers: `neuro/kbs/crosscheck_sim3.m`.
 Per-frame error curves for a single sequence: `python3 neuro/kbs/perframe_err.py`.
@@ -99,26 +145,33 @@ realized average 6.3 km/h; 36 accepted loop-closure events.
 Caliber: **anchored Sim(3)** — the similarity transform is fitted on the first
 100 frames and then applied unchanged to the whole trajectory (stricter than the
 full-Sim(3) refit of Table 3, which would absorb the drift the benchmark is meant
-to expose). MATLAB implementation: `neuro/kbs/kb_s2_se3_check.m`.
+to expose). The quantity reported in §4.5 is the **terminal error** (last-frame
+position error after the anchored fit), *not* the RMSE over the whole trajectory.
+`kb_s2_se3_check` prints both and labels the caliber, because an earlier version
+returned RMSE only and therefore printed 87.25 / 477.76 instead of the paper's
+55.92 / 842.54.
 
-Inputs, as that script expects them, are four whitespace-free CSV files of
-`x,y,z` columns written to `/tmp` (one row per frame, truncated to the common
-length):
+```bash
+python3 neuro/kbs/export_closed_loop_inputs.py \
+        --seq ../data/01_NeuroSLAM_Datasets/Town01Turnaround_IMU_Fusion --out /tmp
+# then, in MATLAB:
+#   kb_s2_se3_check            % or kb_s2_se3_check('/tmp')
+```
 
-| file | content |
-|---|---|
-| `/tmp/se3_gt.txt` | ground truth (`Town01Turnaround_IMU_Fusion/ground_truth.txt`) |
-| `/tmp/se3_pres2.txt` | trajectory before the loop correction (A only) |
-| `/tmp/se3_final.txt` | deployed trajectory (A + loop re-anchoring) |
-| `/tmp/se3_ekf.txt` | EKF-core trajectory (`fusion_pose.txt`) |
-| `/tmp/se3_events.txt` | accepted loop frames, one index per line (`a_final/loop_constraint_events.mat`) |
+`export_closed_loop_inputs.py` writes the five `/tmp/se3_*.txt` files that the
+MATLAB script reads (whitespace-free `x,y,z`, one row per frame, truncated to the
+common length; events one frame index per line). Verified values on the released
+bundle:
 
-**Known gap**: the export step that turns the `.mat`/`.txt` logs into the five
-`/tmp/se3_*.txt` files is not yet a script in this repository — it was run by
-hand when the benchmark was produced, and `/tmp` is wiped between sessions.
-Until `export_closed_loop_inputs.py` lands, the three numbers can be re-derived
-from the files above but not by a single command. The route itself is part of
-the released asset bundle, not of this repository.
+| file | content | terminal (paper) | RMSE (diagnostic) |
+|---|---|---|---|
+| `se3_final.txt` | deployed trajectory (A + loop re-anchoring) | **55.92 m** | 87.25 m |
+| `se3_ekf.txt` | EKF core (`fusion_pose.txt`) | **842.54 m** | 477.76 m |
+| `se3_pres2.txt` | before the loop correction (A only) | 565.31 m (not reported) | 331.66 m |
+
+Ground truth length 881.5 m over 10000 frames; 36 accepted events
+(`a_final/loop_constraint_events.mat`, `NLM_LOOP_EVENTS` = 36 rows). Ratio
+842.54 / 55.92 = 15.07, the "15x" of §4.5.
 
 ---
 
@@ -153,7 +206,11 @@ Cover letter: `cover_letter_KBS.tex`. Highlights: `highlights.tex`.
 
 | Gap | Status |
 |---|---|
-| processed CARLA sequences not hosted | available on request (tens of GB) |
-| closed-loop route/event log not hosted | available on request |
+| processed CARLA sequences not hosted | minimal asset bundle (six sequences, ground truth + EKF/VO + loop-line trajectories) is released; full raw frames available on request |
+| `Ours` column on the 4 CARLA sets, `EKF+尺度` column, `ORB-only` ablation | artifacts not in the released bundle; use `export_repro_bundle.py` on the original run tree to package them, then re-run `se3_metrics.py` |
+| KITTI 09 row (Supplementary S.2) | sequence not in the released bundle; row is carried over from the 2026-10 batch |
 | EKF gate thresholds not swept by a shipped script | fixed before the ablation runs, values are source constants |
 | `*.m` legacy scripts | kept for provenance; published numbers come from the Python path |
+
+`se3_metrics.json` records this itself: computed cells are plain, carried cells
+carry `"carried": true`, and `_meta.configs_carried` lists them.

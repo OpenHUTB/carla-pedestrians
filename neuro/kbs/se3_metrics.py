@@ -17,8 +17,9 @@ import numpy as np, pandas as pd, scipy.io as sio, json, os
 # 锚定到脚本所在目录: 本脚本含 ../ 相对路径, 需保证从任意 cwd 调用均正确
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-D = '../data/01_NeuroSLAM_Datasets/'
-BK = '../data/_p11_backup_20261014/'
+# 数据根可覆盖: NLM_DATA_ROOT=/path/01_NeuroSLAM_Datasets (默认 ../data/01_NeuroSLAM_Datasets)
+D  = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/') + '/'
+BK = os.environ.get('NLM_BACKUP_ROOT', '../data/_p11_backup_20261014').rstrip('/') + '/'
 SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
         'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion', 'KITTI09Data_IMU_Fusion']
 SHORT = {'Town05Data_IMU_Fusion': 'Town05', 'Town03Data_IMU_Fusion': 'Town03',
@@ -97,6 +98,60 @@ for sd in SETS:
                      'sim3_fitted_scale': round(s_f, 4)}
     OUT[sd] = row
 
+# ── 缺失产物的列: 从上一版 JSON 结转, 并打 carried=True 标记 (不静默丢行/丢集) ──
+PREV = {}
+JSN = '../kbs/se3_metrics.json'
+if os.path.exists(JSN):
+    try:
+        PREV = json.load(open(JSN))
+    except Exception:
+        PREV = {}
+SNAP = {k: v for k, v in PREV.items() if not k.startswith('_')}
+for sd, prow in SNAP.items():
+    row = OUT.get(sd)
+    if row is None:                      # 整集没有数据 (如 KITTI09): 整行结转
+        carried = {k: (dict(v, carried=True) if isinstance(v, dict) else v)
+                   for k, v in prow.items() if k != 'gt_len_m'}
+        OUT[sd] = {'gt_len_m': prow.get('gt_len_m'), **carried, 'carried_row': True}
+        continue
+    for cfg, v in prow.items():
+        if cfg == 'gt_len_m' or not isinstance(v, dict):
+            continue
+        if cfg not in row:               # 该配置的产物不在数据根里
+            row[cfg] = dict(v, carried=True)
+
+OUT['_meta'] = {
+    'calibers': {
+        'sim3_rmse': 'full Sim(3) refit (shape-only upper bound)',
+        'se3_rmse': 'SE(3) rigid Kabsch, no scale (metric-scale caliber)',
+        'drift': 'terminal error / trajectory length (%)',
+    },
+    'data_root': D,
+    'note': 'Keys computed from the data root are plain. Keys with "carried": true were '
+            'computed in an earlier batch and their artifact is NOT under the data root '
+            '(EKF+尺度 needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-全系统 needs '
+            'slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are '
+            'carried over from the previous JSON so that Table 3 stays complete, and are '
+            'replaced the moment the artifact is present.',
+}
+present, carried = set(), set()
+for sd, row in OUT.items():
+    if sd.startswith('_') or not isinstance(row, dict):
+        continue
+    for k, v in row.items():
+        if k in ('gt_len_m', 'carried_row') or not isinstance(v, dict):
+            continue
+        (carried if v.get('carried') or row.get('carried_row') else present).add(f'{sd}/{k}')
+OUT['_meta']['configs_computed'] = sorted(present)
+OUT['_meta']['configs_carried'] = sorted(carried)
+OUT['_meta']['table3_notes'] = [
+    'KITTI07 Ours cell (18.45 / 29.99) equals NLM-闭环线: the scale branch is inactive '
+    'zero-shot on real imagery (Supplementary S.1), so the full system there IS the loop line.',
+    'Town10HD Ours == EKF+尺度 (14.44): the single accepted loop link is inert on the open layout.',
+    'Table 3 EKF+尺度 and ORB-only cells come from artifacts outside the released asset bundle '
+    'unless export_repro_bundle.py has been run over the original run tree.',
+]
+
 with open('../kbs/se3_metrics.json', 'w') as f:
     json.dump(OUT, f, indent=2, ensure_ascii=False)
 
@@ -104,6 +159,8 @@ with open('../kbs/se3_metrics.json', 'w') as f:
 CMPS = ['VO', 'EKF', 'EKF+尺度', 'NLM-闭环线', 'NLM-全系统', 'ORB-only']
 print('=' * 96)
 for sd, row in OUT.items():
+    if sd.startswith('_'):
+        continue
     print(f"\n### {sd}  (GT {row['gt_len_m']}m)")
     print(f"{'配置':12s} {'SE(3)刚性':>10s} {'drift%':>8s} | {'sim3_full':>10s} {'drift%':>8s} {'拟合s':>9s}")
     for c in CMPS:
@@ -119,7 +176,7 @@ t1 = FM['table1']
 print('\n── 与 final_metrics.json 交叉校验 (sim3_full 应一致) ──')
 ok = True
 for sd, row in OUT.items():
-    if sd not in t1:
+    if sd.startswith('_') or sd not in t1:
         continue  # 补充材料数据集 (如 KITTI09) 不在主表, 跳过交叉
     for name, key in [('NLM-闭环线', 'nlm'), ('EKF', 'ekf'), ('VO', 'vo')]:
         ref = t1[sd].get(key)
