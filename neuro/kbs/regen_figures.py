@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""regen_figures.py — 用 2026-10-13 车流重采 run (slam_results/) 数据重绘论文 4 张图。
+"""regen_figures.py — 重绘论文 4 张图（NLM 轨迹优先 slam_results_scale_nlm/ 全系统，
+缺失时回退 slam_results/ 闭环线并告警；EKF/VO 基线取自 final_metrics.json）。
 背景: MATLAB R2021b 本机不可用 (Settings 错误), 原图由 MATLAB 生成 (A4 页面+trim);
 本脚本直接生成 trim 后的内容尺寸 PDF, tex 中对应 includegraphics 的 trim 参数改为 0。
 
@@ -12,6 +13,7 @@
 口径: 7-DoF (Procrustes, 旋转+平移+均匀尺度) 全轨迹对齐, 与 compute_metrics_with_alignment.m 一致。
 """
 import os
+import sys
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -22,8 +24,30 @@ ROOT = '../data'
 FIG = '../kbs/fig'
 
 # ---------------- 论文现值 (Table 1, 2026-10-14 二次重采 final_metrics.json) ----------------
-EKF_RMSE = {'Town05': 44.44, 'Town03': 23.36, 'Town07': 40.64, 'Town10HD': 18.61, 'KITTI07': 22.09}
-VO_RMSE  = {'Town05': 48.26, 'Town03': 49.10, 'Town07': 50.07, 'Town10HD': 35.86, 'KITTI07': 27.84}
+_FALLBACK_EKF = {'Town05': 44.44, 'Town03': 23.36, 'Town07': 40.64, 'Town10HD': 18.61, 'KITTI07': 22.09}
+_FALLBACK_VO  = {'Town05': 48.26, 'Town03': 49.10, 'Town07': 50.07, 'Town10HD': 35.86, 'KITTI07': 27.84}
+
+
+def _short(ds_key):
+    """'Town10HDData_IMU_Fusion' -> 'Town10HD'"""
+    return ds_key.split('Data_')[0] if 'Data_' in ds_key else ds_key
+
+
+def _load_baselines():
+    """EKF/VO 的 RMSE 从 final_metrics.json 取（单一来源），取不到才回退常量。"""
+    import json
+    try:
+        t1 = json.load(open('../kbs/final_metrics.json'))['table1']
+        ekf = {_short(k): v['ekf']['rmse'] for k, v in t1.items() if v.get('ekf')}
+        vo = {_short(k): v['vo']['rmse'] for k, v in t1.items() if v.get('vo')}
+        if ekf and vo:
+            return ekf, vo
+    except Exception as e:
+        print(f'[WARN] final_metrics.json 读取失败 ({e})，EKF/VO 用内置常量', file=sys.stderr)
+    return _FALLBACK_EKF, _FALLBACK_VO
+
+
+EKF_RMSE, VO_RMSE = _load_baselines()
 
 # 配色 (与原图一致: NLM 蓝 / EKF 浅橙 / VO 浅绿)
 C_NLM, C_EKF, C_VO = '#4490C2', '#F4A582', '#92C59B'
@@ -36,6 +60,27 @@ C_GRAY = '#888888'
 # KITTI07 无全系统 (零样本尺度支路失效), 保持闭环线 slam_results。
 def _nlm_dirs(ds):
     return ('slam_results',) if ds == 'KITTI07' else ('slam_results_scale_nlm', 'slam_results')
+
+
+_FALLBACK_WARNED = set()
+
+
+def _pick(sub, ds, name):
+    """按 _nlm_dirs 顺序取第一个存在的文件；用了回退目录时告警一次。
+
+    资产包只带 slam_results/（闭环线），此时画出来的 NLM 曲线与正文 Table 3 的
+    Ours 列（slam_results_scale_nlm/ 全系统）不是同一条轨迹。
+    """
+    dirs = _nlm_dirs(ds)
+    for i, d in enumerate(dirs):
+        p = f'{sub}/{d}/{name}'
+        if os.path.exists(p):
+            if i > 0 and ds not in _FALLBACK_WARNED:
+                _FALLBACK_WARNED.add(ds)
+                print(f'[WARN] {ds}: {dirs[0]}/ 缺失，改用 {d}/ —— 该图中的 NLM 为闭环线口径，'
+                      f'与正文 Table 3 的 Ours 列不是同一条轨迹', file=sys.stderr)
+            return p
+    return None
 
 
 def load_pos(path, poscols=None):
@@ -77,22 +122,15 @@ def procrustes_7dof(gt, est):
 def load_ds(ds):
     sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
-    nlm_txt = None
-    for d in _nlm_dirs(ds):
-        p = f'{sub}/{d}/exp_trajectory.txt'
-        if os.path.exists(p):
-            nlm_txt = p
-            break
+    nlm_txt = _pick(sub, ds, 'exp_trajectory.txt')
     if nlm_txt is not None:
         nlm = load_pos(nlm_txt)
     else:
         # 新 run 产物为 trajectories.mat (变量 exp_trajectory), P2 定解口径
         nlm = None
-        for d in _nlm_dirs(ds):
-            mp = f'{sub}/{d}/trajectories.mat'
-            if os.path.exists(mp):
-                nlm = np.array(loadmat(mp)['exp_trajectory'], dtype=float)
-                break
+        mp = _pick(sub, ds, 'trajectories.mat')
+        if mp is not None:
+            nlm = np.array(loadmat(mp)['exp_trajectory'], dtype=float)
         if nlm is None:
             raise FileNotFoundError('exp_trajectory.txt / trajectories.mat')
     ekf = load_pos(f'{sub}/fusion_pose.txt')
@@ -155,11 +193,9 @@ def _mat_field(E, name):
 def load_map(ds):
     sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
     m = None
-    for d in _nlm_dirs(ds):
-        p = f'{sub}/{d}/experiences.mat'
-        if os.path.exists(p):
-            m = loadmat(p)
-            break
+    p = _pick(sub, ds, 'experiences.mat')
+    if p is not None:
+        m = loadmat(p)
     if m is None:
         m = loadmat(_result_file(sub, 'experiences.mat'))
     E = m['EXPERIENCES']
