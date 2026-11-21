@@ -1,83 +1,93 @@
-# NeuroSLAM_KBS_v2 — 修订版论文（对照用）
+# NeuroLocMap: Brain-Inspired 4-DoF Localization-Mapping
 
-本文件夹是 `openhutb/neuro/kbs/` 原论文的**独立修订副本**，原论文文件**一字未动**。
-用途：EKF 基线程序（`neuro/00_collect_data/IMU_Vision_Fusion_EKF.py`）已升级为最终实现后，
-论文中基线描述与结果数字需要随之更新。本版把**可确定的修改直接改好**（红色标注），
-把**依赖新数据才能定的数字**标红为"待重算"，方便你与旧版逐处对照。
+Code and evaluation scripts for the manuscript
 
-## 一、文件清单（与旧版一致，格式不变）
+> **Brain-Inspired 4-DoF Localization-Mapping: Complementary Vestibular-Visual Fusion with Spatial Cells**
+> Haidong Wang, Rongbo Yang — Hunan University of Technology and Business
+> *Submitted to Knowledge-Based Systems* (2026).
 
-| 文件 | 说明 |
+The system couples dual-stream visual processing with IMU fusion on a **fixed 10-state EKF core** (frequency-domain complementarity instantiated as gated observation branches), represents space through **3D grid cells** and **multilayered head-direction cells**, and stores experience in a **multilayer experience map** that provides loop-closure re-anchoring. Two lightweight learned components — a scale-only head over a frozen monocular depth model, and a learned-embedding loop-closure line — are trained once on simulation and deployed without per-domain retraining.
+
+The localization pipeline runs **on CPU only**; no GPU is used in the reported results.
+
+---
+
+## 1. Quick start
+
+```bash
+git clone https://github.com/OpenHUTB/carla-pedestrians.git
+cd carla-pedestrians
+pip install -r neuro/requirements.txt
+
+# 1) check that the processed sequences are in place
+python3 neuro/kbs/check_datasets.py
+
+# 2) recompute the paper's main table (5 scenarios, both alignment calibers)
+python3 neuro/kbs/compute_final_metrics.py      # -> neuro/kbs/final_metrics.json
+
+# 3) regenerate the figures used in the paper
+python3 neuro/kbs/regen_figures.py
+```
+
+Prerequisites: Python 3.9+, NumPy/SciPy/OpenCV/Pandas/Matplotlib (see `neuro/requirements.txt`), PyTorch only for the two learned heads, MATLAB only for the legacy `.m` re-anchoring scripts. A mirror of this repository is available at `https://github.com/82540295/carla-pedestrians`.
+
+**Reproducing every number in the paper** — table by table, script by script — is documented in [`neuro/kbs/REPRODUCE.md`](neuro/kbs/REPRODUCE.md).
+
+---
+
+## 2. Repository layout
+
+| Path | What it is |
 |---|---|
-| `NeuroSLAM_KBS.tex` | 主文件（摘要/贡献/结论处有红色待重算标记） |
-| `sec_related_work.tex` | 相关工作，**未改动** |
-| `sec_method_expanded.tex` | 方法（NeuroLocMap 主体，与 EKF 程序无关，**未改动内容**；仅 1 处图文件名大小写修正） |
-| `experiment_section.tex` | 实验，**主要修改处**（EKF 基线描述重写 + 数字待重算标记） |
-| `NeuroSLAM_KBS_all.bib` / `IEEEtran.bst` / `IEEEtran.cls` | 参考文献与格式文件，未改动 |
-| `fig/` | 全部 16 张图（与旧版相同） |
-| `NeuroSLAM_KBS.pdf` | 本地 tectonic(XeLaTeX) 编译产物，**红色文字即修订点**，可逐处对照 |
+| `neuro/00_collect_data/` | CARLA data collection, `IMU_Vision_Fusion_EKF.py` (the 10-state fusion core), KITTI/EuRoC adapters |
+| `neuro/01_conjunctive_pose_cells_network/` | 3D grid-cell continuous attractor network |
+| `neuro/02_multilayered_experience_map/` | Experience map, loop-closure detection and re-anchoring |
+| `neuro/03_visual_odometry/` | Monocular VO front-end |
+| `neuro/04_visual_template/` | Visual templates, HART+Transformer matching |
+| `neuro/09_vestibular/` | IMU processing and bias estimation |
+| `neuro/kbs/` | **Everything that produces the paper**: metrics, gate toolchain, scale/loop heads, figures, manuscript sources (`*.tex`), trained weights (`*.pt`), per-sequence records (`scale_p1/*.npz`, `*.json`) |
+| `bip/`, `pedestrians-scenarios/`, `pedestrians-video-2-carla/`, `carla-common/`, `walker/`, `alphapose/`, `openpose/` | Mirrored third-party projects used for scenario generation — **not** part of the localization method, and licensed separately (see `NOTICE`) |
 
-## 二、本版已做的修改（共 4 类，PDF 中全部红色显示）
+---
 
-1. **EKF 基线描述重写**（`experiment_section.tex` Baseline Methods 段，R2 版对齐 10 状态最终代码）
-   原文 "tightly coupled EKF … representative of MSCKF/VINS-Mono" 与最终代码不符。
-   改为与代码一致的描述：**10 状态**松耦合 EKF（第 10 维 log(VO尺度) 在线收敛），
-   IMU 预测（陀螺姿态积分 + 静止启动零偏估计 + 零偏补偿航位推算）+ 四个门控观测分支：
-   (i) 1D 水平速度幅值观测（VO 帧间位移×在线尺度，真实间隔 IMU 步数×dt，失配时速度重初始化）、
-   (ii) roll/pitch 姿态观测、(iii) 短窗口相对位置观测（每 30 帧用当前滤波位置重锚，
-   陀螺航向方向×VO 幅值×在线尺度，隔离 VO 全局航向漂移）、
-   (iv) 独立尺度观测（转弯运动学 |a_lat|/|ω| ÷ VO 记录速度，窗中值）。
-   逐分支卡方门控（0.99–0.999）、残差自适应 R（滑动窗口平滑 + 内点数质量因子，
-   clip [0.008, 10]）、Joseph form 协方差更新 + 正则化（对称化 + 最小特征值钳制）。
-2. **Fairness 段补充**（红色）：声明 CARLA 数字对应最终版 EKF 实现，
-   采集参数 12 km/h、安全距离 6 m；需以该版本重采方可复现。
-3. **3 处图引用兼容修正**（texpage/XeLaTeX 可直接编译，图内容不变）：
-   - `fig/ablation_unified.eps` → `.pdf`
-   - `fig/performance_summary.eps` → `.pdf`
-   - `fig/3D_grid_cell_fcc_lattice.pdf` → `3d_...`（与磁盘文件名大小写一致）
-4. **待重算标记**（红色方括号 [V2 ...]）：
-   - 摘要 / 贡献点 4 / 结论的 **38.1%**
-   - Table 1（CARLA 行长度/帧数）、Table 2（CARLA 三行 RMSE/Drift/Improvement、Success Rate）
-   - 正文引用 EKF 数字的所有段落（Performance by Scenario / Representative / Discussion / Failure Case / KITTI 可视化）
-   - 4 张含 EKF 曲线的图注（需重采后重新生成）
+## 3. Data
 
-## 三、texpage 编译步骤
+* **CARLA (Town05 / Town03 / Town07 / Town10HD)** — collected with CARLA 0.9.16 using the code in `neuro/00_collect_data/` (20 Hz, commanded speed 12 km/h, 20 autopilot vehicles + 20 pedestrians). The processed sequences are released as a **minimal asset bundle** (~45 MB, `NLM_Repro_Assets_*`): per sequence the ground truth, the EKF and VO outputs, the loop-line trajectories (`.mat`), the depth-scale and aligned-IMU side files, plus the Town01 turnaround route. That bundle is enough to recompute the `EKF` / `VO` / loop-line cells of Table 3 and the whole closed-loop benchmark. Raw frames and the remaining trajectory directories (`slam_results_scale_nlm/`, `slam_results_orbonly/`, `_p11_backup_20261014/`) are not hosted (tens of GB); they are available from the corresponding author on request and can be packaged with `neuro/kbs/export_repro_bundle.py`.
+* **CARLA Town01 turnaround** (closed-loop benchmark of §4.5) — out-and-back route on the same streets, 10000 frames / 500 s / 881 m (881.5 m ground-truth length), 36 accepted loop events, acquired in an empty town (no background traffic) with the same sensor suite and 12 km/h speed command. Ships in the same asset bundle; the reported quantity is the **terminal drift after the anchored-100 Sim(3) fit** (842.54 m → 55.92 m, 15.07×). Reproduction is two commands: `export_closed_loop_inputs.py` builds the five input files, `kb_s2_se3_check.m` prints terminal and RMSE with a pass/fail verdict.
+* **KITTI odometry 07 / 09** — public, see <https://www.cvlibs.net/datasets/kitti/eval_odometry.php>. Conversion to the pipeline format: `neuro/kbs/kitti_prepare_fusion.py`.
+* **EuRoC MAV** (sanity check only) — public, see <https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets>.
 
-1. 把**整个 `NeuroSLAM_KBS_v2` 文件夹**上传到 texpage（含 `fig/`、`.cls`、`.bst`、`.bib`）。
-2. 编译入口：`NeuroSLAM_KBS.tex`，引擎选 **XeLaTeX**（或 pdflatex 亦可，.cls 已随附）。
-3. 参考文献：texpage 会自动跑 bibtex（已配 `\bibliographystyle{IEEEtran}`）。
-4. 已用 tectonic(XeLaTeX) 本地验证：**0 error、0 未定义引用**，PDF 双栏 IEEE 格式与旧版一致。
+Trained weights (`neuro/kbs/pr_head.pt`, `neuro/kbs/pr_scale_head.pt`) and all evaluation scripts **are** included. With the asset bundle in place, `se3_metrics.py` recomputes the `EKF`, `VO` and loop-line cells of Table 3 and the whole closed-loop benchmark; the remaining Table 3 cells (`Ours` on the four CARLA towns, `EKF+尺度`, `ORB-only`) additionally need the pipeline's own trajectory directories, which `export_repro_bundle.py` packages from the run tree. `REPRODUCE.md` states cell by cell what the bundle covers.
 
-## 四、待办数据清单（红色"待重算"项的解锁条件）
+---
 
-按依赖顺序：
+## 4. Scope and known limitations
 
-| # | 待办 | 解锁哪些红色项 |
-|---|---|---|
-| 1 | 用最终版 EKF（12 km/h 采集参数）重采 **Town01 / Town02 / Town10** 的 ground_truth / fusion_pose / visual_odometry / aligned_imu | Table 1 CARLA 行、Table 2 CARLA 三行、正文所有 EKF 数字 |
-| 2 | MATLAB 侧（`neuro/07_test/test_imu_visual_slam`）在**同批新数据**上重跑 NeuroLocMap + 消融 | NeuroLocMap 列、Improvement 列、Success Rate |
-| 3 | KITTI 07 / EuRoC MH_01 / MH_03 在新代码版本上重跑确认（固定数据集，预期基本不变） | KITTI/EuRoC 行的确认 |
-| 4 | 重新生成 4 张含 EKF 曲线的图（representative_performance / performance_summary / ablation_unified(b) / KITTI 可视化） | 4 张图 + 图注 |
-| 5 | 汇总新均值替换 38.1%（摘要/贡献/结论 3 处） | 摘要、贡献点 4、结论 |
+* The deployed filter runs four gated observation branches; a fifth (heading-from-turn-kinematics) branch is implemented but disabled in the configuration that produced the reported results, and is documented as such in the manuscript (Table 2).
+* The scale head does **not** transfer to real KITTI imagery; all KITTI results run without it. This is reported, not hidden (manuscript §4.6 and Supplementary S.1).
+* `neuro/kbs/*.m` scripts are legacy re-anchoring references kept for provenance; the published numbers come from the Python pipeline.
+* Several mirrored third-party directories are unmodified copies; `bip/` is CC BY-NC 4.0 and therefore must not be used commercially.
 
-> 风险提醒：新 EKF 显著强于旧版（本仓库实测 Town01 融合 ATE≈67 m，旧版基线 253.6 m），
-> 若 NeuroLocMap 不在同批新数据上重跑，可能出现"NeuroLocMap 差于新 EKF"的结论反转，
-> 因此**必须先完成 #1、#2 再定稿数字**，不能只替换 EKF 列。
+---
 
-## 五、与旧版对照方式
+## 5. License
 
-- 旧版：`openhutb/neuro/kbs/`
-- 新版：`~/NeuroSLAM_KBS_v2/`
-- 快速 diff（在仓库根目录执行）：`diff -ru neuro/kbs ~/NeuroSLAM_KBS_v2 --exclude=fig --exclude=*.pdf`
-- PDF 中所有红色文字 = 本版相对旧版的修订/待办点；红色方括号 `[V2 ...]` = 待重算说明（定稿时删除）。
+* Authors' code (`neuro/`, including `neuro/kbs/`) and the two weight files: **MIT**, see `LICENSE`.
+* Third-party directories: their own terms, see **`NOTICE`** (one of them, `bip/`, is non-commercial).
 
-## 附：脚本运行约定（路径重构后）
+---
 
-本目录脚本中的数据路径均为相对路径（`../data/...`），依赖以下运行约定：
+## 6. Citation
 
-- **Python 脚本**：默认在本目录（`neuro/kbs/`）下运行，即 `cd neuro/kbs && python xxx.py`。
-  两个论文指标入口已锚定脚本目录、任意 cwd 均可调用：
-  - `compute_final_metrics.py`（Table 1 指标）
-  - `se3_metrics.py`（SE(3)/Sim(3) 双口径指标）
-- **MATLAB 脚本**：必须先 `cd` 到本目录再运行（`../data`、`../07_test` 以 cwd 解析）。
-- **CARLA / conda 等安装目录**：以 `os.path.expanduser('~/...')` / `$HOME` 引用，不依赖 cwd。
+```bibtex
+@article{wang2026neurolocmap,
+  title   = {Brain-Inspired 4-DoF Localization-Mapping:
+             Complementary Vestibular-Visual Fusion with Spatial Cells},
+  author  = {Wang, Haidong and Yang, Rongbo},
+  journal = {Knowledge-Based Systems},
+  year    = {2026},
+  note    = {Under review}
+}
+```
+
+Contact: `open@hutb.edu.cn`
