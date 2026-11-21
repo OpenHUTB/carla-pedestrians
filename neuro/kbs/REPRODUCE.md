@@ -4,8 +4,9 @@ Every number in the manuscript traces to one of the scripts below. Paths are
 relative to the repository root; scripts are intended to be run from
 `neuro/kbs/` (most of them `chdir` to their own location, so either works).
 
-Environment: `pip install -r neuro/requirements.txt` (PyTorch is needed only for
-the two learned heads; `transformers` only for DINOv2 embeddings).
+Environment: `pip install -r neuro/requirements.txt`; for the learned components
+(scale-head training, DINOv2 embeddings) additionally
+`pip install -r neuro/requirements-learned.txt`.
 
 ---
 

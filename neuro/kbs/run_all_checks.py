@@ -51,7 +51,10 @@ def mark(tag, ok, name, got=None, exp=None):
     else:
         res['fail'] += 1
         res['fails'].append((name, got, exp))
-        print(f'  {tag:6s} {name:44s}  FAIL  got {got}  expected {exp}  (diff {got - exp:+.2f})')
+        if isinstance(got, (int, float)) and isinstance(exp, (int, float)):
+            print(f'  {tag:6s} {name:44s}  FAIL  got {got}  expected {exp}  (diff {got - exp:+.2f})')
+        else:
+            print(f'  {tag:6s} {name:44s}  FAIL  got {got}  expected {exp}')
 
 
 def cmp(name, got, exp, tag='value'):
