@@ -1,10 +1,11 @@
 function kb_s2_se3_check()
 % S2 的 SE(3) 变体 (procrustes 无尺度) 复算: anchored100 + scale2d
-% 校验基准 (neuro/kbs/final_metrics.json turnaround 权威值):
-%   preS2 (A-fix, 无S2)   : anchored100=323.48, scale2d=191.08
-%   exp_trajectory (A+S2) : anchored100=44.24,  scale2d=46.63
-%   fusion_pose (EKF)     : anchored100=398.05, scale2d=422.31
-% 数据: 由 Python 预清洗到 /tmp/se3_*.txt (与 compute_final_metrics.py 同口径, 裁剪到 n10k)
+% 校验基准 (2026-11 重采批次: Town01 折返, 10000 帧/500 s/881 m, 36 个接受事件):
+%   exp_trajectory (A+S2) : anchored100=55.92   <- 论文 §4.5 报告值
+%   fusion_pose (EKF)     : anchored100=842.54  <- 论文 §4.5 报告值
+%   preS2 (A-fix, 无S2)   : 旧批次 323.48; 新批次未单独报告, 以本脚本打印值为准
+%   scale2d (纯尺度 2D)   : 新批次未单独报告, 以本脚本打印值为准
+% 数据: 由 Python 预清洗到 /tmp/se3_*.txt (与 compute_final_metrics.py 同口径)
 gt = csvread('/tmp/se3_gt.txt');
 preS2  = csvread('/tmp/se3_pres2.txt');
 finalT = csvread('/tmp/se3_final.txt');
@@ -14,11 +15,11 @@ evs = csvread('/tmp/se3_events.txt');
 fprintf('sizes: gt=%dx%d pre=%dx%d final=%dx%d ekf=%dx%d\n', ...
         size(gt,1),size(gt,2), size(preS2,1),size(preS2,2), size(finalT,1),size(finalT,2), size(ekf,1),size(ekf,2));
 
-fprintf('validate preS2 : anch100=%.2f scale2d=%.2f  (expect 323.48/191.08)\n', ...
+fprintf('validate preS2 : anch100=%.2f scale2d=%.2f  (no reference in the 2026-11 batch)\n', ...
         anchored100(preS2, gt), scale2d_rmse(preS2, gt));
-fprintf('validate S2    : anch100=%.2f scale2d=%.2f  (expect 44.24/46.63)\n', ...
+fprintf('validate S2    : anch100=%.2f scale2d=%.2f  (expect anch100 55.92)\n', ...
         anchored100(finalT, gt), scale2d_rmse(finalT, gt));
-fprintf('validate EKF   : anch100=%.2f scale2d=%.2f  (expect 398.05/422.31)\n', ...
+fprintf('validate EKF   : anch100=%.2f scale2d=%.2f  (expect anch100 842.54)\n', ...
         anchored100(ekf, gt), scale2d_rmse(ekf, gt));
 
 [se3, napp] = reanchor_se3(preS2, evs, 250);

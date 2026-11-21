@@ -1,174 +1,93 @@
-# NeuroSLAM: IMU-Visual Fusion SLAM System
+# NeuroLocMap: Brain-Inspired 4-DoF Localization-Mapping
 
-A biologically-inspired SLAM system with IMU-visual fusion, featuring HART+Transformer visual template matching and 3D grid cell network for spatial representation.
+Code and evaluation scripts for the manuscript
 
-## 🎯 Key Features
+> **Brain-Inspired 4-DoF Localization-Mapping: Complementary Vestibular-Visual Fusion with Spatial Cells**
+> Haidong Wang, Rongbo Yang — Hunan University of Technology and Business
+> *Submitted to Knowledge-Based Systems* (2026).
 
-- **IMU-Visual Fusion**: Complementary filter-based sensor fusion for robust odometry
-- **HART+Transformer**: Hierarchical Attentive Recurrent Tracking with Transformer for visual template matching
-- **3D Grid Cell Network**: Biologically-inspired spatial representation
-- **Multi-layer Experience Map**: Topological mapping with loop closure detection
-- **Multi-dataset Validation**: Tested on CARLA, KITTI, and EuRoC datasets
+The system couples dual-stream visual processing with IMU fusion on a **fixed 10-state EKF core** (frequency-domain complementarity instantiated as gated observation branches), represents space through **3D grid cells** and **multilayered head-direction cells**, and stores experience in a **multilayer experience map** that provides loop-closure re-anchoring. Two lightweight learned components — a scale-only head over a frozen monocular depth model, and a learned-embedding loop-closure line — are trained once on simulation and deployed without per-domain retraining.
 
-## 📁 Project Structure
+The localization pipeline runs **on CPU only**; no GPU is used in the reported results.
 
-```
-neuro/
-├── 00_collect_data/          # Data collection and preprocessing
-├── 01_conjunctive_pose_cells_network/  # 3D grid cell network
-├── 02_multilayered_experience_map/     # Experience map implementation
-├── 03_visual_odometry/       # Visual odometry module
-├── 04_visual_template/       # Visual template matching (HART+Transformer)
-├── 05_tookit/                # Utility functions and tools
-├── 06_main/                  # Main SLAM system
-├── 07_test/                  # Testing and experiments
-├── 08_draw_fig_for_paper/    # Paper figure generation
-├── 09_vestibular/            # IMU processing and fusion
-└── kbs/kbs_1/                # Paper draft (KBS submission)
-```
+---
 
-## 📊 Datasets
+## 1. Quick start
 
-### Public Datasets Used
-
-1. **CARLA Simulator Datasets**
-   - Town01, Town02, Town10 scenarios
-   - RGB images + IMU data + Ground truth
-   - Download: [CARLA Official Website](https://carla.org/)
-
-2. **KITTI Odometry Dataset**
-   - Sequence 07 (outdoor driving)
-   - Stereo images + IMU + GPS ground truth
-   - Download: [KITTI Vision Benchmark](http://www.cvlibs.net/datasets/kitti/eval_odometry.php)
-
-3. **EuRoC MAV Dataset**
-   - MH_01_easy, MH_03_medium (indoor MAV)
-   - Stereo images + IMU + Vicon ground truth
-   - Download: [EuRoC MAV Dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets)
-
-### Our Processed Datasets
-
-We provide pre-processed datasets with aligned IMU-visual data:
-- **Format**: MATLAB `.mat` files with synchronized timestamps
-- **Structure**: RGB images, IMU measurements, ground truth trajectories
-- **Download**: [Coming soon - will be hosted on cloud storage]
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- **Python 3.8+**
-- **CARLA Simulator 0.9.8+** (for data collection)
-
-### Installation
-
-1. Clone the repository:
 ```bash
 git clone https://github.com/OpenHUTB/carla-pedestrians.git
 cd carla-pedestrians
-```
-
-2. Install Python dependencies:
-```bash
 pip install -r neuro/requirements.txt
+
+# 1) check that the processed sequences are in place
+python3 neuro/kbs/check_datasets.py
+
+# 2) recompute the paper's main table (5 scenarios, both alignment calibers)
+python3 neuro/kbs/compute_final_metrics.py      # -> neuro/kbs/final_metrics.json
+
+# 3) regenerate the figures used in the paper
+python3 neuro/kbs/regen_figures.py
 ```
 
-3. Install CARLA Python API:
-```bash
-pip install <CARLA_DIR>\PythonAPI\carla\dist\carla-*.whl
+Prerequisites: Python 3.9+, NumPy/SciPy/OpenCV/Pandas/Matplotlib (see `neuro/requirements.txt`), PyTorch only for the two learned heads, MATLAB only for the legacy `.m` re-anchoring scripts. A mirror of this repository is available at `https://github.com/82540295/carla-pedestrians`.
+
+**Reproducing every number in the paper** — table by table, script by script — is documented in [`neuro/kbs/REPRODUCE.md`](neuro/kbs/REPRODUCE.md).
+
+---
+
+## 2. Repository layout
+
+| Path | What it is |
+|---|---|
+| `neuro/00_collect_data/` | CARLA data collection, `IMU_Vision_Fusion_EKF.py` (the 10-state fusion core), KITTI/EuRoC adapters |
+| `neuro/01_conjunctive_pose_cells_network/` | 3D grid-cell continuous attractor network |
+| `neuro/02_multilayered_experience_map/` | Experience map, loop-closure detection and re-anchoring |
+| `neuro/03_visual_odometry/` | Monocular VO front-end |
+| `neuro/04_visual_template/` | Visual templates, HART+Transformer matching |
+| `neuro/09_vestibular/` | IMU processing and bias estimation |
+| `neuro/kbs/` | **Everything that produces the paper**: metrics, gate toolchain, scale/loop heads, figures, manuscript sources (`*.tex`), trained weights (`*.pt`), per-sequence records (`scale_p1/*.npz`, `*.json`) |
+| `bip/`, `pedestrians-scenarios/`, `pedestrians-video-2-carla/`, `carla-common/`, `walker/`, `alphapose/`, `openpose/` | Mirrored third-party projects used for scenario generation — **not** part of the localization method, and licensed separately (see `NOTICE`) |
+
+---
+
+## 3. Data
+
+* **CARLA (Town05 / Town03 / Town07 / Town10HD)** — collected with CARLA 0.9.16 using the code in `neuro/00_collect_data/` (20 Hz, commanded speed 12 km/h, 20 autopilot vehicles + 20 pedestrians). The processed sequences (`ground_truth.txt`, `fusion_pose.txt`, `visual_odometry.txt`, `slam_results/*.mat`) are **not** hosted in this repository: their combined size is in the tens of GB. They are available from the corresponding author on reasonable request.
+* **CARLA Town01 turnaround** (closed-loop benchmark of §4.5) — out-and-back route on the same streets, 10000 frames / 500 s / 881 m, 36 accepted loop events, acquired in an empty town (no background traffic) with the same sensor suite and 12 km/h speed command. Ships in the same asset bundle as the five main sequences; the MATLAB check that reproduces 842.54 m → 55.92 m is `neuro/kbs/kb_s2_se3_check.m`.
+* **KITTI odometry 07 / 09** — public, see <https://www.cvlibs.net/datasets/kitti/eval_odometry.php>. Conversion to the pipeline format: `neuro/kbs/kitti_prepare_fusion.py`.
+* **EuRoC MAV** (sanity check only) — public, see <https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets>.
+
+Trained weights (`neuro/kbs/pr_head.pt`, `neuro/kbs/pr_scale_head.pt`) and all evaluation scripts **are** included, so every table is recomputable once the sequences are in place.
+
+---
+
+## 4. Scope and known limitations
+
+* The deployed filter runs four gated observation branches; a fifth (heading-from-turn-kinematics) branch is implemented but disabled in the configuration that produced the reported results, and is documented as such in the manuscript (Table 2).
+* The scale head does **not** transfer to real KITTI imagery; all KITTI results run without it. This is reported, not hidden (manuscript §4.6 and Supplementary S.1).
+* `neuro/kbs/*.m` scripts are legacy re-anchoring references kept for provenance; the published numbers come from the Python pipeline.
+* Several mirrored third-party directories are unmodified copies; `bip/` is CC BY-NC 4.0 and therefore must not be used commercially.
+
+---
+
+## 5. License
+
+* Authors' code (`neuro/`, including `neuro/kbs/`) and the two weight files: **MIT**, see `LICENSE`.
+* Third-party directories: their own terms, see **`NOTICE`** (one of them, `bip/`, is non-commercial).
+
+---
+
+## 6. Citation
+
+```bibtex
+@article{wang2026neurolocmap,
+  title   = {Brain-Inspired 4-DoF Localization-Mapping:
+             Complementary Vestibular-Visual Fusion with Spatial Cells},
+  author  = {Wang, Haidong and Yang, Rongbo},
+  journal = {Knowledge-Based Systems},
+  year    = {2026},
+  note    = {Under review}
+}
 ```
 
-### One-Click Run
-
-```bash
-# 1. Start CARLA server (in a separate terminal)
-cd <CARLA_DIR>
-CarlaUE4.exe -RenderOffScreen -quality-level=Low
-
-# 2. Run the full pipeline
-cd carla-pedestrians
-python main.py
-```
-
-This will automatically:
-- Collect 5000 frames of IMU + Visual data from CARLA Town01
-- Run ablation study (Pure IMU / Pure VO / EKF Fusion)
-- Generate comparison charts
-
-### Available Options
-
-| Command | Description |
-|---------|-------------|
-| `python main.py` | Full pipeline: collect + evaluate |
-| `python main.py --skip-collect` | Skip collection, only evaluate existing data |
-| `python main.py --collect-only` | Only collect data, skip evaluation |
-| `python main.py --keep` | Keep existing data, re-collect new data (append instead of deleting old data) |
-| `python main.py --host 192.168.1.1` | Connect to remote CARLA server |
-
-### Core Components (Python)
-
-1. **Data Collection**: `neuro/00_collect_data/IMU_Vision_Fusion_EKF.py`
-2. **One-Click Entry**: `neuro/main.py`
-3. **Ablation Study**: `neuro/07_test/run_ablation.py`
-4. **Visual Odometry**: `neuro/00_collect_data/visual_odometry_opencv.py`
-
-## 📊 Experiments
-
-### Run Ablation Study
-
-```bash
-cd carla-pedestrians
-python main.py --skip-collect    # Use existing data
-```
-
-Results are saved to `neuro/data/`:
-- `ablation_comparison.png` — comparison chart
-- `ablation_results.json` — detailed metrics
-
-## 📝 Paper
-
-**Title**: NeuroSLAM: A Biologically-Inspired IMU-Visual Fusion SLAM System
-
-**Status**: Under review (Knowledge-Based Systems)
-
-**LaTeX Source**: `neuro/kbs/kbs_1/NeuroSLAM_KBS.tex`
-
-**PDF**: `neuro/kbs/kbs_1/NeuroSLAM_KBS.pdf`
-
-
-## 🔧 Requirements
-
-### Python
-- Python 3.8+
-- numpy >= 1.19.0
-- opencv-python >= 4.5.0
-- scipy >= 1.5.0
-- matplotlib >= 3.3.0
-- pandas >= 1.1.0
-
-### CARLA
-- CARLA Simulator 0.9.8+
-- CARLA Python API (`carla` wheel)
-
-### MATLAB (Legacy)
-- MATLAB R2020b or later
-- Computer Vision Toolbox
-- Image Processing Toolbox
-- Statistics and Machine Learning Toolbox
-
-See `neuro/requirements.txt` for complete Python dependencies.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
+Contact: `open@hutb.edu.cn`
