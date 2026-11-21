@@ -159,6 +159,7 @@ resources/
 
 # ============ 保留的核心文件 (明确包含) ============
 # 这些文件即使匹配上面的规则也要保留
+!neuro/kbs/*.md
 !neuro/START_HERE.md
 !neuro/07_test/07_test/test_imu_visual_slam/core/README_test_imu_visual_fusion_slam2.md
 !neuro/07_test/07_test/test_imu_visual_slam/parameter_search/参数网格搜索指南.md

@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "purpose": "Manuscript numbers as printed, for run_all_checks.py to diff against. Edit only together with the .tex.",
+    "batch": "2026-10-14 main sequences; Town01 closed-loop re-collected 2026-11",
+    "tolerance": 0.011
+  },
+  "table1": {
+    "Town05Data_IMU_Fusion": {"gt_len_m": 485.6, "frames": 5000, "nlm_rmse": 41.14, "nlm_drift": 14.3,
+                              "ekf_rmse": 44.44, "ekf_drift": 13.26, "vo_rmse": 48.26, "vo_drift": 24.16,
+                              "exp_nodes": 175, "templates": 175, "loop_edges": 7},
+    "Town03Data_IMU_Fusion": {"gt_len_m": 473.5, "frames": 5000, "nlm_rmse": 22.91, "nlm_drift": 5.03,
+                              "ekf_rmse": 23.36, "ekf_drift": 5.14, "vo_rmse": 49.1, "vo_drift": 17.59,
+                              "exp_nodes": 91, "templates": 91, "loop_edges": 7},
+    "Town07Data_IMU_Fusion": {"gt_len_m": 617.9, "frames": 5000, "nlm_rmse": 39.49, "nlm_drift": 13.17,
+                              "ekf_rmse": 40.64, "ekf_drift": 12.82, "vo_rmse": 50.07, "vo_drift": 14.35,
+                              "exp_nodes": 270, "templates": 270, "loop_edges": 7},
+    "Town10HDData_IMU_Fusion": {"gt_len_m": 452.3, "frames": 5000, "nlm_rmse": 18.61, "nlm_drift": 1.57,
+                                "ekf_rmse": 18.61, "ekf_drift": 1.57, "vo_rmse": 35.86, "vo_drift": 15.58,
+                                "exp_nodes": 481, "templates": 481, "loop_edges": 1},
+    "KITTI07Data_IMU_Fusion": {"gt_len_m": 692.1, "frames": 1101, "nlm_rmse": 18.45, "nlm_drift": 9.71,
+                               "ekf_rmse": 22.09, "ekf_drift": 8.33, "vo_rmse": 27.84, "vo_drift": 9.86,
+                               "exp_nodes": 964, "templates": 964, "loop_edges": 11}
+  },
+  "table3": {
+    "Town05Data_IMU_Fusion":   {"ours_sim3": 18.07, "ekfs_sim3": 20.10, "ekf_sim3": 44.44, "vo_sim3": 48.26,
+                                "ours_se3": 32.67, "ekfs_se3": 33.26, "ekf_se3": 49.40, "vo_se3": 53.86, "orb_sim3": 44.72, "orb_se3": null},
+    "Town03Data_IMU_Fusion":   {"ours_sim3": 15.31, "ekfs_sim3": 16.07, "ekf_sim3": 23.36, "vo_sim3": 49.10,
+                                "ours_se3": 17.31, "ekfs_se3": 17.47, "ekf_se3": 23.53, "vo_se3": 49.15},
+    "Town07Data_IMU_Fusion":   {"ours_sim3": 28.75, "ekfs_sim3": 27.90, "ekf_sim3": 40.64, "vo_sim3": 50.07,
+                                "ours_se3": 31.51, "ekfs_se3": 29.21, "ekf_se3": 42.85, "vo_se3": 50.13},
+    "Town10HDData_IMU_Fusion": {"ours_sim3": 14.44, "ekfs_sim3": 14.44, "ekf_sim3": 18.61, "vo_sim3": 35.86,
+                                "ours_se3": 49.88, "ekfs_se3": 49.89, "ekf_se3": 57.38, "vo_se3": 58.04},
+    "KITTI07Data_IMU_Fusion":  {"ours_sim3": 18.45, "ekfs_sim3": null, "ekf_sim3": 22.09, "vo_sim3": 27.84,
+                                "ours_se3": 29.99, "ekfs_se3": null, "ekf_se3": 30.45, "vo_se3": 38.35}
+  },
+  "closed_loop": {
+    "seq": "Town01Turnaround_IMU_Fusion",
+    "gt_len_m": 881.5, "frames": 10000, "events": 36,
+    "terminal": {"final": 55.92, "ekf": 842.54, "pres2": 565.31},
+    "rmse": {"final": 87.25, "ekf": 477.76},
+    "ratio": 15.07
+  }
+}
