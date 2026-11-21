@@ -169,3 +169,12 @@ carla/
 .atomcode/
 *.xdv
 *.bak
+
+
+# ============ 复现资产例外 (可选提交, 约 13 MB) ============
+# 这些 .mat / .txt 让 Table 3 的 Ours / EKF+scale / ORB-only 列可复算,
+# 见 neuro/kbs/repro_assets/README.md
+!neuro/kbs/repro_assets/
+!neuro/kbs/repro_assets/**/*.mat
+!neuro/kbs/repro_assets/**/*.txt
+!neuro/kbs/repro_assets/**/*.md

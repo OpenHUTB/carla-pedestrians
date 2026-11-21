@@ -94,8 +94,17 @@ original run tree — it copies only the missing artifacts, verifies row counts
 against the ground truth, and writes a sha256 manifest:
 
 ```bash
-python3 neuro/kbs/export_repro_bundle.py --src /path/to/runs --out /path/to/NLM_Repro_Assets_full
-python3 neuro/kbs/export_repro_bundle.py --src /path/to/runs --out /path/to/NLM_Repro_Assets_full --check-only  # dry run
+python3 neuro/kbs/export_repro_bundle.py --src /path/to/runs --out neuro/kbs/repro_assets --check-only  # dry run
+python3 neuro/kbs/export_repro_bundle.py --src /path/to/runs --out neuro/kbs/repro_assets
+```
+
+`neuro/kbs/repro_assets/` is `.gitignore`-exempt (about 13 MB) and is read
+directly by the evaluator, so no copying into `neuro/data/` is needed:
+
+```bash
+NLM_DATA_ROOT=neuro/kbs/repro_assets/01_NeuroSLAM_Datasets \
+NLM_BACKUP_ROOT=neuro/kbs/repro_assets/_p11_backup_20261014 \
+python3 neuro/kbs/se3_metrics.py
 ```
 
 The expected `--src` layout is documented in the script header
