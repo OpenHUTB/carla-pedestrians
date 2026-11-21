@@ -26,11 +26,11 @@ if nargin < 1 || isempty(inDir)
 end
 inDir = char(inDir);
 
-gt     = csvread(fullfile(inDir, 'se3_gt.txt'));
-preS2  = csvread(fullfile(inDir, 'se3_pres2.txt'));
-finalT = csvread(fullfile(inDir, 'se3_final.txt'));
-ekf    = csvread(fullfile(inDir, 'se3_ekf.txt'));
-evs    = csvread(fullfile(inDir, 'se3_events.txt'));
+gt     = dlmread(fullfile(inDir, 'se3_gt.txt'), '');
+preS2  = dlmread(fullfile(inDir, 'se3_pres2.txt'), '');
+finalT = dlmread(fullfile(inDir, 'se3_final.txt'), '');
+ekf    = dlmread(fullfile(inDir, 'se3_ekf.txt'), '');
+evs    = dlmread(fullfile(inDir, 'se3_events.txt'), '');
 
 L = sum(sqrt(sum(diff(gt, 1, 1).^2, 2)));
 fprintf('input    : %s\n', inDir);
