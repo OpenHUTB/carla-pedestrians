@@ -16,7 +16,7 @@ PARALLEL="${2:-1}"
 AXES=(INPUT FORGET OUTPUT)
 VALS=(0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0)
 DEFAULTS=(0.5 0.5 0.9)   # INPUT FORGET OUTPUT 当前基线
-CSV="/home/yangrb/openhutb/neuro/kbs/grid_search_results.csv"
+CSV="$(cd "$(dirname "$0")" && pwd)/grid_search_results.csv"
 echo "axis,value,rmse,log" > "$CSV"
 
 get_axis_idx() { case "$1" in INPUT) echo 0;; FORGET) echo 1;; OUTPUT) echo 2;; esac; }
@@ -42,7 +42,7 @@ run_one() {  # $1=axis $2=value
   local rc=$?
   # 解析 NLM(经验地图)行 RMSE: 从 performance_report.txt 的 "Experience Map:" 块提取
   local rmse
-  local report="/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/${SCENE}Data_IMU_Fusion/slam_results/performance_report.txt"
+  local report="$(cd "$(dirname "$0")/../.." && pwd)/data/01_NeuroSLAM_Datasets/${SCENE}Data_IMU_Fusion/slam_results/performance_report.txt"
   cp "$report" "/tmp/gs_report_${SCENE}_${tag//./_}.txt" 2>/dev/null  # 组合报告快照(事后取证)
   rmse=$(grep -A6 "Experience Map:" "$report" 2>/dev/null | grep -m1 "RMSE" | grep -oE "[0-9]+\.[0-9]+")
   if [ -z "$rmse" ]; then

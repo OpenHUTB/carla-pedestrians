@@ -37,9 +37,26 @@ the same class (`chi2_heading`, `chi2_vel`, `chi2_att`, `chi2_scale`,
 
 ### Table 3 — main results (5 scenarios × 2 calibers)
 ```bash
-python3 neuro/kbs/compute_final_metrics.py     # -> final_metrics.json (full-Sim(3) RMSE, drift rate, counts)
-python3 neuro/kbs/se3_metrics.py               # -> se3_metrics.json  (rigid SE(3) caliber)
+python3 neuro/kbs/se3_metrics.py               # -> se3_metrics.json : Table 3, all four configurations × both calibers
+python3 neuro/kbs/compute_final_metrics.py     # -> final_metrics.json : loop-line caliber only (Table 1 counts + §4.4 ablation row)
 ```
+
+**Three trajectory directories feed these numbers, and only the first is the
+full system.** Prepare them per sequence before running either script:
+
+| directory / file | configuration it holds | used by |
+|---|---|---|
+| `slam_results_scale_nlm/trajectories.mat` | **full system** (EKF core + scale head + loop line) — this is the `Ours` column of Table 3 | `se3_metrics.py` → `NLM-全系统` |
+| `slam_results/trajectories.mat` | loop line only, no scale branch | `se3_metrics.py` → `NLM-闭环线`; `compute_final_metrics.py` → `nlm` |
+| `slam_results_orbonly/trajectories.mat` | loop line with classical ORB descriptors (§4.4 ablation) | `se3_metrics.py` → `ORB-only` |
+| `_p11_backup_20261014/<seq>/fp_head030.txt` | EKF core + scale head, no loop (dead-band 0.30 replay) | `se3_metrics.py` → `EKF+尺度` |
+
+Consequently `final_metrics.json` reports the **loop-line** value (Town05:
+41.14 m), not the 18.07 m quoted in Table 3; the full-system column must be
+read from `se3_metrics.json`. Run both scripts, and compare against
+`se3_metrics.json` for Table 3 and against `final_metrics.json` only for the
+Table 1 counts and the "loop line over the unscaled EKF core" ablation row.
+
 MATLAB cross-check of the same two calibers: `neuro/kbs/crosscheck_sim3.m`.
 Per-frame error curves for a single sequence: `python3 neuro/kbs/perframe_err.py`.
 

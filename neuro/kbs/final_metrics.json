@@ -1,4 +1,9 @@
 {
+  "_meta": {
+    "caliber": "loop-line configuration (slam_results/), NOT the full system",
+    "table3_source": "se3_metrics.json -> NLM-全系统 (slam_results_scale_nlm/)",
+    "batch": "2026-10-14; closed-loop Town01 re-collected 2026-11"
+  },
   "table1": {
     "Town05Data_IMU_Fusion": {
       "gt_len_m": 485.6,
