@@ -240,7 +240,7 @@
       "se3_rmse": "SE(3) rigid Kabsch, no scale (metric-scale caliber)",
       "drift": "terminal error / trajectory length (%)"
     },
-    "data_root": "../data/01_NeuroSLAM_Datasets/",
+    "data_root": "repro_assets/01_NeuroSLAM_Datasets/",
     "note": "Keys computed from the data root are plain. Keys with \"carried\": true were computed in an earlier batch and their artifact is NOT under the data root (EKF+尺度 needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-全系统 needs slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are carried over from the previous JSON so that Table 3 stays complete, and are replaced the moment the artifact is present.",
     "configs_computed": [
       "KITTI07Data_IMU_Fusion/EKF",
