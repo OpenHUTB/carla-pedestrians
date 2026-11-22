@@ -217,26 +217,22 @@
       "se3_drift": 17.81,
       "sim3_rmse": 206.28,
       "sim3_drift": 20.16,
-      "sim3_fitted_scale": 2.0551,
-      "carried": true
+      "sim3_fitted_scale": 2.0551
     },
     "EKF": {
       "se3_rmse": 54.77,
       "se3_drift": 8.28,
       "sim3_rmse": 42.34,
       "sim3_drift": 6.74,
-      "sim3_fitted_scale": 1.1853,
-      "carried": true
+      "sim3_fitted_scale": 1.1853
     },
     "NLM-闭环线": {
       "se3_rmse": 54.63,
       "se3_drift": 8.28,
       "sim3_rmse": 42.37,
       "sim3_drift": 6.75,
-      "sim3_fitted_scale": 1.1836,
-      "carried": true
-    },
-    "carried_row": true
+      "sim3_fitted_scale": 1.1836
+    }
   },
   "_meta": {
     "calibers": {
@@ -244,13 +240,16 @@
       "se3_rmse": "SE(3) rigid Kabsch, no scale (metric-scale caliber)",
       "drift": "terminal error / trajectory length (%)"
     },
-    "data_root": "repro_assets/01_NeuroSLAM_Datasets/",
+    "data_root": "../data/01_NeuroSLAM_Datasets/",
     "note": "Keys computed from the data root are plain. Keys with \"carried\": true were computed in an earlier batch and their artifact is NOT under the data root (EKF+尺度 needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-全系统 needs slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are carried over from the previous JSON so that Table 3 stays complete, and are replaced the moment the artifact is present.",
     "configs_computed": [
       "KITTI07Data_IMU_Fusion/EKF",
       "KITTI07Data_IMU_Fusion/NLM-闭环线",
       "KITTI07Data_IMU_Fusion/ORB-only",
       "KITTI07Data_IMU_Fusion/VO",
+      "KITTI09Data_IMU_Fusion/EKF",
+      "KITTI09Data_IMU_Fusion/NLM-闭环线",
+      "KITTI09Data_IMU_Fusion/VO",
       "Town03Data_IMU_Fusion/EKF",
       "Town03Data_IMU_Fusion/EKF+尺度",
       "Town03Data_IMU_Fusion/NLM-全系统",
@@ -276,11 +275,7 @@
       "Town10HDData_IMU_Fusion/ORB-only",
       "Town10HDData_IMU_Fusion/VO"
     ],
-    "configs_carried": [
-      "KITTI09Data_IMU_Fusion/EKF",
-      "KITTI09Data_IMU_Fusion/NLM-闭环线",
-      "KITTI09Data_IMU_Fusion/VO"
-    ],
+    "configs_carried": [],
     "table3_notes": [
       "KITTI07 Ours cell (18.45 / 29.99) equals NLM-闭环线: the scale branch is inactive zero-shot on real imagery (Supplementary S.1), so the full system there IS the loop line.",
       "Town10HD Ours == EKF+尺度 (14.44): the single accepted loop link is inert on the open layout.",

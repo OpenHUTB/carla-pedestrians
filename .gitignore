@@ -178,3 +178,6 @@ carla/
 !neuro/kbs/repro_assets/**/*.mat
 !neuro/kbs/repro_assets/**/*.txt
 !neuro/kbs/repro_assets/**/*.md
+
+# fig/ 只保留可编译产物; pptx 源稿移至 docs/src/
+neuro/kbs/fig/**/*.pptx
