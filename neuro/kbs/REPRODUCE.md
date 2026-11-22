@@ -43,10 +43,27 @@ the same class (`chi2_heading`, `chi2_vel`, `chi2_att`, `chi2_scale`,
 `chi2_pos`). The heading branch is switched by `HEADING_OBS_ENABLED`, which is
 `False` in the configuration that produced the reported numbers.
 
+### Supplementary numbers (S.1 / S.2)
+`neuro/kbs/supplementary_metrics.json` records the figures quoted in the supplementary
+material. **S.2** (KITTI-09) is derivable from `se3_metrics.json` (the
+`KITTI09Data_IMU_Fusion` row, `carried_row: true`): loop line 42.37 / 54.63 m vs EKF
+42.34 / 54.77 m (Sim(3) / SE(3)). **S.1** (KITTI-07 true-VIO replay) comes from an internal
+batch whose trajectories are **not** part of the released bundle, so those numbers
+(17.75 / 44.01 / 23.13 / 23.12 / 40.99 m) cannot be recomputed here; they are recorded in
+the same JSON for traceability and are available from the authors on request.
+
 ### Table 3 — main results (5 scenarios × 2 calibers)
 ```bash
 python3 neuro/kbs/se3_metrics.py               # -> se3_metrics.json : Table 3, all four configurations × both calibers
 python3 neuro/kbs/compute_final_metrics.py     # -> final_metrics.json : loop-line caliber only (Table 1 counts + §4.4 ablation row)
+```
+
+Both scripts honour `NLM_DATA_ROOT`, so the released bundle can be evaluated in place
+without copying it into `neuro/data/`:
+
+```bash
+NLM_DATA_ROOT=<bundle>/datasets python3 neuro/kbs/compute_final_metrics.py
+NLM_DATA_ROOT=<bundle>/datasets python3 neuro/kbs/se3_metrics.py
 ```
 
 **Three trajectory directories feed these numbers, and only the first is the
@@ -91,8 +108,12 @@ flag, and every cell carried over from an earlier batch with `"carried": true`
 | KITTI 09 row (Supplementary S.2) | carried | KITTI 09 is not in the bundle at all |
 
 To close the three carried groups, run this on the machine that holds the
-original run tree — it copies only the missing artifacts, verifies row counts
-against the ground truth, and writes a sha256 manifest:
+original run tree — it copies what the evaluator needs (inputs, the closed-loop
+`slam_results/`, and the missing artifacts), verifies row counts against the
+ground truth, and writes a sha256 manifest. `--src` accepts the run tree
+(`<src>/01_NeuroSLAM_Datasets/...`), the released bundle root
+(`<src>/datasets/...`), or its `datasets/` sub-directory — the level is
+auto-detected:
 
 ```bash
 python3 neuro/kbs/export_repro_bundle.py --src /path/to/runs --out neuro/kbs/repro_assets --check-only  # dry run
