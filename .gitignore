@@ -181,3 +181,7 @@ carla/
 
 # fig/ 只保留可编译产物; pptx 源稿移至 docs/src/
 neuro/kbs/fig/**/*.pptx
+
+# 中文版仅保留本地, 不入公开仓库
+neuro/kbs/*_zh.tex
+neuro/kbs/*_zh.pdf
