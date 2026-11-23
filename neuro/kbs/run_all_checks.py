@@ -15,11 +15,11 @@
 
 分四段:
   A 输入清单   —— 每个集该有的文件在不在、行数对不对
-  B Table 1    —— NLM/EKF/VO 的 Sim(3) RMSE 与 drift, 模板/节点/闭环计数, GT 长度
-  C Table 3    —— 双口径四配置 8 格/集 (缺 slam_results_scale_nlm / orbonly / fp_head030 时记 SKIP)
+  B Table 3    —— NLM/EKF/VO 的 Sim(3) RMSE 与 drift, 模板/节点/闭环计数, GT 长度
+  C Table 4    —— 双口径四配置 8 格/集 (缺 slam_results_scale_nlm / orbonly / fp_head030 时记 SKIP)
   D 闭环基准   —— Town01 折返: GT 长度/帧数/事件数/terminal/ RMSE / 15x 比值
 
-退出码: 0 = 没有 FAIL; 1 = 有 FAIL; 2 = 连 Table 1 都算不全 (缺基础输入)
+退出码: 0 = 没有 FAIL; 1 = 有 FAIL; 2 = 连 Table 3 都算不全 (缺基础输入)
 """
 import argparse
 import json
@@ -210,27 +210,27 @@ def main():
             for k in ('nodes', 'templates', 'loop edges'):
                 mark('file', None, f'{sd} {k}')
 
-    # ── B Table 1 ──
-    print('\n── B Table 1 (Sim(3) RMSE / drift) ' + '─' * 40)
+    # ── B Table 3 ──
+    print('\n── B Table 3 (Sim(3) RMSE / drift) ' + '─' * 40)
     for sd in SETS:
         s = per_set[sd]; e = exp['table1'][sd]
         if s['gt'] is None:
-            mark('table1', None, sd); continue
+            mark('Table 3', None, sd); continue
         for nm, arr, kr, kd in [('NLM', s['lo'], 'nlm_rmse', 'nlm_drift'),
                                 ('EKF', s['ek'], 'ekf_rmse', 'ekf_drift'),
                                 ('VO', s['vo'], 'vo_rmse', 'vo_drift')]:
             if arr is None:
-                mark('table1', None, f'{sd} {nm}'); continue
+                mark('Table 3', None, f'{sd} {nm}'); continue
             r, dr = sim3(arr, s['gt'])
             cmp(f'{sd} {nm} sim3 RMSE', round(r, 2), e[kr])
             cmp(f'{sd} {nm} sim3 drift', round(dr, 2), e[kd])
 
-    # ── C Table 3 ──
-    print('\n── C Table 3 (Sim(3) upper bound | SE(3) rigid) ' + '─' * 28)
+    # ── C Table 4 ──
+    print('\n── C Table 4 (Sim(3) upper bound | SE(3) rigid) ' + '─' * 28)
     for sd in SETS:
         s = per_set[sd]; e = exp['table3'][sd]
         if s['gt'] is None:
-            mark('table3', None, sd); continue
+            mark('Table 4', None, sd); continue
         cfg = [('Ours', s['full'] if (s['full'] is not None or sd.startswith('KITTI'))
                 else None, 'ours_sim3', 'ours_se3', s['full'] is not None),
                ('EKF+scale', s['fph'], 'ekfs_sim3', 'ekfs_se3', s['fph'] is not None),
@@ -241,16 +241,16 @@ def main():
             cfg[0] = ('Ours (=loop line)', s['lo'], 'ours_sim3', 'ours_se3', True)
         for nm, arr, ks, kse, present in cfg:
             if e[ks] is None and e[kse] is None:
-                mark('table3', None, f'{sd} {nm} (paper n/a)'); continue
+                mark('Table 4', None, f'{sd} {nm} (paper n/a)'); continue
             if arr is None:
-                mark('table3', None, f'{sd} {nm} (artifact missing)'); continue
+                mark('Table 4', None, f'{sd} {nm} (artifact missing)'); continue
             r, _ = sim3(arr, s['gt'])
             rr, _ = se3(arr, s['gt'])
             cmp(f'{sd} {nm} Sim(3)', round(r, 2), e[ks])
             cmp(f'{sd} {nm} SE(3)', round(rr, 2), e[kse])
         if e.get('orb_sim3') is not None:
             if s['orb'] is None:
-                mark('table3', None, f'{sd} ORB-only Sim(3) (slam_results_orbonly missing)')
+                mark('Table 4', None, f'{sd} ORB-only Sim(3) (slam_results_orbonly missing)')
             else:
                 r, _ = sim3(s['orb'], s['gt'])
                 cmp(f'{sd} ORB-only Sim(3)', round(r, 2), e['orb_sim3'])
