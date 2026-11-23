@@ -180,3 +180,6 @@ carla/
 # 无法生效 (git 不会进入被忽略的目录), 必须显式放行该目录本身
 !neuro/kbs/repro_assets/**/slam_results/
 !neuro/kbs/repro_assets/**/slam_results/**
+
+# 复现映射仅本地维护, 不入公开仓库
+neuro/kbs/REPRODUCE.md
