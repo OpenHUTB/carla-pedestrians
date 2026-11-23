@@ -21,6 +21,11 @@ import matplotlib.pyplot as plt
 from scipy.io import loadmat
 
 ROOT = '../data'
+# 数据根可覆盖（与 se3_metrics.py 同约定），资产包可直接用来重绘：
+#   NLM_DATA_ROOT=<bundle>/datasets NLM_BACKUP_ROOT=<bundle>/_p11_backup_20261014
+DS    = os.environ.get('NLM_DATA_ROOT', f'{ROOT}/01_NeuroSLAM_Datasets').rstrip('/')
+KITTI = os.environ.get('NLM_KITTI_DIR', f'{ROOT}/KITTI_07').rstrip('/')
+BK    = os.environ.get('NLM_BACKUP_ROOT', f'{ROOT}/_p11_backup_20261014').rstrip('/')
 FIG = '../kbs/fig'
 
 # ---------------- 论文现值 (Table 1, 2026-10-14 二次重采 final_metrics.json) ----------------
@@ -120,7 +125,7 @@ def procrustes_7dof(gt, est):
 
 
 def load_ds(ds):
-    sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
+    sub = f'{DS}/{ds}Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
     nlm_txt = _pick(sub, ds, 'exp_trajectory.txt')
     if nlm_txt is not None:
@@ -138,7 +143,7 @@ def load_ds(ds):
     # VO 口径 = visual_odometry.txt (vo_x/vo_y/vo_z), 与 Table 1 同源 (compute_final_metrics)
     vo_p = f'{sub}/visual_odometry.txt'
     if ds == 'KITTI07' and not os.path.exists(vo_p):
-        vo_p = f'{ROOT}/KITTI_07/visual_odometry_ekf.txt'  # VO 文件在 raw 转换目录
+        vo_p = f'{KITTI}/visual_odometry_ekf.txt'  # VO 文件在 raw 转换目录
     out['vo'] = load_pos(vo_p) if os.path.exists(vo_p) else None
     for name in ('nlm', 'ekf', 'vo'):
         T = out[name]
@@ -191,7 +196,7 @@ def _mat_field(E, name):
 
 
 def load_map(ds):
-    sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
+    sub = f'{DS}/{ds}Data_IMU_Fusion'
     m = None
     p = _pick(sub, ds, 'experiences.mat')
     if p is not None:
@@ -384,9 +389,9 @@ def fig_ablation(ta, tb, mpa):
 
     # (a) Town05 组件消融 (全系统时代 5 成分, sim3_full 口径)
     ax = axes[0]
-    sub5 = f'{ROOT}/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion'
+    sub5 = f'{DS}/Town05Data_IMU_Fusion'
     comps = [('Full\n(EKF+scale+loop)', ta['nlm'])]
-    _ekfs = load_pos(f'{ROOT}/_p11_backup_20261014/Town05/fp_head030.txt')  # EKF+尺度 replay (无闭环)
+    _ekfs = load_pos(f'{BK}/Town05/fp_head030.txt')  # EKF+尺度 replay (无闭环)
     comps += [('w/o loop\n(EKF+scale)', _ekfs),
               ('w/o scale\n(loop only)', load_pos(f'{sub5}/slam_results/exp_trajectory.txt')),
               ('EKF', ta['ekf']), ('VO', ta['vo'])]
@@ -438,7 +443,7 @@ def fig_ablation(ta, tb, mpa):
 
 # ---------------- 图4: KITTI_07_input_output (561 x 327 pt) ----------------
 def fig_kitti_io():
-    sub = f'{ROOT}/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion'
+    sub = f'{DS}/KITTI07Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
     nlm_txt = _result_file(sub, 'exp_trajectory.txt', required=False)
     if nlm_txt is not None:
@@ -558,6 +563,11 @@ def fig_kitti_io():
 if __name__ == '__main__':
     ta, tb, mpa = fig_representative()
     fig_performance_summary(ta, tb, mpa)
-    fig_ablation(ta, tb, mpa)
+    try:
+        fig_ablation(ta, tb, mpa)
+    except FileNotFoundError as e:
+        print(f'[SKIP] ablation_unified.pdf: {e}\n'
+              f'       该图需要 EKF+尺度 replay (NLM_BACKUP_ROOT/_p11_backup_20261014/<seq>/fp_head030.txt)，'
+              f'资产包不含；先用 export_repro_bundle.py 打包再重绘。', file=sys.stderr)
     fig_kitti_io()
     print('DONE')

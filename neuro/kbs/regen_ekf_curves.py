@@ -12,14 +12,15 @@
     尺度观测) 移植进独立 EKF 生成器, 重生成实测均有害, 已回滚 (生成器回
     7f9bbb1 版本); CARLA 侧 10-09 恢复只动 IMU_Vision_Fusion_EKF.py。
 """
-import numpy as np
+import numpy as np, os
 import pandas as pd
 import scipy.io as sio
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-D = '../data/'
+# 数据根可覆盖（与 se3_metrics.py 同约定），资产包可直接重绘
+DS = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/')
 OUT = '../kbs/fig/'
 
 def procrustes_full(est, gt, tag=''):
@@ -71,7 +72,7 @@ def plot_set(name, title, gt, nlm, ekf, vo):
 
 def main():
     for town in ['Town05', 'Town03', 'Town07', 'Town10HD']:
-        base = D + f'01_NeuroSLAM_Datasets/{town}Data_IMU_Fusion/'
+        base = f'{DS}/{town}Data_IMU_Fusion/'
         gt = load_csv(base + 'ground_truth.txt', ['pos_x', 'pos_y', 'pos_z'])
         ekf = load_csv(base + 'fusion_pose.txt', ['pos_x', 'pos_y', 'pos_z'])
         vo = load_csv(base + 'visual_odometry.txt', ['vo_x', 'vo_y', 'vo_z'])

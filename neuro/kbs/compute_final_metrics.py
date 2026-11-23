@@ -103,8 +103,13 @@ for d in ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusi
     t1[d] = row
 
 OUT = {'table1': t1}
+META = {
+    'caliber': 'loop-line configuration (slam_results/), NOT the full system',
+    'table3_source': 'se3_metrics.json -> NLM-全系统 (slam_results_scale_nlm/)',
+    'batch': '2026-10-14; closed-loop Town01 re-collected 2026-11',
+}
 with open('../kbs/final_metrics.json', 'w') as f:
-    json.dump(OUT, f, indent=2, ensure_ascii=False)
+    json.dump({'_meta': META, **OUT}, f, indent=2, ensure_ascii=False)
 
 # ─────────────────── 打印 ───────────────────
 print('════ Table 1 (full Sim(3), Town05/03/07/10HD + KITTI07) ════')

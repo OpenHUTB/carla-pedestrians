@@ -227,13 +227,32 @@ Ground truth length 881.5 m over 10000 frames; 36 accepted events
 
 ## 2. Figures
 
+All figure scripts read the same data root as the metric scripts; point it at the
+released bundle (or at a full run tree) before running them:
+
 ```bash
-python3 neuro/kbs/regen_figures.py         # representative_performance.pdf, performance_summary.pdf, ablation/visual-template, KITTI in/out
+export NLM_DATA_ROOT=<repro_assets>/datasets        # <seq>/ with GT, fusion_pose, VO, slam_results
+export NLM_KITTI_DIR=<repro_assets>/KITTI_07        # optional, defaults to $NLM_DATA_ROOT/../KITTI_07
+export NLM_BACKUP_ROOT=<repro_assets>/_p11_backup_20261014   # only for the ablation figure
+
+python3 neuro/kbs/regen_figures.py         # representative_performance, performance_summary, ablation, KITTI in/out
 python3 neuro/kbs/make_all_results_fig.py  # 5-scenario Sim(3)/SE(3) overview + KITTI external RTE
 python3 neuro/kbs/regen_ekf_curves.py      # EKF error curves used in the failure analysis
 ```
+
+Two caveats, both scripted to fail loudly rather than silently:
+
+- `ablation_unified.pdf` also needs the EKF+scale replay
+  (`$NLM_BACKUP_ROOT/Town05/fp_head030.txt`), which the small asset bundle does not
+  carry. With the bundle alone the script prints `[SKIP] ablation_unified.pdf`
+  and still writes the other three figures; run
+  `export_repro_bundle.py` first to obtain that file.
+- `perframe_err.py` needs the complete run tree (`slam_results/exp_trajectory.txt`),
+  not the `.mat`-only bundle; missing sequences are skipped with a message.
+
 All figures land in `neuro/kbs/fig/` and are the files `\includegraphics` pulls
-in the LaTeX sources.
+in the LaTeX sources. `neuro/kbs/SCRIPTS.md` indexes every script in this
+directory and says which ones belong to the published pipeline.
 
 ---
 
