@@ -87,7 +87,11 @@ ce_val = str2double(getenv('CE_VAL'));
 if isempty(ce_val) || isnan(ce_val), ce_val = 50; end
 fix_on = strcmp(getenv('FIX_ON'), '1');
 tag = sprintf('%s_vt%s_ce%g_fix%d', ds0, num2str(vt_thr), ce_val, fix_on);
-dataRoot = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets';
+nlmRoot = getenv('NLM_ROOT');
+if isempty(nlmRoot)
+    nlmRoot = fileparts(fileparts(fileparts(fileparts(fileparts(mfilename('fullpath'))))));
+end
+dataRoot = fullfile(nlmRoot, 'neuro', 'data', '01_NeuroSLAM_Datasets');
 out = fullfile('/tmp/reco_sweep', tag);
 if ~isfolder(out), mkdir(out); end
 copyfile(fullfile(dataRoot, ds0, 'slam_results', 'exp_trajectory.txt'), fullfile(out, 'exp_trajectory.txt'));

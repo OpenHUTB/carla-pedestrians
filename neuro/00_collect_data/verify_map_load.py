@@ -63,8 +63,10 @@ def main():
                          '如 "-RenderOffScreen -quality-level=Low" (与 collect_5000.py 同口径)')
     args = ap.parse_args()
 
-    carla_bin = os.environ.get('CARLA_BIN',
-                               '/home/yangrb/下载/carla/CARLA_0.9.16/CarlaUE4.sh')
+    carla_bin = os.environ.get('CARLA_BIN')
+    if not carla_bin:
+        print('[FATAL] 未设置 CARLA_BIN, 例如: export CARLA_BIN=/path/to/CARLA_0.9.16/CarlaUE4.sh')
+        return 2
     if not os.path.isfile(carla_bin):
         print(f'[FATAL] CARLA_BIN 不存在: {carla_bin}')
         return 2

@@ -25,7 +25,11 @@ test_imu_visual_fusion_slam;
 % ---- core的clearvars后重新推导 (全局变量仍可用) ----
 ds = getenv('SWEEP_DS');
 ce = str2double(getenv('SWEEP_CE'));
-dataRoot = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets';
+nlmRoot = getenv('NLM_ROOT');
+if isempty(nlmRoot)
+    nlmRoot = fileparts(fileparts(fileparts(fileparts(fileparts(mfilename('fullpath'))))));
+end
+dataRoot = fullfile(nlmRoot, 'neuro', 'data', '01_NeuroSLAM_Datasets');
 out = fullfile('/tmp/sweep_ce', sprintf('%s_ce%d', ds, ce));
 if ~isfolder(out), mkdir(out); end
 copyfile(fullfile(dataRoot, ds, 'slam_results', 'exp_trajectory.txt'), fullfile(out, 'exp_trajectory.txt'));

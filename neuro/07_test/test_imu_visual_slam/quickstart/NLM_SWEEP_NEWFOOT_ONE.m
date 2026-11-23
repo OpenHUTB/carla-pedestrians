@@ -52,7 +52,11 @@ ds0  = getenv('SWEEP_DS');
 vt0  = str2double(getenv('SWEEP_VT'));
 ce0  = str2double(getenv('SWEEP_CE'));
 tag = sprintf('vt%s_ce%d', num2str(vt0), ce0);
-root = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets';
+nlmRoot = getenv('NLM_ROOT');
+if isempty(nlmRoot)
+    nlmRoot = fileparts(fileparts(fileparts(fileparts(fileparts(mfilename('fullpath'))))));
+end
+root = fullfile(nlmRoot, 'neuro', 'data', '01_NeuroSLAM_Datasets');
 out = fullfile('/tmp/nlm_sweep_newfoot', ds0, tag);
 if ~isfolder(out), mkdir(out); end
 copyfile(fullfile(root, ds0, 'slam_results', 'exp_trajectory.txt'), fullfile(out, 'exp_trajectory.txt'));
