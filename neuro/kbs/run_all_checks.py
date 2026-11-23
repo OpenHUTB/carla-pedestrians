@@ -13,11 +13,12 @@
 
   python3 neuro/kbs/run_all_checks.py --data-root <dir> --backup-root <dir> --json report.json
 
-分四段:
+分 A/B/C/D/F 五段 (E 段 Table 5 运行时是 MATLAB 实测, 脚本无法重算, 见 CHECKLIST_VERIFY.md):
   A 输入清单   —— 每个集该有的文件在不在、行数对不对
   B Table 3    —— NLM/EKF/VO 的 Sim(3) RMSE 与 drift, 模板/节点/闭环计数, GT 长度
   C Table 4    —— 双口径四配置 8 格/集 (缺 slam_results_scale_nlm / orbonly / fp_head030 时记 SKIP)
   D 闭环基准   —— Town01 折返: GT 长度/帧数/事件数/terminal/ RMSE / 15x 比值
+  F Table 6    —— 外部对照表只核本方法两行 (RTE 原始/Sim3 对齐/剔 top-50, ATE)
 
 退出码: 0 = 没有 FAIL; 1 = 有 FAIL; 2 = 连 Table 3 都算不全 (缺基础输入)
 """
@@ -291,6 +292,29 @@ def main():
         cmp('RMSE final (m)', round(rf, 2), cl['rmse']['final'])
         cmp('RMSE EKF (m)', round(re_, 2), cl['rmse']['ekf'])
         cmp('ratio EKF/final', round(te / tf, 2), cl['ratio'])
+
+    # ── F Table 6 (external comparison, our rows) ──
+    print('\n── F Table 6 (external comparison, our rows) ' + '─' * 24)
+    t6 = exp.get('table6')
+    kit = os.path.join(root, 'KITTI07Data_IMU_Fusion')
+    labels = ('EKF RTE raw', 'EKF RTE aligned', 'EKF ATE', 'EKF RTE excl. top-50',
+              'NLM RTE raw', 'NLM RTE aligned', 'NLM ATE', 'NLM RTE excl. top-50')
+    if t6 is None or not os.path.exists(os.path.join(kit, 'ground_truth.txt')):
+        for k in labels:
+            mark('Table 6', None, k)
+    else:
+        import importlib.util
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location('kitti_rte_mod', os.path.join(here, 'kitti_rte.py'))
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        d6 = mod.compute(kit)
+        cmp('GT length (m)', d6['gt_len_m'], t6['gt_len_m'])
+        for key, jsonkey, nm in (('EKF', 'ekf', 'EKF'), ('NLM', 'nlm', 'NLM')):
+            v = d6.get(key) or {}
+            e = t6[jsonkey]
+            for field, lab in (('rte_raw', 'RTE raw'), ('rte_aligned', 'RTE aligned'),
+                               ('ate', 'ATE'), ('rte_top50', 'RTE excl. top-50')):
+                cmp(f'{nm} {lab}', v.get(field), e[field])
 
     # ── 汇总 ──
     print('\n' + '═' * 74)

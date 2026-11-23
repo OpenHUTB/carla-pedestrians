@@ -92,41 +92,52 @@ def rte_excl(e, df, k):
     return float(e[m].mean() / df[m].mean() * 100)
 
 
-base = sys.argv[1] if len(sys.argv) > 1 else \
-    '../data/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/'
-if not base.endswith('/'):
-    base += '/'
-gt = loadcsv(base, 'ground_truth.txt', ['pos_x', 'pos_y', 'pos_z'])
-assert gt is not None, f'GT missing: {base}ground_truth.txt'
-L = float(np.linalg.norm(np.diff(gt, axis=0), axis=1).sum())
-cfg = {
-    'EKF': loadcsv(base, 'fusion_pose.txt', ['pos_x', 'pos_y', 'pos_z']),
-    'NLM (规范)': loadmat(base, 'slam_results/trajectories.mat', 'exp_trajectory'),
-    'NLM+尺度': loadmat(base, 'slam_results_scale_nlm/trajectories.mat', 'exp_trajectory'),
-}
-print(f'== {os.path.basename(base.rstrip("/"))}  GT {len(gt)} 帧, 长度 {L:.1f}m ==')
-print(f"{'配置':14s} {'帧数':>7s} {'RTE%(无对齐)':>13s} {'RTE%(Sim3对齐)':>15s} {'ATE(Sim3)m':>11s} {'sim3 s':>8s}")
-for name, traj in cfg.items():
-    if traj is None:
-        print(f'{name:14s}   (MISSING)')
-        continue
-    r, mref, mres = rte(traj, gt); s = sim3_scale(traj, gt)
-    est_a, s7, d7 = procrustes_7dof(gt, traj)
-    ate = float(np.sqrt((d7 ** 2).mean())); r7, _, _ = rte(est_a, gt)
-    print(f'{name:14s} {len(traj):7d} {r:13.2f} {r7:15.2f} {ate:11.2f} {s7:8.4f}   '
-          f'(meanΔgt {mref:.4f} / meanΔres {mres:.4f}, 比值 {mres / mref:.3f})')
+def compute(base):
+    """Return the Table-6 numbers for one KITTI sequence directory."""
+    if not base.endswith('/'):
+        base += '/'
+    gt = loadcsv(base, 'ground_truth.txt', ['pos_x', 'pos_y', 'pos_z'])
+    assert gt is not None, f'GT missing: {base}ground_truth.txt'
+    L = float(np.linalg.norm(np.diff(gt, axis=0), axis=1).sum())
+    cfg = {
+        'EKF': loadcsv(base, 'fusion_pose.txt', ['pos_x', 'pos_y', 'pos_z']),
+        'NLM': loadmat(base, 'slam_results/trajectories.mat', 'exp_trajectory'),
+        'NLM+scale': loadmat(base, 'slam_results_scale_nlm/trajectories.mat', 'exp_trajectory'),
+    }
+    out = {'gt_len_m': round(L, 1), 'base': base}
+    for name, traj in cfg.items():
+        if traj is None:
+            out[name] = None
+            continue
+        r, mref, mres = rte(traj, gt)
+        est_a, s7, d7 = procrustes_7dof(gt, traj)
+        ate = float(np.sqrt((d7 ** 2).mean())); r7, _, _ = rte(est_a, gt)
+        e, df = per_frame_err(est_a, gt)
+        out[name] = {'frames': int(len(traj)),
+                     'rte_raw': round(r, 2), 'rte_aligned': round(r7, 2),
+                     'ate': round(ate, 2), 's': round(s7, 4),
+                     'rte_top50': round(rte_excl(e, df, 50), 2)}
+    return out
 
-print()
-print('== 对齐后 RTE 离群帧诊断 (剔除误差最大 top-k 帧; 判定系统性逐帧漂移 vs 少量脏帧) ==')
-for name, traj in cfg.items():
-    if traj is None:
-        continue
-    est_a, _, _ = procrustes_7dof(gt, traj)
-    e, df = per_frame_err(est_a, gt)
-    full = float(e.mean() / df.mean() * 100)
-    excl = '  '.join(f'剔top-{k}={rte_excl(e, df, k):6.2f}%' for k in (5, 10, 20, 50))
-    print(f'{name:14s} 完整={full:7.2f}%  最大单帧={e.max():7.1f}m  {excl}')
-print()
-print('参考 (官方相对平移误差): SOFT2(st) 0.53% | SOFT-SLAM(st) 0.65% |')
-print('  VINS-Fusion(st) 1.09% | ORB-SLAM2(st) 1.15% | MonoROCC 1.11% | MonoDepth2 12.59%')
-print('  (激光 SOTA ~0.5%)')
+
+def main(base=None):
+    base = base or (sys.argv[1] if len(sys.argv) > 1 else
+                    '../data/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/')
+    d = compute(base)
+    print(f'== {os.path.basename(d["base"].rstrip("/"))}  GT {d["gt_len_m"]} m ==')
+    print(f"{'config':10s} {'frames':>7s} {'RTE% raw':>10s} {'RTE% aligned':>13s} {'ATE m':>8s} {'sim3 s':>8s}")
+    for name in ('EKF', 'NLM', 'NLM+scale'):
+        v = d.get(name)
+        if v is None:
+            print(f'{name:10s}   (MISSING)')
+        else:
+            print(f'{name:10s} {v["frames"]:7d} {v["rte_raw"]:10.2f} {v["rte_aligned"]:13.2f} '
+                  f'{v["ate"]:8.2f} {v["s"]:8.4f}   (RTE after dropping top-50 frames: {v["rte_top50"]:.2f}%)')
+    print()
+    print('Reference (official KITTI relative translation error, %): '
+          'SOFT2 0.53 | SOFT-SLAM 0.65 | VINS-Fusion 1.09 | ORB-SLAM2 1.15 |'
+          ' MonoDepth2 12.59')
+
+
+if __name__ == '__main__':
+    main()

@@ -15,7 +15,9 @@
 """
 import sys, os
 import numpy as np, scipy.io as sio
-exec(open('../kbs/regen_table.py').read().split("# ---------- 口径验证")[0])
+_HERE = os.path.dirname(os.path.abspath(__file__))
+exec(open(os.path.join(_HERE, 'regen_table.py')).read()
+     .split("# ---------- 口径验证")[0])
 ROOT = '../data/01_NeuroSLAM_Datasets'
 DSS = [('Town01Data_IMU_Fusion', 'Town01', 5000), ('Town02Data_IMU_Fusion', 'Town02', 5000),
        ('Town05Data_IMU_Fusion', 'Town05', 5000), ('Town10HDData_IMU_Fusion', 'Town10HD', 5000),

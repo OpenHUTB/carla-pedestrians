@@ -15,6 +15,7 @@ Environment: `pip install -r neuro/requirements.txt`; for the learned components
 | Step | Command | Checks |
 |---|---|---|
 | dataset structure | `python3 neuro/kbs/check_datasets.py` | the five per-sequence files the metrics need (`ground_truth.txt`, `fusion_pose.txt`, `visual_odometry.txt`, `slam_results/trajectories.mat`, `slam_results/experiences.mat`); exit code 0 = ready |
+| number guard | `python3 neuro/kbs/check_baseline.py --offline` | 113 frozen baseline numbers (`baseline_frozen.json`); any regression exits 1 — run it after every data refresh |
 
 Re-run log against the released bundle (2026-11, six sequences): `check_datasets.py`
 passes on all; `compute_final_metrics.py` and `se3_metrics.py` reproduce the
@@ -60,7 +61,7 @@ the same JSON for traceability and are available from the authors on request.
 
 ### Table 5 — per-module runtime and throughput
 The timing numbers (67--76~FPS on the four CARLA towns, 39~FPS / 25.6~ms on
-KITTI~07, and the per-module shares in Table~4) come from full `matlab -batch`
+KITTI~07, and the per-module shares in Table~5) come from full `matlab -batch`
 wall-clock runs plus one MATLAB-profiler pass on a 250-frame KITTI~07 subset;
 the underlying measurements are recorded in
 `neuro/kbs/FPS_MEASUREMENT_EVIDENCE_20261023.md` (per-town frame counts, wall
@@ -70,6 +71,25 @@ reference hardware (Intel Core i9-14900HX, 32~GB RAM, CPU only). Per-module
 shares are quoted from the profiler pass because profiler overhead inflates
 absolute times (34.4 vs 25.6~ms/frame); the end-to-end FPS numbers are from the
 clean wall-clock runs.
+
+### Table 6 — external comparison (our rows)
+Only our own rows are recomputable; the published rows are literature values
+taken from the KITTI odometry leaderboard and from the original papers.
+
+```bash
+python3 neuro/kbs/kitti_rte.py <repro_assets>/datasets/KITTI07Data_IMU_Fusion
+```
+
+Expected (official relative translation error, \% of traversed distance):
+
+| row | RTE raw | RTE after 7-DoF alignment | ATE (m) | RTE after dropping top-50 frames |
+|---|---|---|---|---|
+| EKF core | 94.72 | 72.09 | 22.09 | 38.20 |
+| full system | 101.06 | 75.15 | 18.45 | 46.91 |
+
+`run_all_checks.py` (section E) recomputes these eight numbers and compares them
+with `expected_values.json -> table6`, so Table~6 is no longer the one table
+whose rows had no machine check.
 
 ### Table 4 — main results (5 scenarios × 2 calibers)
 ```bash
@@ -250,6 +270,12 @@ Two caveats, both scripted to fail loudly rather than silently:
 - `perframe_err.py` needs the complete run tree (`slam_results/exp_trajectory.txt`),
   not the `.mat`-only bundle; missing sequences are skipped with a message.
 
+Four figures are **not** script-generated: the graphical abstract (`1_abstract.pdf`),
+the framework diagram (`2_framework.pdf`), the grid-cell diagram
+(`3d_grid_cell_network.pdf`) and the fusion-principle diagram
+(`imu_visual_complementary_fusion.pdf`) were exported from the `.pptx` sources in
+`fig/`; `src/` holds early draft drawing scripts whose outputs are not used.
+
 All figures land in `neuro/kbs/fig/` and are the files `\includegraphics` pulls
 in the LaTeX sources. `neuro/kbs/SCRIPTS.md` indexes every script in this
 directory and says which ones belong to the published pipeline.
@@ -280,6 +306,7 @@ Cover letter: `cover_letter_KBS.tex`. Highlights: `highlights.tex`.
 | KITTI 09 row (Supplementary S.2) | sequence not in the released bundle; row is carried over from the 2026-10 batch |
 | EKF gate thresholds not swept by a shipped script | fixed before the ablation runs, values are source constants |
 | `*.m` legacy scripts | kept for provenance; published numbers come from the Python path |
+| Table 5 raw timing runs | the two MATLAB drivers (`FPS_CLEAN_RUN.m`, `FPS_PROBE_RUN.m`) were session scripts under `/tmp` and are not in the repository; `FPS_MEASUREMENT_EVIDENCE_20261023.md` keeps the measured values, but the measurement cannot be re-executed from the repo alone |
 
 `se3_metrics.json` records this itself: computed cells are plain, carried cells
 carry `"carried": true`, and `_meta.configs_carried` lists them.

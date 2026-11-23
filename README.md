@@ -10,6 +10,8 @@ The system couples dual-stream visual processing with IMU fusion on a **fixed 10
 
 The localization pipeline runs **on CPU only**; no GPU is used in the reported results.
 
+> **Naming.** The manuscript calls the framework *NeuroLocMap*; the code, file names and the LaTeX sources keep the historical *NeuroSLAM* naming (`NeuroSLAM_KBS.tex`, `neuro/00_...`). The two names refer to the same system.
+
 ---
 
 ## 1. Quick start

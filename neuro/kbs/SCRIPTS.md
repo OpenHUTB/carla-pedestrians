@@ -22,6 +22,7 @@ Data root convention for all groups: `NLM_DATA_ROOT` (defaults to `../data/01_Ne
 | `regen_table.py` | recompute Table-4-style metrics from trajectories (imported by perframe_err.py) |
 | `regen_figures.py` | redraw the four main figures |
 | `make_all_results_fig.py` | redraw the five-scenario overview + KITTI RTE figure |
+| `kitti_rte.py` | Table 6, our rows: official KITTI relative translation error (raw / Sim(3)-aligned / after dropping top-50 frames) |
 | `regen_ekf_curves.py` | redraw the EKF error curves of the failure analysis |
 | `perframe_err.py` | per-frame error localisation, NLM vs EKF (needs full run trees) |
 
@@ -77,7 +78,6 @@ documented rather than hidden:
 | `xodr_bidir_scan.py` | 离线解析 OpenDRIVE, 找"双向折返真闭环"候选起点。 |
 | `kitti09_assemble_raw.py` | 从 raw 0033_sync.zip 解压结果组装 kitti_prepare_fusion.py 输入布局 |
 | `kitti_prepare_fusion.py` | KITTI 转换管线: 原始 KITTI odometry 数据 → 标准 IMU_Fusion 格式 + 真视觉惯性 EKF |
-| `kitti_rte.py` | KITTI 官方相对平移误差 (RTE %) 侦察/计算 (缺口1<->缺口2 耦合证据) |
 | `_diag_kitti.py` | no description in source |
 | `_improve_exp.py` | no description in source |
 
@@ -95,3 +95,19 @@ documented rather than hidden:
 
 `validate_dataset.py` also serves as an offline consistency check of a run tree
 (GT jumps, VO saturation, frame counts, timestamp monotonicity).
+
+## 5. Diagram sources (`src/`)
+
+Early draft drawing scripts for the conceptual diagrams. Their outputs
+(`bio_nav_architecture.pdf`, `experience_map.pdf`, `grid_cell_activity.pdf`,
+`hdc_network.pdf`) are **not** the files compiled in the manuscript: the three
+method figures (`2_framework.pdf`, `3d_grid_cell_network.pdf`,
+`imu_visual_complementary_fusion.pdf`) and the graphical abstract (`1_abstract.pdf`)
+were exported from the `.pptx` sources in `fig/`, not from these scripts.
+
+| script | note |
+|---|---|
+| `draw_bio_architecture_compact.py` / `..._elegant.py` / `..._elegant_v2.py` / `..._final.py` / `draw_bio_architecture.py` / `..._v2.py` | six iterations of the same architecture drawing |
+| `draw_grid_cell_network.py` | grid-cell diagram draft (`grid_cell_activity.pdf`) |
+| `draw_method_diagrams.py` | experience-map / HDC blocks (`experience_map.pdf`, `hdc_network.pdf`) |
+| `draw_neuroslam_architecture.py` | pipeline diagram draft |

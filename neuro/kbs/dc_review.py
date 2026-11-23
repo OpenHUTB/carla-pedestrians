@@ -9,7 +9,9 @@ import numpy as np, os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-exec(open('../kbs/regen_table.py').read().split("# ---------- 口径验证")[0])
+_HERE = os.path.dirname(os.path.abspath(__file__))
+exec(open(os.path.join(_HERE, 'regen_table.py')).read()
+     .split("# ---------- 口径验证")[0])
 ROOT = '../data/01_NeuroSLAM_Datasets'
 OUT = os.path.expanduser('~/桌面/NLM_DCv3_review')
 os.makedirs(OUT, exist_ok=True)

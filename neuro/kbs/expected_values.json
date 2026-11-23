@@ -145,5 +145,21 @@
       "ekf": 477.76
     },
     "ratio": 15.07
+  },
+  "table6": {
+    "_note": "Table 6: our rows only; published rows are literature values and are not recomputable",
+    "gt_len_m": 692.1,
+    "ekf": {
+      "rte_raw": 94.72,
+      "rte_aligned": 72.09,
+      "ate": 22.09,
+      "rte_top50": 38.2
+    },
+    "nlm": {
+      "rte_raw": 101.06,
+      "rte_aligned": 75.15,
+      "ate": 18.45,
+      "rte_top50": 46.91
+    }
   }
 }

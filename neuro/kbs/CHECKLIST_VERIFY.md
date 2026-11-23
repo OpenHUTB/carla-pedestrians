@@ -77,6 +77,12 @@ NLM_DATA_ROOT=/path/datasets NLM_BACKUP_ROOT=/path/_p11_backup_20261014 \
 端到端 FPS 来自干净墙钟跑；原始测量见 `FPS_MEASUREMENT_EVIDENCE_20261023.md`。
 资产包不含原始帧，故此项只能人工比对证据表，不能重算（详见 REPRODUCE.md 的 Table 5 小节）。
 
+## F 外部对照表（稿中 Table 6，只核本方法两行）
+
+`kitti_rte.py` 复算官方相对平移误差，`run_all_checks.py` 第 F 段自动比对
+`expected_values.json -> table6`：EKF 94.72 / 72.09 / 22.09 m（剔除最大 50 帧后 38.20），
+本方法 101.06 / 75.15 / 18.45 m（46.91）。文献行（SOFT2 等）属引用数据，不求值。
+
 ## 判定与常见原因
 
 - `FAIL` 且偏差 < 0.05 m：多半是浮点舍入或行长截断差 1–2 帧，可接受但要在报告里写清。
