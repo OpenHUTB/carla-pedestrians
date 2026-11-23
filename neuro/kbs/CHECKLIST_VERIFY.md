@@ -28,7 +28,7 @@ NLM_DATA_ROOT=/path/datasets NLM_BACKUP_ROOT=/path/_p11_backup_20261014 \
 | 模板数 | 175 / 91 / 270 / 481 / 964 |
 | 闭环边（每 experience 首条 link） | 7 / 7 / 7 / 1 / 11 |
 
-## B Table 1（full Sim(3)，RMSE / drift %）
+## B 主结果表（稿中 Table 4，full Sim(3)，RMSE / drift %）
 
 | 集 | NLM | EKF | VO |
 |---|---|---|---|
@@ -38,7 +38,7 @@ NLM_DATA_ROOT=/path/datasets NLM_BACKUP_ROOT=/path/_p11_backup_20261014 \
 | Town10HD | 18.61 / 1.57 | 18.61 / 1.57 | 35.86 / 15.58 |
 | KITTI 07 | 18.45 / 9.71 | 22.09 / 8.33 | 27.84 / 9.86 |
 
-## C Table 3（8 格/集；`Ours` 在 KITTI 07 就是闭环线）
+## C 主结果表其余口径（稿中 Table 4，8 格/集；`Ours` 在 KITTI 07 就是闭环线）
 
 | 集 | Ours S3 / SE3 | EKF+scale | EKF | VO |
 |---|---|---|---|---|
@@ -71,6 +71,11 @@ NLM_DATA_ROOT=/path/datasets NLM_BACKUP_ROOT=/path/_p11_backup_20261014 \
 `kb_s2_se3_check.m` 两种都打印。
 
 ---
+
+## E 运行时表（稿中 Table 5）
+非 `run_all_checks.py` 覆盖范围：分模块计时来自 MATLAB profiler（KITTI07 250 帧子集），
+端到端 FPS 来自干净墙钟跑；原始测量见 `FPS_MEASUREMENT_EVIDENCE_20261023.md`。
+资产包不含原始帧，故此项只能人工比对证据表，不能重算（详见 REPRODUCE.md 的 Table 5 小节）。
 
 ## 判定与常见原因
 

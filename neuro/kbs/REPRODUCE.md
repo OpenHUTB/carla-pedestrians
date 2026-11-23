@@ -19,7 +19,7 @@ Environment: `pip install -r neuro/requirements.txt`; for the learned components
 Re-run log against the released bundle (2026-11, six sequences): `check_datasets.py`
 passes on all; `compute_final_metrics.py` and `se3_metrics.py` reproduce the
 committed numbers **cell for cell** — loop-line 41.14 / 22.91 / 39.49 / 18.61 /
-18.45 m (Sim(3)), `EKF` and `VO` columns identical to Table 3, cross-check
+18.45 m (Sim(3)), `EKF` and `VO` columns identical to Table 4, cross-check
 `PASS`, closed-loop terminal drift 842.54 → 55.92 m (15.07×). What the bundle
 does *not* contain is listed in §1, "What the released asset bundle covers".
 
@@ -27,7 +27,13 @@ does *not* contain is listed in §1, "What the released asset bundle covers".
 
 ## 1. Table by table
 
-### Table 1 — dataset characteristics
+Manuscript table numbering (as compiled in `NeuroSLAM_KBS.pdf`): Table 1 = related-work
+comparison, Table 2 = observation branches and thresholds, Table 3 = dataset
+characteristics, Table 4 = main results, Table 5 = per-module runtime, Table 6 =
+external comparison. The internal JSON keys `table1` / `table3` in
+`expected_values.json` still refer to the datasets / results tables respectively.
+
+### Table 3 — dataset characteristics
 Not a computed table: lengths and frame counts come from the collection logs,
 and the template/node/link counts are the ones written into
 `neuro/kbs/final_metrics.json` by step 2 below (`NUM_EXPS`, template count,
@@ -52,10 +58,23 @@ batch whose trajectories are **not** part of the released bundle, so those numbe
 (17.75 / 44.01 / 23.13 / 23.12 / 40.99 m) cannot be recomputed here; they are recorded in
 the same JSON for traceability and are available from the authors on request.
 
-### Table 3 — main results (5 scenarios × 2 calibers)
+### Table 5 — per-module runtime and throughput
+The timing numbers (67--76~FPS on the four CARLA towns, 39~FPS / 25.6~ms on
+KITTI~07, and the per-module shares in Table~4) come from full `matlab -batch`
+wall-clock runs plus one MATLAB-profiler pass on a 250-frame KITTI~07 subset;
+the underlying measurements are recorded in
+`neuro/kbs/FPS_MEASUREMENT_EVIDENCE_20261023.md` (per-town frame counts, wall
+clock, ms/frame, profiler shares). They are **not** recomputable from the
+released asset bundle: they need the raw frames and a MATLAB install on the
+reference hardware (Intel Core i9-14900HX, 32~GB RAM, CPU only). Per-module
+shares are quoted from the profiler pass because profiler overhead inflates
+absolute times (34.4 vs 25.6~ms/frame); the end-to-end FPS numbers are from the
+clean wall-clock runs.
+
+### Table 4 — main results (5 scenarios × 2 calibers)
 ```bash
-python3 neuro/kbs/se3_metrics.py               # -> se3_metrics.json : Table 3, all four configurations × both calibers
-python3 neuro/kbs/compute_final_metrics.py     # -> final_metrics.json : loop-line caliber only (Table 1 counts + §4.4 ablation row)
+python3 neuro/kbs/se3_metrics.py               # -> se3_metrics.json : Table 4, all four configurations × both calibers
+python3 neuro/kbs/compute_final_metrics.py     # -> final_metrics.json : loop-line caliber only (Table 3 counts + §4.4 ablation row)
 ```
 
 Both scripts honour `NLM_DATA_ROOT`, so the released bundle can be evaluated in place
@@ -71,16 +90,16 @@ full system.** Prepare them per sequence before running either script:
 
 | directory / file | configuration it holds | used by |
 |---|---|---|
-| `slam_results_scale_nlm/trajectories.mat` | **full system** (EKF core + scale head + loop line) — this is the `Ours` column of Table 3 | `se3_metrics.py` → `NLM-全系统` |
+| `slam_results_scale_nlm/trajectories.mat` | **full system** (EKF core + scale head + loop line) — this is the `Ours` column of Table 4 | `se3_metrics.py` → `NLM-全系统` |
 | `slam_results/trajectories.mat` | loop line only, no scale branch | `se3_metrics.py` → `NLM-闭环线`; `compute_final_metrics.py` → `nlm` |
 | `slam_results_orbonly/trajectories.mat` | loop line with classical ORB descriptors (§4.4 ablation) | `se3_metrics.py` → `ORB-only` |
 | `_p11_backup_20261014/<seq>/fp_head030.txt` | EKF core + scale head, no loop (dead-band 0.30 replay) | `se3_metrics.py` → `EKF+尺度` |
 
 Consequently `final_metrics.json` reports the **loop-line** value (Town05:
-41.14 m), not the 18.07 m quoted in Table 3; the full-system column must be
+41.14 m), not the 18.07 m quoted in Table 4; the full-system column must be
 read from `se3_metrics.json`. Run both scripts, and compare against
-`se3_metrics.json` for Table 3 and against `final_metrics.json` only for the
-Table 1 counts and the "loop line over the unscaled EKF core" ablation row.
+`se3_metrics.json` for Table 4 and against `final_metrics.json` only for the
+Table 3 counts and the "loop line over the unscaled EKF core" ablation row.
 
 Data roots are overridable, so the released asset bundle can be evaluated
 without copying it into `neuro/data/`:
@@ -100,7 +119,7 @@ flag, and every cell carried over from an earlier batch with `"carried": true`
 
 | column | status in the asset bundle | note |
 |---|---|---|
-| `EKF`, `VO` (both calibers) | **recomputed** | 15 cells, all match Table 3 to the printed precision |
+| `EKF`, `VO` (both calibers) | **recomputed** | 15 cells, all match Table 4 to the printed precision |
 | `NLM-闭环线` (both calibers) | **recomputed** | 41.14 / 46.37 (Town05), 18.45 / 29.99 (KITTI 07) — this is also the `Ours` cell on KITTI 07 |
 | `Ours` on 4 CARLA sets (18.07 / 15.31 / 28.75 / 14.44 Sim(3)) | carried | needs `slam_results_scale_nlm/`, not in the bundle |
 | `EKF+尺度` (20.10 / 16.07 / 27.90 / 14.44) | carried | needs `_p11_backup_20261014/<seq>/fp_head030.txt` |
@@ -175,7 +194,7 @@ realized average 6.3 km/h; 36 accepted loop-closure events.
 
 Caliber: **anchored Sim(3)** — the similarity transform is fitted on the first
 100 frames and then applied unchanged to the whole trajectory (stricter than the
-full-Sim(3) refit of Table 3, which would absorb the drift the benchmark is meant
+full-Sim(3) refit of Table 4, which would absorb the drift the benchmark is meant
 to expose). The quantity reported in §4.5 is the **terminal error** (last-frame
 position error after the anchored fit), *not* the RMSE over the whole trajectory.
 `kb_s2_se3_check` prints both and labels the caliber, because an earlier version

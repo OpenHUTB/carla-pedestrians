@@ -19,6 +19,9 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # 数据根可覆盖: NLM_DATA_ROOT=/path/01_NeuroSLAM_Datasets (默认 ../data/01_NeuroSLAM_Datasets)
 D  = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/') + '/'
+# _meta 里记录可移植的记号: 设了环境变量就写 $NLM_DATA_ROOT/, 否则写默认相对路径。
+# (曾经写死实际绝对路径, 会把作者本机的 workspace 路径提交进仓库)
+ROOT_NOTE = '$NLM_DATA_ROOT/' if 'NLM_DATA_ROOT' in os.environ else D
 BK = os.environ.get('NLM_BACKUP_ROOT', '../data/_p11_backup_20261014').rstrip('/') + '/'
 SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
         'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion', 'KITTI09Data_IMU_Fusion']
@@ -126,12 +129,15 @@ OUT['_meta'] = {
         'se3_rmse': 'SE(3) rigid Kabsch, no scale (metric-scale caliber)',
         'drift': 'terminal error / trajectory length (%)',
     },
-    'data_root': D,
+    'data_root': ROOT_NOTE,
+    'data_root_note': 'token for the directory that was evaluated: the released bundle'
+                      ' dataset root (NLM_Repro_Assets_*/datasets/) in place of $NLM_DATA_ROOT,'
+                      ' or the repo default ../data/01_NeuroSLAM_Datasets/',
     'note': 'Keys computed from the data root are plain. Keys with "carried": true were '
             'computed in an earlier batch and their artifact is NOT under the data root '
             '(EKF+尺度 needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-全系统 needs '
             'slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are '
-            'carried over from the previous JSON so that Table 3 stays complete, and are '
+            'carried over from the previous JSON so that Table 4 stays complete, and are '
             'replaced the moment the artifact is present.',
 }
 present, carried = set(), set()
@@ -148,7 +154,7 @@ OUT['_meta']['table3_notes'] = [
     'KITTI07 Ours cell (18.45 / 29.99) equals NLM-闭环线: the scale branch is inactive '
     'zero-shot on real imagery (Supplementary S.1), so the full system there IS the loop line.',
     'Town10HD Ours == EKF+尺度 (14.44): the single accepted loop link is inert on the open layout.',
-    'Table 3 EKF+尺度 and ORB-only cells come from artifacts outside the released asset bundle '
+    'Table 4 EKF+尺度 and ORB-only cells come from artifacts outside the released asset bundle '
     'unless export_repro_bundle.py has been run over the original run tree.',
 ]
 

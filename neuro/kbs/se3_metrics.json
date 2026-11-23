@@ -240,8 +240,9 @@
       "se3_rmse": "SE(3) rigid Kabsch, no scale (metric-scale caliber)",
       "drift": "terminal error / trajectory length (%)"
     },
-    "data_root": "repro_assets/01_NeuroSLAM_Datasets/",
-    "note": "Keys computed from the data root are plain. Keys with \"carried\": true were computed in an earlier batch and their artifact is NOT under the data root (EKF+尺度 needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-全系统 needs slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are carried over from the previous JSON so that Table 3 stays complete, and are replaced the moment the artifact is present.",
+    "data_root": "$NLM_DATA_ROOT/",
+    "data_root_note": "token for the directory that was evaluated: the released bundle dataset root (NLM_Repro_Assets_*/datasets/) in place of $NLM_DATA_ROOT, or the repo default ../data/01_NeuroSLAM_Datasets/",
+    "note": "Keys computed from the data root are plain. Keys with \"carried\": true were computed in an earlier batch and their artifact is NOT under the data root (EKF+尺度 needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-全系统 needs slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are carried over from the previous JSON so that Table 4 stays complete, and are replaced the moment the artifact is present.",
     "configs_computed": [
       "KITTI07Data_IMU_Fusion/EKF",
       "KITTI07Data_IMU_Fusion/NLM-闭环线",
@@ -279,7 +280,7 @@
     "table3_notes": [
       "KITTI07 Ours cell (18.45 / 29.99) equals NLM-闭环线: the scale branch is inactive zero-shot on real imagery (Supplementary S.1), so the full system there IS the loop line.",
       "Town10HD Ours == EKF+尺度 (14.44): the single accepted loop link is inert on the open layout.",
-      "Table 3 EKF+尺度 and ORB-only cells come from artifacts outside the released asset bundle unless export_repro_bundle.py has been run over the original run tree."
+      "Table 4 EKF+尺度 and ORB-only cells come from artifacts outside the released asset bundle unless export_repro_bundle.py has been run over the original run tree."
     ]
   }
 }
