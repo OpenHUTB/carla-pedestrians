@@ -18,15 +18,23 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+plt.rcParams.update({'font.family': 'sans-serif',
+                        'font.sans-serif': ['DejaVu Sans'],
+                        'mathtext.fontset': 'dejavusans'})
 from scipy.io import loadmat
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = '../data'
 # 数据根可覆盖（与 se3_metrics.py 同约定），资产包可直接用来重绘：
 #   NLM_DATA_ROOT=<bundle>/datasets NLM_BACKUP_ROOT=<bundle>/_p11_backup_20261014
-DS    = os.environ.get('NLM_DATA_ROOT', f'{ROOT}/01_NeuroSLAM_Datasets').rstrip('/')
-KITTI = os.environ.get('NLM_KITTI_DIR', f'{ROOT}/KITTI_07').rstrip('/')
-BK    = os.environ.get('NLM_BACKUP_ROOT', f'{ROOT}/_p11_backup_20261014').rstrip('/')
-FIG = '../kbs/fig'
+DS    = os.environ.get('NLM_DATA_ROOT', os.path.join(_HERE, '..', 'data', '01_NeuroSLAM_Datasets')).rstrip('/')
+KITTI = os.environ.get('NLM_KITTI_DIR', os.path.join(_HERE, '..', 'KITTI_07')).rstrip('/')
+BK    = os.environ.get('NLM_BACKUP_ROOT', os.path.join(_HERE, '..', '_p11_backup_20261014')).rstrip('/')
+if not os.path.isdir(DS):
+    print(f'[ERROR] data root not found: {os.path.abspath(DS)}\n'
+             f'        set NLM_DATA_ROOT=<bundle>/datasets (or a full run tree) and retry')
+    sys.exit(2)
+FIG = os.path.join(_HERE, 'fig')
 
 # ---------------- 论文现值 (Table 1, 2026-10-14 二次重采 final_metrics.json) ----------------
 _FALLBACK_EKF = {'Town05': 44.44, 'Town03': 23.36, 'Town07': 40.64, 'Town10HD': 18.61, 'KITTI07': 22.09}
@@ -60,7 +68,7 @@ C_GRAY = '#888888'
 
 
 # ---------------- 数据加载 ----------------
-# 2026-10-16 定调: 论文主形态 = NLM 全系统 (EKF+尺度+闭环)。
+# 2026-10-16 定调: 论文主形态 = NLM 全系统 (EKF+scale+闭环)。
 # CARLA 4 集 NLM 轨迹源优先 slam_results_scale_nlm (全系统), 回退 slam_results (闭环线);
 # KITTI07 无全系统 (零样本尺度支路失效), 保持闭环线 slam_results。
 def _nlm_dirs(ds):
@@ -391,7 +399,7 @@ def fig_ablation(ta, tb, mpa):
     ax = axes[0]
     sub5 = f'{DS}/Town05Data_IMU_Fusion'
     comps = [('Full\n(EKF+scale+loop)', ta['nlm'])]
-    _ekfs = load_pos(f'{BK}/Town05/fp_head030.txt')  # EKF+尺度 replay (无闭环)
+    _ekfs = load_pos(f'{BK}/Town05/fp_head030.txt')  # EKF+scale replay (无闭环)
     comps += [('w/o loop\n(EKF+scale)', _ekfs),
               ('w/o scale\n(loop only)', load_pos(f'{sub5}/slam_results/exp_trajectory.txt')),
               ('EKF', ta['ekf']), ('VO', ta['vo'])]
@@ -567,7 +575,7 @@ if __name__ == '__main__':
         fig_ablation(ta, tb, mpa)
     except FileNotFoundError as e:
         print(f'[SKIP] ablation_unified.pdf: {e}\n'
-              f'       该图需要 EKF+尺度 replay (NLM_BACKUP_ROOT/_p11_backup_20261014/<seq>/fp_head030.txt)，'
+              f'       该图需要 EKF+scale replay (NLM_BACKUP_ROOT/_p11_backup_20261014/<seq>/fp_head030.txt)，'
               f'资产包不含；先用 export_repro_bundle.py 打包再重绘。', file=sys.stderr)
     fig_kitti_io()
     print('DONE')

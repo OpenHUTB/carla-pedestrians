@@ -2,6 +2,7 @@ NOTICE — third-party components in this repository
 ==================================================
 
 The MIT license in LICENSE covers only the authors' own code under `neuro/`
+(except the vendored class in `neuro/kbs/module/elsarticle/`, which keeps its LPPL terms)
 and the trained weights `neuro/kbs/*.pt`. The directories below are separate
 projects with separate terms. Each list entry states the license file found
 in-tree (or, where none is provided, that none was found).
@@ -25,7 +26,12 @@ in-tree (or, where none is provided, that none was found).
 5. `carla-common/`
    License: MIT, Copyright (c) 2022 wielgosz-info (`carla-common/LICENSE`).
 
-6. `alphapose/`, `openpose/`, `walker/`
+6. `neuro/kbs/module/elsarticle/`
+   License: LaTeX Project Public License 1.3 (`elsarticle.dtx` / `elsarticle.ins`,
+   Elsevier). Vendored copy of the journal class; the build actually uses the
+   TeX Live installation, so this directory is not required to compile.
+
+7. `alphapose/`, `openpose/`, `walker/`
    No license file is present in this repository. These directories are
    wrappers/scripts around the upstream AlphaPose and OpenPose projects; consult
    the upstream terms before redistribution or commercial use.

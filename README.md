@@ -59,7 +59,7 @@ Prerequisites: Python 3.9+, NumPy/SciPy/OpenCV/Pandas/Matplotlib (see `neuro/req
 * **KITTI odometry 07 / 09** — public, see <https://www.cvlibs.net/datasets/kitti/eval_odometry.php>. Conversion to the pipeline format: `neuro/kbs/kitti_prepare_fusion.py`.
 * **EuRoC MAV** (sanity check only) — public, see <https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets>.
 
-Trained weights (`neuro/kbs/pr_head.pt`, `neuro/kbs/pr_scale_head.pt`) and all evaluation scripts **are** included. With the asset bundle in place, `se3_metrics.py` recomputes the `EKF`, `VO` and loop-line cells of Table 4 and the whole closed-loop benchmark; the remaining Table 4 cells (`Ours` on the four CARLA towns, `EKF+尺度`, `ORB-only`) additionally need the pipeline's own trajectory directories, which `export_repro_bundle.py` packages from the run tree. `REPRODUCE.md` states cell by cell what the bundle covers.
+Trained weights (`neuro/kbs/pr_head.pt`, `neuro/kbs/pr_scale_head.pt`) and all evaluation scripts **are** included. With the asset bundle in place, `se3_metrics.py` recomputes the `EKF`, `VO` and loop-line cells of Table 4 and the whole closed-loop benchmark; the remaining Table 4 cells (`Ours` on the four CARLA towns, `EKF+scale`, `ORB-only`) additionally need the pipeline's own trajectory directories, which `export_repro_bundle.py` packages from the run tree. `REPRODUCE.md` states cell by cell what the bundle covers.
 
 ---
 

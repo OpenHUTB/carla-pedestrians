@@ -15,7 +15,7 @@ Environment: `pip install -r neuro/requirements.txt`; for the learned components
 | Step | Command | Checks |
 |---|---|---|
 | dataset structure | `python3 neuro/kbs/check_datasets.py` | the five per-sequence files the metrics need (`ground_truth.txt`, `fusion_pose.txt`, `visual_odometry.txt`, `slam_results/trajectories.mat`, `slam_results/experiences.mat`); exit code 0 = ready |
-| number guard | `python3 neuro/kbs/check_baseline.py --offline` | 113 frozen baseline numbers (`baseline_frozen.json`); any regression exits 1 — run it after every data refresh |
+| number guard | `python3 neuro/kbs/check_baseline.py --offline` | 113 frozen baseline numbers (`baseline_frozen.json`); it guards the **committed** metric files against accidental edits (no data needed, so it cannot validate recomputation) and exits 1 on any regression — run it after touching any of the JSON files |
 
 Re-run log against the released bundle (2026-11, six sequences): `check_datasets.py`
 passes on all; `compute_final_metrics.py` and `se3_metrics.py` reproduce the
@@ -63,9 +63,9 @@ the same JSON for traceability and are available from the authors on request.
 The timing numbers (67--76~FPS on the four CARLA towns, 39~FPS / 25.6~ms on
 KITTI~07, and the per-module shares in Table~5) come from full `matlab -batch`
 wall-clock runs plus one MATLAB-profiler pass on a 250-frame KITTI~07 subset;
-the underlying measurements are recorded in
-`neuro/kbs/FPS_MEASUREMENT_EVIDENCE_20261023.md` (per-town frame counts, wall
-clock, ms/frame, profiler shares). They are **not** recomputable from the
+the underlying measurements (per-town frame counts, wall clock, ms/frame,
+profiler shares) are kept in the internal measurement log that is not part of
+this repository. They are **not** recomputable from the
 released asset bundle: they need the raw frames and a MATLAB install on the
 reference hardware (Intel Core i9-14900HX, 32~GB RAM, CPU only). Per-module
 shares are quoted from the profiler pass because profiler overhead inflates
@@ -110,10 +110,10 @@ full system.** Prepare them per sequence before running either script:
 
 | directory / file | configuration it holds | used by |
 |---|---|---|
-| `slam_results_scale_nlm/trajectories.mat` | **full system** (EKF core + scale head + loop line) — this is the `Ours` column of Table 4 | `se3_metrics.py` → `NLM-全系统` |
-| `slam_results/trajectories.mat` | loop line only, no scale branch | `se3_metrics.py` → `NLM-闭环线`; `compute_final_metrics.py` → `nlm` |
+| `slam_results_scale_nlm/trajectories.mat` | **full system** (EKF core + scale head + loop line) — this is the `Ours` column of Table 4 | `se3_metrics.py` → `NLM-fullsystem` |
+| `slam_results/trajectories.mat` | loop line only, no scale branch | `se3_metrics.py` → `NLM-loopline`; `compute_final_metrics.py` → `nlm` |
 | `slam_results_orbonly/trajectories.mat` | loop line with classical ORB descriptors (§4.4 ablation) | `se3_metrics.py` → `ORB-only` |
-| `_p11_backup_20261014/<seq>/fp_head030.txt` | EKF core + scale head, no loop (dead-band 0.30 replay) | `se3_metrics.py` → `EKF+尺度` |
+| `_p11_backup_20261014/<seq>/fp_head030.txt` | EKF core + scale head, no loop (dead-band 0.30 replay) | `se3_metrics.py` → `EKF+scale` |
 
 Consequently `final_metrics.json` reports the **loop-line** value (Town05:
 41.14 m), not the 18.07 m quoted in Table 4; the full-system column must be
@@ -140,9 +140,9 @@ flag, and every cell carried over from an earlier batch with `"carried": true`
 | column | status in the asset bundle | note |
 |---|---|---|
 | `EKF`, `VO` (both calibers) | **recomputed** | 15 cells, all match Table 4 to the printed precision |
-| `NLM-闭环线` (both calibers) | **recomputed** | 41.14 / 46.37 (Town05), 18.45 / 29.99 (KITTI 07) — this is also the `Ours` cell on KITTI 07 |
+| `NLM-loopline` (both calibers) | **recomputed** | 41.14 / 46.37 (Town05), 18.45 / 29.99 (KITTI 07) — this is also the `Ours` cell on KITTI 07 |
 | `Ours` on 4 CARLA sets (18.07 / 15.31 / 28.75 / 14.44 Sim(3)) | carried | needs `slam_results_scale_nlm/`, not in the bundle |
-| `EKF+尺度` (20.10 / 16.07 / 27.90 / 14.44) | carried | needs `_p11_backup_20261014/<seq>/fp_head030.txt` |
+| `EKF+scale` (20.10 / 16.07 / 27.90 / 14.44) | carried | needs `_p11_backup_20261014/<seq>/fp_head030.txt` |
 | `ORB-only` (44.72 on Town05) | carried | needs `slam_results_orbonly/` |
 | KITTI 09 row (Supplementary S.2) | carried | KITTI 09 is not in the bundle at all |
 
@@ -310,11 +310,11 @@ Cover letter: `cover_letter_KBS.tex`. Highlights: `highlights.tex`.
 | Gap | Status |
 |---|---|
 | processed CARLA sequences not hosted | minimal asset bundle (six sequences, ground truth + EKF/VO + loop-line trajectories) is released; full raw frames available on request |
-| `Ours` column on the 4 CARLA sets, `EKF+尺度` column, `ORB-only` ablation | artifacts not in the released bundle; use `export_repro_bundle.py` on the original run tree to package them, then re-run `se3_metrics.py` |
+| `Ours` column on the 4 CARLA sets, `EKF+scale` column, `ORB-only` ablation | artifacts not in the released bundle; use `export_repro_bundle.py` on the original run tree to package them, then re-run `se3_metrics.py` |
 | KITTI 09 row (Supplementary S.2) | sequence not in the released bundle; row is carried over from the 2026-10 batch |
 | EKF gate thresholds not swept by a shipped script | fixed before the ablation runs, values are source constants |
 | `*.m` legacy scripts | kept for provenance; published numbers come from the Python path |
-| Table 5 raw timing runs | the two MATLAB drivers (`FPS_CLEAN_RUN.m`, `FPS_PROBE_RUN.m`) were session scripts under `/tmp` and are not in the repository; `FPS_MEASUREMENT_EVIDENCE_20261023.md` keeps the measured values, but the measurement cannot be re-executed from the repo alone |
+| Table 5 raw timing runs | the two MATLAB drivers (`FPS_CLEAN_RUN.m`, `FPS_PROBE_RUN.m`) were session scripts under `/tmp` and are not in the repository; the measured values are kept in an internal log, but the measurement cannot be re-executed from the repo alone |
 
 `se3_metrics.json` records this itself: computed cells are plain, carried cells
 carry `"carried": true`, and `_meta.configs_carried` lists them.

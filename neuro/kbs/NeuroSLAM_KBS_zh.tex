@@ -1,0 +1,164 @@
+%%
+%% 中文版 —— 仅供内部审阅 (与 EN 投稿版同构: elsarticle review)
+%% 原文: Knowledge-Based Systems - NeuroSLAM Paper
+%%
+
+\documentclass[review,12pt]{elsarticle}
+\journal{Knowledge-Based Systems}
+
+% CJK 字体: 本机无 SimSun/YaHei, 用 Noto CJK (xelatex + xeCJK 必需, 否则中文字符被静默丢弃)
+\usepackage{xeCJK}
+\setCJKmainfont[BoldFont={Noto Serif CJK SC Bold}]{Noto Serif CJK SC}
+\setCJKsansfont[BoldFont={Noto Sans CJK SC Bold}]{Noto Sans CJK SC}
+
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsfonts}
+% \usepackage{algorithmic}   % 正文未使用算法环境（与英文稿一致）；缺该宏包会直接编译失败
+% \usepackage{algorithm}
+\usepackage{array}
+\usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
+\usepackage{url}
+\usepackage{xurl}
+% 浮动页顶对齐: 消除独页大图上下居中造成的大片留白
+\makeatletter
+\setlength{\@fptop}{0pt}
+\makeatother
+% 浮动参数: 大图优先作页顶浮动、正文填充图下空间, 独页浮动须占满 80% 页高
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.8}
+\renewcommand{\dblfloatpagefraction}{0.8}
+\usepackage{graphicx}
+\graphicspath{{fig/}}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{threeparttable}
+\usepackage[expansion=false]{microtype}
+\usepackage{xspace}
+\usepackage{lineno}
+
+% 行号 (review 模式要求, 与 EN 版一致)
+\modulolinenumbers[5]
+
+\definecolor{darkgreen}{rgb}{0,0.6,0}
+
+\tolerance=300
+\emergencystretch=1em
+\hyphenpenalty=200
+\exhyphenpenalty=200
+
+\DeclareMathOperator*{\argmin}{\arg\!\min}
+
+% Abbreviation macros
+\makeatletter
+\DeclareRobustCommand\onedot{\futurelet\@let@token\@onedot}
+\def\@onedot{\ifx\@let@token.\else.\null\fi\xspace}
+
+\def\eg{\emph{例如}\onedot} \def\Eg{\emph{例如}\onedot}
+\def\ie{\emph{即}\onedot} \def\Ie{\emph{即}\onedot}
+\def\cf{\emph{参见}\onedot} \def\Cf{\emph{参见}\onedot}
+\def\etc{\emph{等等}\onedot} \def\vs{\emph{对比}\onedot}
+\def\wrt{关于\onedot} \def\dof{自由度\onedot}
+\def\etal{\emph{等}\onedot}
+\makeatother
+
+
+\begin{document}
+
+% 标题与作者 (elsarticle frontmatter — 与 EN 投稿版同构)
+\begin{frontmatter}
+
+\title{受脑启发的4自由度定位-建图：前庭-视觉互补融合与空间细胞}
+
+\author[hutb]{Haidong Wang (王海东)\corref{cor1}}
+\ead{open@hutb.edu.cn}
+\author[hutb]{Rongbo Yang (杨荣波)}
+\cortext[cor1]{通讯作者。}
+
+\affiliation[hutb]{organization={湖南工商大学},
+            city={长沙},
+            postcode={410205},
+            country={中国}}
+
+% 摘要
+\begin{abstract}
+    \sloppy
+    受脑启发的空间认知为自主定位提供了可解释的替代方案，用以替代不透明的学习方法。然而，现有的受脑启发框架仍局限于2D环境或简化的视觉处理，在困难条件下缺乏鲁棒的3D空间表征。为克服这些局限，本文提出 NeuroLocMap——一个将定位-建图框架扩展到4自由度状态估计的受脑启发框架，融合了前庭-视觉互补融合与海马-内嗅空间表征。该框架由双流视觉处理（腹侧通路负责识别、背侧通路负责运动）、前庭IMU建模、用于位置编码的3D网格细胞连续吸引子，以及用于闭环检测的经验式认知建图组成；在10状态EKF核之上，两个高层校正补全系统：在线的、仅尺度的单目校正（冻结深度基础模型之上的轻量回归头）与基于学习嵌入的闭环线。在涵盖仿真城市驾驶（CARLA Town05/03/07/10HD）与真实高速公路驾驶（KITTI~07）的五个场景上的实验表明，全系统\emph{在两种评估口径下于全部五个场景上优于}10状态EKF视觉-惯性基线——在仅形状的全Sim(3)重拟合（吸收全局尺度的上界）下改善16.5--59.3\%，在更严格的SE(3)刚性对齐（错误度量尺度无法被吸收）下改善1.5--33.9\%——并相对单目视觉里程计改善33.7--68.8\%。在专门的闭环基准上，经验地图重锚定相对EKF基线多恢复15倍累积全局漂移（55.92~m 对 842.54~m 锚定Sim(3)口径）。\textcolor{red}{参考实现}以实测39--76~FPS运行于CPU（无GPU），其学习组件一次训练、零样本部署，并输出可解释的拓扑经验地图。
+\end{abstract}
+
+\begin{keyword}
+受脑启发的定位-建图 \sep 前庭-视觉融合 \sep 海马空间细胞 \sep 视觉地点识别 \sep 认知建图
+\end{keyword}
+
+\end{frontmatter}
+
+%% ==================== 引言 ====================
+\section{引言}
+\label{sec:intro}
+
+在复杂3D环境中的空间定位与建图是自动驾驶、移动机器人与智能交通系统的基石~\cite{cadena2016past}。作为自主设备的核心感知模块，SLAM直接支撑所有自主运动规划与执行。现代实用方案通常组合相机、IMU，有时还加入GNSS，以实现鲁棒的位姿估计~\cite{saputra2018visual}。传统SLAM方案大多采用优化或滤波框架求解位姿，但在模型可解释性与计算资源消耗上通常存在明显缺陷。
+
+有趣的是，蝙蝠等生物通过融合视觉与前庭信号以及海马空间细胞完成3D导航~\cite{jeffery2013navigating,hafting2005microstructure,taube1990head,finkelstein2016three,solstad2008representation}。这些神经机制使受脑启发的定位框架在可解释性与计算效率上优于传统SLAM。
+
+然而，将这些生物学原理转化为实用的机器人系统面临若干挑战。第一，现有仿生框架大多在2D中运行，而实际部署需要鲁棒的3D空间表征。第二，经典视觉模板匹配对光照与视角变化敏感，限制了困难环境下的地点识别性能。第三，一种将视觉里程计与惯性测量相结合、且不依赖EKF等计算昂贵滤波器的简单而有效的融合策略，在受脑启发定位框架中仍未被充分探索。
+
+为应对这些挑战，本文提出 NeuroLocMap——一个扩展到3D空间内4自由度位姿估计（位姿 $x$、$y$、$z$、$\psi$）的受脑启发定位-建图框架，集成了双流视觉前端（腹侧通路用于场景识别、背侧通路用于运动提取）与前庭前端（用于IMU处理），并以\textcolor{red}{实例化为固定维数EKF的频域融合核}实现多感官融合。该框架采用3D网格细胞与多层头部方向细胞进行空间表征，并采用作为类海马情景记忆的多层经验地图用于地点识别与漂移校正。对于在相对平坦地形（如城市道路、室内地面）上运行的地面车辆，姿态由偏航角 $\psi$ 主导，俯仰与横摆变化通常受车辆动力学约束（$<5^\circ$）。我们的4自由度表征为这类场景提供了高效的定位-建图~\cite{milford2004ratslam,milford2010persistent}。
+
+本文的贡献总结如下：
+\begin{itemize}
+    \item 我们提出一种统一的受脑启发架构，将双流视觉处理与前庭建模、海马-内嗅空间表征耦合，用于4自由度定位与建图。
+    \item 我们开发了受皮层启发的视觉处理，采用显式算子构建视觉模板，将模板数从5（RatSLAM典型值）提升到评估序列中最多的964个（提升192倍以上），从而在困难光照与视角变化下实现更细粒度的地点判别。
+    \item \textcolor{red}{我们设计了一种轻量前庭-视觉融合核，其每次更新的代价与跟踪视觉特征的数量无关：两种模态的频域互补性实例化为带五个门控观测分支的固定维数（10状态）松耦合EKF。两个一次训练的校正支路——冻结单目深度模型之上的在线仅尺度头与学习嵌入闭环线——随后叠加其上并零样本部署。完整流水线仅运行于CPU并维持39--76~FPS（参考前端，含评估与绘图）。}
+    \item 我们在五个多样化场景（CARLA Town05 / 03 / 07 / 10HD，KITTI~07）上验证该框架：全系统\emph{在两种评估口径下于全部五个场景上优于}10状态EKF视觉-惯性基线（Sim(3)仅形状上界：$+$16.5--59.3\%；SE(3)刚性：$+$1.5--33.9\%），相对单目VO改善$+$33.7--68.8\%，且在专门的闭环基准上其经验地图重锚定相对EKF多恢复15倍累积全局漂移（55.92~m 对 842.54~m 锚定Sim(3)口径），同时将可解释的拓扑经验地图作为定位的副产品输出。
+\end{itemize}
+
+\textcolor{red}{以知识为视角：流水线产出的经验地图是一种显式、可解释的拓扑知识表示，闭环则是对该表示的检索与一致性校正。}
+
+%% ==================== 相关工作 ====================
+\input{sec_related_work_zh.tex}
+
+
+%% ==================== 方法 ====================
+\input{sec_method_expanded_zh.tex}
+
+
+%% ==================== 实验 ====================
+\input{experiment_section_zh.tex}
+
+%% ==================== 补充材料 ====================
+\input{supplementary_zh.tex}
+
+
+\section{结论}
+\label{sec:conclusion}
+
+\textcolor{red}{所有仿真序列均由我们自行采集自 CARLA 城镇；未评估第三方 SLAM 基准（如 EuRoC），地图与门控参数的跨数据集泛化能力有待验证。}
+
+随着资源受限环境下对鲁棒、可解释定位系统需求的增加，实现生物学合理的空间表征已成为自主导航与移动机器人不可或缺的一环。本研究提出 NeuroLocMap——一个受脑启发的4自由度定位-建图框架，将3D网格细胞与多层头部方向细胞的计算模型同双流视觉处理、互补前庭-视觉融合相结合。我们描述了受脑启发的空间细胞架构、受腹侧/背侧通路启发的双流视觉处理策略，以及用于多感官集成的\textcolor{red}{轻量频域融合核（以固定维数EKF实现）}。在五个多样化场景（CARLA Town 05 / 03 / 07 / 10HD，KITTI~07）上的实验结果表明，NeuroLocMap 全系统\emph{在两种评估口径下于全部五个场景上优于}10状态EKF视觉-惯性基线——仅形状的全Sim(3)重拟合下$+$16.5--59.3\%、SE(3)刚性对齐（错误度量尺度无法被对齐器吸收）下$+$1.5--33.9\%——并相对单目VO改善$+$33.7--68.8\%，同时保持\textcolor{red}{参考实现}实测39--76~FPS的CPU实时性能。在专门的闭环基准上，其经验地图重锚定相对EKF基线多恢复15倍累积全局漂移（55.92~m 对 842.54~m 锚定Sim(3)口径）。该框架将视觉模板数从约5个（RatSLAM典型值）提升到最多964个（提升192倍以上），使更细粒度的地点判别成为可能，支撑鲁棒的闭环检测。其学习组件——单目尺度校正头与闭环嵌入——仅在仿真上训练一次，即零样本部署于包括真实序列在内的每条测试序列；闭环线直接迁移，尺度头当前的sim-to-real差距\textcolor{red}{在实验中被量化}。未来工作将把该框架扩展到完整的6自由度位姿表征，弥合尺度支路的sim-to-real差距，并部署到神经形态硬件上，逐步实现可在嵌入式平台上实时运行的可解释定位系统。
+
+\section*{致谢}
+
+作者衷心感谢以下资助：湖南省自然科学基金（编号2024JJ6190）、湖南省教育厅科学研究项目（编号22B0646）、基于超大规模真实神经系统的新代类脑智能计算框架研究（24XJJCYJ01001）、湘江实验室开放基金项目（编号23XJ03009）、基于多模态AI大模型的全息媒体创意关键技术研究与应用（编号24XJ01001）、湖南工商大学数字智能+ 交叉学科研究项目（编号2023SZJ19）。
+
+\section*{代码可用性}
+
+NeuroLocMap 代码可在以下地址获取：\url{https://github.com/OpenHUTB/carla-pedestrians}
+
+\section*{利益冲突声明}
+
+作者声明不存在任何已知的可能影响本文所报告工作的竞争性经济利益或个人关系。
+
+\section*{CRediT 作者贡献声明}
+
+\textbf{Haidong Wang}：概念化、方法论、软件、论文初稿撰写。 \textbf{Rongbo Yang}：数据整理、验证、论文审阅与编辑。
+
+\section*{数据可用性}
+
+CARLA 数据集使用开源 CARLA 仿真器（v0.9.16）与公开仓库中的采集代码收集；KITTI 里程计基准公开于 \url{https://www.cvlibs.net/datasets/kitti/}。全部处理序列、训练模型权重与评测脚本见 \url{https://github.com/OpenHUTB/carla-pedestrians}。
+
+%% 参考文献
+\bibliographystyle{elsarticle-num}
+\bibliography{NeuroSLAM_KBS_all}
+
+\end{document}

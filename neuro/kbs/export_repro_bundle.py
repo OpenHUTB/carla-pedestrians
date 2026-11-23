@@ -3,7 +3,7 @@
 """kbs/export_repro_bundle.py — 把 Table 3 还缺的三类产物从原始运行目录打包出来
 
 背景: 公开的复现资产包 (NLM_Repro_Assets_*) 只含每集的 slam_results/ (闭环线),
-因此 Table 3 的 Ours 列 (NLM-全系统)、EKF+尺度 列、以及 §4.4 的 ORB 消融无法从
+因此 Table 3 的 Ours 列 (NLM-fullsystem)、EKF+scale 列、以及 §4.4 的 ORB 消融无法从
 该包复现。本脚本从作者本机的运行结果目录里把这三类产物收齐, 写成 se3_metrics.py
 直接可吃的布局, 并生成 MANIFEST.json (含 sha256 / 行数 / GT 长度校验)。
 
@@ -34,7 +34,7 @@ SETS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion
         'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion']
 SHORT = {'Town05Data_IMU_Fusion': 'Town05', 'Town03Data_IMU_Fusion': 'Town03',
          'Town07Data_IMU_Fusion': 'Town07', 'Town10HDData_IMU_Fusion': 'Town10HD'}
-# KITTI 07 无尺度支路 (S.1 零样本失效), 因此不需要 EKF+尺度 产物
+# KITTI 07 无尺度支路 (S.1 零样本失效), 因此不需要 EKF+scale 产物
 NO_SCALE = {'KITTI07Data_IMU_Fusion'}
 
 
@@ -71,6 +71,21 @@ def probe_traj(path, var='exp_trajectory'):
     return len(a), np.round(a[[0, -1]], 2).tolist()
 
 
+def resolve_root(src):
+    """把 --src 归一化到数据集根（容忍 01_NeuroSLAM_Datasets/ 前缀、datasets/ 前缀）。
+
+    资产包与作者 run 树的层级不同：包是 <root>/datasets/<seq>/，run 树常是
+    <root>/01_NeuroSLAM_Datasets/<seq>/。以前只认后者，直接对资产包跑会误报
+    "找不到 ground_truth.txt"（文件其实在上一级）。
+    """
+    for pre in ('', '01_NeuroSLAM_Datasets', 'datasets', 'datasets/01_NeuroSLAM_Datasets'):
+        cand = os.path.join(src, pre) if pre else src
+        for probe in ('ground_truth.txt', 'slam_results'):
+            if os.path.exists(os.path.join(cand, SETS[0], probe)):
+                return cand, pre
+    return src, ''
+
+
 def find(root, rel_a, rel_b):
     for p in (os.path.join(root, rel_a), os.path.join(root, rel_b)):
         if os.path.exists(p):
@@ -86,17 +101,18 @@ def main():
     a = ap.parse_args()
 
     ds_rel = '01_NeuroSLAM_Datasets'
+    base, pre = resolve_root(a.src)
     items, missing, problems = [], [], []
 
     for sd in SETS:
-        gt = find(a.src, f'{ds_rel}/{sd}/ground_truth.txt', f'{sd}/ground_truth.txt')
+        gt = find(base, f'{sd}/ground_truth.txt', f'{sd}/ground_truth.txt')
         gl = gt_len(gt) if gt else None
         if gt is None:
             problems.append(f'{sd}: 找不到 ground_truth.txt, 无法校验行数与长度')
 
         # 评估还需要的参考输入: GT / EKF 核 / VO (缺失不算错, 但会记录)
         for fn in ('ground_truth.txt', 'fusion_pose.txt', 'visual_odometry.txt'):
-            p = find(a.src, f'{ds_rel}/{sd}/{fn}', f'{sd}/{fn}')
+            p = find(base, f'{sd}/{fn}', f'{sd}/{fn}')
             if p is None:
                 if fn == 'visual_odometry.txt':
                     continue           # KITTI 的 VO 在别的目录, se3_metrics.py 有回退
@@ -104,9 +120,12 @@ def main():
                 continue
             items.append(('input', sd, p, fn, None, gl))
 
-        for cfg, sub in [('NLM-全系统', 'slam_results_scale_nlm'),
+        # 闭环线也一起收: 否则从零构建的 --out 里没有 slam_results/,
+        # se3_metrics 会把 Table 1/3 的 NLM 列全部结转成 carried
+        for cfg, sub in [('NLM-loopline', 'slam_results'),
+                         ('NLM-fullsystem', 'slam_results_scale_nlm'),
                          ('ORB-only', 'slam_results_orbonly')]:
-            p = find(a.src, f'{ds_rel}/{sd}/{sub}/trajectories.mat', f'{sd}/{sub}/trajectories.mat')
+            p = find(base, f'{sd}/{sub}/trajectories.mat', f'{sd}/{sub}/trajectories.mat')
             if p is None:
                 missing.append(f'{sd}/{cfg} ({sub}/trajectories.mat)')
                 continue
@@ -120,20 +139,22 @@ def main():
 
         if sd in NO_SCALE:
             continue
-        p = find(a.src, f'_p11_backup_20261014/{SHORT[sd]}/fp_head030.txt',
-                 f'_p11_backup_20261014/{SHORT[sd]}/fp_head030.txt')
+        bk_rel = f'_p11_backup_20261014/{SHORT[sd]}/fp_head030.txt'
+        p = find(base, bk_rel, f'../{bk_rel}')
         if p is None:
-            missing.append(f'{sd}/EKF+尺度 (_p11_backup_20261014/{SHORT[sd]}/fp_head030.txt)')
+            missing.append(f'{sd}/EKF+scale (_p11_backup_20261014/{SHORT[sd]}/fp_head030.txt)')
             continue
         df = pd.read_csv(p)
         if not all(c in df.columns for c in ('pos_x', 'pos_y', 'pos_z')):
-            problems.append(f'{sd}/EKF+尺度: 缺少 pos_x/y/z 列')
+            problems.append(f'{sd}/EKF+scale: 缺少 pos_x/y/z 列')
             continue
         if gl and len(df) != gl[1]:
-            problems.append(f'{sd}/EKF+尺度: {len(df)} 行 != GT {gl[1]} 行')
-        items.append(('EKF+尺度', sd, p, 'fp_head030.txt', len(df), gl))
+            problems.append(f'{sd}/EKF+scale: {len(df)} 行 != GT {gl[1]} 行')
+        items.append(('EKF+scale', sd, p, 'fp_head030.txt', len(df), gl))
 
     print(f'src : {a.src}')
+    if pre:
+        print(f'      → 数据集根识别为 {base}')
     print(f'out : {a.out}')
     print(f'找到 {len(items)} 个产物, 缺 {len(missing)} 个')
     for cfg, sd, p, fn, n, gl in items:
@@ -159,10 +180,11 @@ def main():
     man = {'_meta': {'src': a.src, 'n_items': len(items), 'missing': missing, 'problems': problems},
            'files': {}}
     for cfg, sd, p, fn, n, gl in items:
-        if cfg == 'EKF+尺度':
+        if cfg == 'EKF+scale':
             dst_dir = os.path.join(a.out, '_p11_backup_20261014', SHORT[sd])
-        else:                                   # input / NLM-全系统 / ORB-only
-            sub = {'NLM-全系统': 'slam_results_scale_nlm',
+        else:                                   # input / NLM-fullsystem / ORB-only
+            sub = {'NLM-loopline': 'slam_results',
+                   'NLM-fullsystem': 'slam_results_scale_nlm',
                    'ORB-only': 'slam_results_orbonly'}.get(cfg, '')
             dst_dir = os.path.join(a.out, ds_rel, sd, sub)
         os.makedirs(dst_dir, exist_ok=True)

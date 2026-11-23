@@ -28,7 +28,6 @@
 # ============ Markdown文档 (保留核心README) ============
 *.md
 !README.md
-!START_HERE.md
 !**/README.md
 !LICENSE.md
 
@@ -160,7 +159,6 @@ resources/
 # ============ 保留的核心文件 (明确包含) ============
 # 这些文件即使匹配上面的规则也要保留
 !neuro/kbs/*.md
-!neuro/START_HERE.md
 !neuro/07_test/07_test/test_imu_visual_slam/core/README_test_imu_visual_fusion_slam2.md
 !neuro/07_test/07_test/test_imu_visual_slam/parameter_search/参数网格搜索指南.md
 carla/
@@ -178,10 +176,7 @@ carla/
 !neuro/kbs/repro_assets/**/*.mat
 !neuro/kbs/repro_assets/**/*.txt
 !neuro/kbs/repro_assets/**/*.md
-
-# fig/ 只保留可编译产物; pptx 源稿移至 docs/src/
-neuro/kbs/fig/**/*.pptx
-
-# 中文版仅保留本地, 不入公开仓库
-neuro/kbs/*_zh.tex
-neuro/kbs/*_zh.pdf
+# 闭环线目录: 上面的 **/slam_results/ 会把整个目录判为忽略, 之后按文件名的放行规则
+# 无法生效 (git 不会进入被忽略的目录), 必须显式放行该目录本身
+!neuro/kbs/repro_assets/**/slam_results/
+!neuro/kbs/repro_assets/**/slam_results/**

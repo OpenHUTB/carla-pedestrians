@@ -228,6 +228,6 @@ fprintf('  ✓ 注意力: 层次化空间注意力\n');
 fprintf('  ✓ 时序: LSTM递归建模\n');
 fprintf('\n下一步:\n');
 fprintf('  1. 运行完整SLAM测试: test_imu_visual_slam_hart_cornet.m\n');
-fprintf('  2. 查看详细文档: README_HART_CORNET.md\n');
+fprintf('  2. Hart-CORnet module: neuro/04_visual_template/hart_cornet.m\n');
 fprintf('  3. 调整参数优化性能\n');
 fprintf('========================================\n');

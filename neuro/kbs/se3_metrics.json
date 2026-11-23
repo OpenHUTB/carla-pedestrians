@@ -15,21 +15,21 @@
       "sim3_drift": 13.26,
       "sim3_fitted_scale": 1.4459
     },
-    "EKF+尺度": {
+    "EKF+scale": {
       "se3_rmse": 33.26,
       "se3_drift": 4.39,
       "sim3_rmse": 20.1,
       "sim3_drift": 4.66,
       "sim3_fitted_scale": 1.4913
     },
-    "NLM-闭环线": {
+    "NLM-loopline": {
       "se3_rmse": 46.37,
       "se3_drift": 11.26,
       "sim3_rmse": 41.14,
       "sim3_drift": 14.3,
       "sim3_fitted_scale": 1.4229
     },
-    "NLM-全系统": {
+    "NLM-fullsystem": {
       "se3_rmse": 32.67,
       "se3_drift": 4.51,
       "sim3_rmse": 18.07,
@@ -60,21 +60,21 @@
       "sim3_drift": 5.14,
       "sim3_fitted_scale": 0.9566
     },
-    "EKF+尺度": {
+    "EKF+scale": {
       "se3_rmse": 17.47,
       "se3_drift": 0.59,
       "sim3_rmse": 16.07,
       "sim3_drift": 3.44,
       "sim3_fitted_scale": 1.1193
     },
-    "NLM-闭环线": {
+    "NLM-loopline": {
       "se3_rmse": 23.05,
       "se3_drift": 4.98,
       "sim3_rmse": 22.91,
       "sim3_drift": 5.03,
       "sim3_fitted_scale": 0.9617
     },
-    "NLM-全系统": {
+    "NLM-fullsystem": {
       "se3_rmse": 17.31,
       "se3_drift": 0.24,
       "sim3_rmse": 15.31,
@@ -105,21 +105,21 @@
       "sim3_drift": 12.82,
       "sim3_fitted_scale": 0.8032
     },
-    "EKF+尺度": {
+    "EKF+scale": {
       "se3_rmse": 29.21,
       "se3_drift": 13.92,
       "sim3_rmse": 27.9,
       "sim3_drift": 11.57,
       "sim3_fitted_scale": 0.879
     },
-    "NLM-闭环线": {
+    "NLM-loopline": {
       "se3_rmse": 42.87,
       "se3_drift": 18.86,
       "sim3_rmse": 39.49,
       "sim3_drift": 13.17,
       "sim3_fitted_scale": 0.7715
     },
-    "NLM-全系统": {
+    "NLM-fullsystem": {
       "se3_rmse": 31.51,
       "se3_drift": 15.22,
       "sim3_rmse": 28.75,
@@ -150,21 +150,21 @@
       "sim3_drift": 1.57,
       "sim3_fitted_scale": 0.6461
     },
-    "EKF+尺度": {
+    "EKF+scale": {
       "se3_rmse": 49.89,
       "se3_drift": 13.4,
       "sim3_rmse": 14.44,
       "sim3_drift": 2.92,
       "sim3_fitted_scale": 1.918
     },
-    "NLM-闭环线": {
+    "NLM-loopline": {
       "se3_rmse": 57.38,
       "se3_drift": 19.01,
       "sim3_rmse": 18.61,
       "sim3_drift": 1.57,
       "sim3_fitted_scale": 0.646
     },
-    "NLM-全系统": {
+    "NLM-fullsystem": {
       "se3_rmse": 49.88,
       "se3_drift": 13.4,
       "sim3_rmse": 14.44,
@@ -195,7 +195,7 @@
       "sim3_drift": 8.33,
       "sim3_fitted_scale": 0.8083
     },
-    "NLM-闭环线": {
+    "NLM-loopline": {
       "se3_rmse": 29.99,
       "se3_drift": 13.09,
       "sim3_rmse": 18.45,
@@ -226,7 +226,7 @@
       "sim3_drift": 6.74,
       "sim3_fitted_scale": 1.1853
     },
-    "NLM-闭环线": {
+    "NLM-loopline": {
       "se3_rmse": 54.63,
       "se3_drift": 8.28,
       "sim3_rmse": 42.37,
@@ -242,45 +242,45 @@
     },
     "data_root": "$NLM_DATA_ROOT/",
     "data_root_note": "token for the directory that was evaluated: the released bundle dataset root (NLM_Repro_Assets_*/datasets/) in place of $NLM_DATA_ROOT, or the repo default ../data/01_NeuroSLAM_Datasets/",
-    "note": "Keys computed from the data root are plain. Keys with \"carried\": true were computed in an earlier batch and their artifact is NOT under the data root (EKF+尺度 needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-全系统 needs slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are carried over from the previous JSON so that Table 4 stays complete, and are replaced the moment the artifact is present.",
+    "note": "Keys computed from the data root are plain. Keys with \"carried\": true were computed in an earlier batch and their artifact is NOT under the data root (EKF+scale needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-fullsystem needs slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are carried over from the previous JSON so that Table 4 stays complete, and are replaced the moment the artifact is present.",
     "configs_computed": [
       "KITTI07Data_IMU_Fusion/EKF",
-      "KITTI07Data_IMU_Fusion/NLM-闭环线",
+      "KITTI07Data_IMU_Fusion/NLM-loopline",
       "KITTI07Data_IMU_Fusion/ORB-only",
       "KITTI07Data_IMU_Fusion/VO",
       "KITTI09Data_IMU_Fusion/EKF",
-      "KITTI09Data_IMU_Fusion/NLM-闭环线",
+      "KITTI09Data_IMU_Fusion/NLM-loopline",
       "KITTI09Data_IMU_Fusion/VO",
       "Town03Data_IMU_Fusion/EKF",
-      "Town03Data_IMU_Fusion/EKF+尺度",
-      "Town03Data_IMU_Fusion/NLM-全系统",
-      "Town03Data_IMU_Fusion/NLM-闭环线",
+      "Town03Data_IMU_Fusion/EKF+scale",
+      "Town03Data_IMU_Fusion/NLM-fullsystem",
+      "Town03Data_IMU_Fusion/NLM-loopline",
       "Town03Data_IMU_Fusion/ORB-only",
       "Town03Data_IMU_Fusion/VO",
       "Town05Data_IMU_Fusion/EKF",
-      "Town05Data_IMU_Fusion/EKF+尺度",
-      "Town05Data_IMU_Fusion/NLM-全系统",
-      "Town05Data_IMU_Fusion/NLM-闭环线",
+      "Town05Data_IMU_Fusion/EKF+scale",
+      "Town05Data_IMU_Fusion/NLM-fullsystem",
+      "Town05Data_IMU_Fusion/NLM-loopline",
       "Town05Data_IMU_Fusion/ORB-only",
       "Town05Data_IMU_Fusion/VO",
       "Town07Data_IMU_Fusion/EKF",
-      "Town07Data_IMU_Fusion/EKF+尺度",
-      "Town07Data_IMU_Fusion/NLM-全系统",
-      "Town07Data_IMU_Fusion/NLM-闭环线",
+      "Town07Data_IMU_Fusion/EKF+scale",
+      "Town07Data_IMU_Fusion/NLM-fullsystem",
+      "Town07Data_IMU_Fusion/NLM-loopline",
       "Town07Data_IMU_Fusion/ORB-only",
       "Town07Data_IMU_Fusion/VO",
       "Town10HDData_IMU_Fusion/EKF",
-      "Town10HDData_IMU_Fusion/EKF+尺度",
-      "Town10HDData_IMU_Fusion/NLM-全系统",
-      "Town10HDData_IMU_Fusion/NLM-闭环线",
+      "Town10HDData_IMU_Fusion/EKF+scale",
+      "Town10HDData_IMU_Fusion/NLM-fullsystem",
+      "Town10HDData_IMU_Fusion/NLM-loopline",
       "Town10HDData_IMU_Fusion/ORB-only",
       "Town10HDData_IMU_Fusion/VO"
     ],
     "configs_carried": [],
     "table3_notes": [
-      "KITTI07 Ours cell (18.45 / 29.99) equals NLM-闭环线: the scale branch is inactive zero-shot on real imagery (Supplementary S.1), so the full system there IS the loop line.",
-      "Town10HD Ours == EKF+尺度 (14.44): the single accepted loop link is inert on the open layout.",
-      "Table 4 EKF+尺度 and ORB-only cells come from artifacts outside the released asset bundle unless export_repro_bundle.py has been run over the original run tree."
+      "KITTI07 Ours cell (18.45 / 29.99) equals NLM-loopline: the scale branch is inactive zero-shot on real imagery (Supplementary S.1), so the full system there IS the loop line.",
+      "Town10HD Ours == EKF+scale (14.44): the single accepted loop link is inert on the open layout.",
+      "Table 4 EKF+scale and ORB-only cells come from artifacts outside the released asset bundle unless export_repro_bundle.py has been run over the original run tree."
     ]
   }
 }

@@ -1,37 +1,35 @@
-# `fig/` 资产说明
+# neuro/kbs — evaluation, manuscript sources and reproduction
 
-本目录既有论文实际编译的 7 张图，也有作图源文件（`.pptx`）和历史草稿图。
-`NeuroSLAM_KBS.tex` 只引用下面第一张表的 7 个 PDF；其余文件不参与编译。
+This directory holds everything that produces the numbers in the manuscript:
+metric scripts, the gate/scale/loop toolchain, trained weights (`pr_head.pt`,
+`pr_scale_head.pt`), figure sources, the LaTeX sources and the per-sequence
+records.
 
-## 参与编译（7 张）
+> **Naming.** Manuscript = *NeuroLocMap*; code and LaTeX sources keep the historical
+> *NeuroSLAM* file names. Same system, two names.
 
-| 图标签 | 文件 | 定义于 |
-|---|---|---|
-| `fig:3D_grid_cell_network` | `fig/3d_grid_cell_network.pdf` | `sec_method_expanded.tex` |
-| `fig:ablation_and_vt` | `fig/ablation_unified.pdf` | `experiment_section.tex` |
-| `fig:imu_visual_fusion` | `fig/imu_visual_complementary_fusion.pdf` | `sec_method_expanded.tex` |
-| `fig:kitti_input_output` | `fig/KITTI_07_input_output_visualization.pdf` | `experiment_section.tex` |
-| `fig:performance_summary` | `fig/performance_summary.pdf` | `experiment_section.tex` |
-| `fig:representative_performance` | `fig/representative_performance.pdf` | `experiment_section.tex` |
-| `fig:system_overview` | `fig/2_framework.pdf` | `sec_method_expanded.tex` |
+Start from the repository root — the main README is there:
 
-## 不参与编译
+| Looking for | File |
+|---|---|
+| project overview, repository layout, data availability, license | [`../../README.md`](../../README.md) |
+| reproduction guide, table by table, script by script | [`REPRODUCE.md`](REPRODUCE.md) |
+| one-command check of every number against the data (`PASS/FAIL/SKIP`) | [`run_all_checks.py`](run_all_checks.py) (section-by-section semantics are documented at the top of the script) |
+| manuscript sources | `NeuroSLAM_KBS.tex` (main), `supplementary_KBS.tex`, `cover_letter_KBS.tex`, `highlights.tex` |
+| checked-in manuscript values | [`expected_values.json`](expected_values.json) (as printed) / [`se3_metrics.json`](se3_metrics.json) + [`final_metrics.json`](final_metrics.json) (as computed) |
 
-- `1_abstract.pdf`（0.8 MB）——图形摘要候选，投稿系统单独上传，正文未排版引用；
-- `ekf_curve_KITTI07 / MH_03 / Town01 / Town02 / Town03 / Town05 / Town07 / Town10HD.pdf`
-  与 `vt_growth_all_datasets.pdf`——早期草稿的逐集曲线，当前稿已不再使用（Town01/02 也不在主表）；
-- 7 个 `.pptx`（合计约 21.8 MB，含 `other/` 下 5 个）——作图源文件，重建 PDF 时才需要。
+| Directory | Role |
+|---|---|
+| `fig/` | figure PDFs actually compiled, plus `.pptx` drawing sources — see `fig/README.md` |
+| `src/` | nine early draft drawing scripts (`bio_nav_architecture`, `experience_map`, `grid_cell_activity`, `hdc_network`); none of their outputs is in the current manuscript |
+| `module/elsarticle/` | vendored Elsevier class (the build uses the TeX Live installation; kept for offline/Overleaf builds) |
+| `scale_p1/` | scale-series intermediates written by `scale_series_p1.py` (Supplementary S.1 figure) |
+| `other/` | journal declaration form (`declarationStatement_kbs.docx`) |
+| `legacy/` | older LaTeX variants, not compiled |
+| `repro_assets/` | placeholder for the minimal asset bundle — see its `README.md` |
 
-## 非 PDF 资产（18 个，均不被 `\includegraphics` 引用）
-
-| 类别 | 文件 | 说明 |
-|---|---|---|
-| 作图源 | 7 个 `.pptx`（含 `other/` 下 5 个） | 结果/方法图的原稿，重建时才需要，合计约 21.8 MB |
-| EPS 备份 | `ablation_unified.eps`、`performance_summary.eps` | 出版社排版阶段可能要求 EPS，保留 |
-| PNG 备份 | `ekf_curve_{Town01,Town02,Town05,Town10HD}.png`、`other/pipeline.png` | 草稿期位图 |
-| 照片 | `HaidongWang.jpg`、`PengfeiXiao.jpg` | 正文未使用；`other/` 下那份重复副本已删除 |
-
-## 重建
-结果类 4 张由 `../regen_figures.py` 生成（需 `neuro/data/` 下的轨迹）；
-方法类 3 张与 `1_abstract.pdf` 由本目录的 `.pptx` 源文件导出；`../src/` 下的
-九个绘图脚本是早期草稿，输出为 `bio_nav_architecture` 等，未进入本稿。
+Only the files listed above are release documentation. The Chinese-language
+research notes that used to sit here (design log, intermediate result dumps,
+code-reading notes, rerun manual, asset manifest, FPS evidence) have been moved
+out of the repository to keep it English-only; `REPRODUCE.md` is the single
+authority for what is reproducible. Unused older LaTeX variants are in `legacy/`.

@@ -10,7 +10,9 @@ neuro/kbs/repro_assets/
 └── _p11_backup_20261014/<Town05|Town03|Town07|Town10HD>/fp_head030.txt    # EKF+scale column
 ```
 
-Produce them on the machine that holds the original run tree:
+Produce them on the machine that holds the original run tree (the released bundle
+root or its `datasets/` also work as `--src`; the script copies `slam_results/` too,
+so the output directory is self-contained for `se3_metrics.py`):
 
 ```bash
 python3 neuro/kbs/export_repro_bundle.py --src /path/to/runs --out neuro/kbs/repro_assets

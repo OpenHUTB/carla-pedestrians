@@ -26,3 +26,10 @@
 *.pdf binary
 *.png binary
 *.xlsx binary
+*.pt binary
+*.npz binary
+*.eps binary
+*.pptx binary
+*.gz binary
+*.ttc binary
+*.tif binary

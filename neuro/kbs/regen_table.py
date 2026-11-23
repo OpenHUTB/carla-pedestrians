@@ -8,7 +8,8 @@
 """
 import numpy as np, os, os
 
-ROOT = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/')
+_HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.environ.get('NLM_DATA_ROOT', os.path.join(_HERE, '..', 'data', '01_NeuroSLAM_Datasets')).rstrip('/')
 
 def load_pos(path, poscols=None):
     """poscols=None: 自动探测(首行是表头→列1,2,3; 否则列0,1,2)。"""

@@ -7,7 +7,7 @@
 输出: neuro/kbs/final_metrics.json + 打印摘要
 注: 闭环计数口径 = 每 experience 首条 link (论文沿用此口径, 用户已确认)
 """
-import numpy as np, pandas as pd, scipy.io as sio, json, os
+import numpy as np, pandas as pd, scipy.io as sio, json, os, sys
 
 # 锚定到脚本所在目录: 本脚本含 ../ 相对路径, 需保证从任意 cwd 调用均正确
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -15,6 +15,10 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # 数据根可覆盖 (与 se3_metrics.py / check_datasets.py 同一约定):
 # NLM_DATA_ROOT=/path/to/datasets python3 compute_final_metrics.py
 D = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/') + '/'
+if not os.path.isdir(D):
+    print(f'[ERROR] data root not found: {os.path.abspath(D)}\n'
+             f'        set NLM_DATA_ROOT=<bundle>/datasets (or a full run tree) and retry')
+    sys.exit(2)
 OUT = {}
 
 def sim3_full(est, gt):
@@ -105,7 +109,7 @@ for d in ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusi
 OUT = {'table1': t1}
 META = {
     'caliber': 'loop-line configuration (slam_results/), NOT the full system',
-    'table3_source': 'se3_metrics.json -> NLM-全系统 (slam_results_scale_nlm/)',
+    'table3_source': 'se3_metrics.json -> NLM-fullsystem (slam_results_scale_nlm/)',
     'batch': '2026-10-14; closed-loop Town01 re-collected 2026-11',
 }
 with open('../kbs/final_metrics.json', 'w') as f:

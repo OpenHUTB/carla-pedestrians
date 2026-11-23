@@ -10,11 +10,16 @@ RTE 数字为 kitti_rte.py 实测 (复现: python3 kitti_rte.py)。
 """
 import json
 import numpy as np
+import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+plt.rcParams.update({'font.family': 'sans-serif',
+                        'font.sans-serif': ['DejaVu Sans'],
+                        'mathtext.fontset': 'dejavusans'})
 
-KBS = '../kbs'
+_HERE = os.path.dirname(os.path.abspath(__file__))
+KBS = _HERE
 FIG = f'{KBS}/fig'
 with open(f'{KBS}/se3_metrics.json') as f:
     SE3 = json.load(f)
@@ -49,13 +54,13 @@ def bar_panel(ax, metric, title, ylim):
     w = 0.19
     order = [('VO', 'VO', C_VO),
              ('EKF', 'EKF', C_EKF),
-             ('EKF+尺度', 'EKF+scale', C_EKFS),
-             ('NLM-全系统', 'NLM full', C_NLM)]
+             ('EKF+scale', 'EKF+scale', C_EKFS),
+             ('NLM-fullsystem', 'NLM full', C_NLM)]
     for off, (key, lab, col) in enumerate(order):
         for j, (k, _) in enumerate(DS):
             v = row(k, key, metric)
-            if v is None and key == 'NLM-全系统':
-                v = row(k, 'NLM-闭环线', metric)  # KITTI 无全系统, 闭环线承载
+            if v is None and key == 'NLM-fullsystem':
+                v = row(k, 'NLM-loopline', metric)  # KITTI 无全系统, 闭环线承载
             cx = x[j] + (off - 1.5) * w
             if v is None:
                 ax.text(cx, ylim * 0.03, 'n/a', ha='center', fontsize=6.5, color=C_GRAY)
@@ -115,7 +120,7 @@ plt.close(fig)
 print('OK  fig/all_results_overview.pdf + .png')
 for k, lab in DS:
     vals = []
-    for cfg in ['VO', 'EKF', 'EKF+尺度', 'NLM-全系统', 'NLM-闭环线']:
+    for cfg in ['VO', 'EKF', 'EKF+scale', 'NLM-fullsystem', 'NLM-loopline']:
         v = row(k, cfg, 'sim3_rmse')
         vals.append(f'{cfg[:4]}={v if v is not None else "n/a"}')
     print(f'  {lab:10s} ' + '  '.join(vals))

@@ -11,25 +11,25 @@
 \usepackage{tabularx}
 \usepackage{ragged2e}
 \usepackage{amsmath,amssymb,amsfonts}
-% \usepackage{algorithmic}   % 正文未使用算法环境; 若期刊要求可换 algorithm2e
+% \usepackage{algorithmic}   % no algorithm environment in the body; switch to algorithm2e if the journal requires it
 % \usepackage{algorithm}
 \usepackage{array}
 \usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
 \usepackage{url}
 \usepackage{xurl}
 \emergencystretch=1.5em
-% 浮动页顶对齐: 消除独页大图上下居中造成的大片留白
+% float alignment: top-align full-page floats to remove the large vertical gaps of centred full-page figures
 \makeatletter
 \setlength{\@fptop}{0pt}
 \makeatother
-% 浮动参数: 大图优先作页顶浮动、正文填充图下空间, 独页浮动须占满 80% 页高
+% float parameters: large figures prefer top-of-page floats, body text fills the space below, full-page floats must occupy 80% of the page height
 \renewcommand{\topfraction}{0.9}
 \renewcommand{\dbltopfraction}{0.9}
 \renewcommand{\textfraction}{0.05}
 \renewcommand{\floatpagefraction}{0.8}
 \renewcommand{\dblfloatpagefraction}{0.8}
 \usepackage{graphicx}
-% 图片路径（统一指向本地fig目录）
+% graphics path (points to the local fig/ directory)
 \graphicspath{{fig/}}
 \usepackage{xcolor}
 \usepackage{multirow}
@@ -38,10 +38,10 @@
 \usepackage{xspace}
 \usepackage{lineno}
 
-% 行号 (review 模式要求)
+% line numbers (required in review mode)
 \modulolinenumbers[5]
 
-% 定义自定义颜色（仅作图使用）
+% custom colours (drawing only)
 \definecolor{darkgreen}{rgb}{0,0.6,0}
 
 \DeclareMathOperator*{\argmin}{\arg\!\min}
@@ -62,14 +62,14 @@
 \makeatother
 
 
-% 标题与作者 (elsarticle frontmatter — 置于 \begin{document} 之后、正文之前)
+% title and authors (elsarticle frontmatter: after \begin{document}, before the body)
 \begin{document}
 
 \begin{frontmatter}
 
 \title{Brain-Inspired 4-DoF Localization-Mapping: Complementary Vestibular-Visual Fusion with Spatial Cells}
 
-% 邮箱待定稿填写 (HUTB 邮箱域名 hutb.edu.cn)
+% e-mail to be filled in at proof stage (HUTB domain, hutb.edu.cn)
 \author[hutb]{Haidong Wang\corref{cor1}}
 \ead{open@hutb.edu.cn}
 \author[hutb]{Rongbo Yang}

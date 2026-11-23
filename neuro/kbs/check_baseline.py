@@ -43,7 +43,7 @@ def collect():
             cur[f'{sd}/{cfg}/sim3_rmse'] = v[key]['rmse']
             cur[f'{sd}/{cfg}/sim3_drift'] = v[key]['drift']
     for sd, row in sm.items():
-        for cfg in ['NLM-全系统', 'NLM-闭环线', 'EKF', 'VO', 'EKF+尺度', 'ORB-only']:
+        for cfg in ['NLM-fullsystem', 'NLM-loopline', 'EKF', 'VO', 'EKF+scale', 'ORB-only']:
             if cfg in row and 'se3_rmse' in row[cfg]:
                 cur[f'{sd}/{cfg}/se3_rmse'] = row[cfg]['se3_rmse']
                 cur[f'{sd}/{cfg}/se3_drift'] = row[cfg]['se3_drift']

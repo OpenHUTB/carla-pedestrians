@@ -120,9 +120,17 @@ def compute(base):
     return out
 
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def default_root():
+    return os.environ.get('NLM_DATA_ROOT',
+                          os.path.join(HERE, '..', 'data', '01_NeuroSLAM_Datasets'))
+
+
 def main(base=None):
-    base = base or (sys.argv[1] if len(sys.argv) > 1 else
-                    '../data/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion/')
+    base = base or (os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else
+                    os.path.join(default_root(), 'KITTI07Data_IMU_Fusion'))
     d = compute(base)
     print(f'== {os.path.basename(d["base"].rstrip("/"))}  GT {d["gt_len_m"]} m ==')
     print(f"{'config':10s} {'frames':>7s} {'RTE% raw':>10s} {'RTE% aligned':>13s} {'ATE m':>8s} {'sim3 s':>8s}")

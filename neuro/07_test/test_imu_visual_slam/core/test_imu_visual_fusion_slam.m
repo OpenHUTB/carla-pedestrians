@@ -370,7 +370,7 @@ if isempty(NLM_DC_COLLECT_ONLY), NLM_DC_COLLECT_ONLY = false; end
 dc_events = zeros(0, 4);      % [frame, dx, dy, dz] 重锚定跳变事件
 dc_prev_exp_id = 0; dc_prev_delta = zeros(1, 3);
 
-% [A-fix] 闭环约束漂移场 (2026-10-06, 设计见 neuro/kbs/NLM_LOOP_DESIGN.md):
+% [A-fix] 闭环约束漂移场 (2026-10-06):
 % NLM_LOOP_CONSTRAINT=1 时 exp_map_iteration 只记录闭环约束事件(不动节点/
 % NLM_LOOP_CORR, 零地图反馈), 轨迹结束后在本脚本输出层注入约束漂移场:
 % [t_old, t_now] 区间预校正消除 t_now 处重锚定阶梯, 之后保持修正(类DC v3结构)。
@@ -384,7 +384,7 @@ global NLM_LOOP_BETA NLM_LOOP_CE_MIN NLM_LOOP_STEP_MAX;
 if isempty(NLM_LOOP_BETA), NLM_LOOP_BETA = 1.0; end
 if isempty(NLM_LOOP_CE_MIN), NLM_LOOP_CE_MIN = 3; end
 if isempty(NLM_LOOP_STEP_MAX), NLM_LOOP_STEP_MAX = 25; end
-global NLM_SIM3_REANCHOR;   % S2: 闭环时全Sim(3)重锚 (默认关; 设计见 NLM_LOOP_DESIGN.md §9)
+global NLM_SIM3_REANCHOR;   % S2: 闭环时全Sim(3)重锚 (默认关)
 if isempty(NLM_SIM3_REANCHOR), NLM_SIM3_REANCHOR = false; end
 global NLM_SIM3_WIN;        % S2: 当前lap拟合窗帧数 (win=250 双口径最优, kb_s2_winsweep_v2 自校准)
 if isempty(NLM_SIM3_WIN), NLM_SIM3_WIN = 250; end
@@ -792,7 +792,7 @@ if NLM_DC_ENABLE && ~NLM_DC_COLLECT_ONLY && ~isempty(dc_events)
             size(dc_events, 1), NLM_DC_W0, NLM_DC_W_PER_M, norm(d_field(end, :) - C_cum(end, :)));
 end
 
-% [A-fix] 闭环约束漂移场注入 (设计见 neuro/kbs/NLM_LOOP_DESIGN.md):
+% [A-fix] 闭环约束漂移场注入:
 % 约束事件 (t_now, t_old, c=-β·clamp(r)): 区间 [t_old, t_now) 输出从0爬坡到c,
 % t_now 处重锚定后原始轨迹已锚到matched节点(残差消失), 之后 L=0。
 % 净效果: t_now 处阶梯被预校正抵消, 且 t_now 之后不引入 -r 持续偏差。
@@ -800,7 +800,7 @@ end
 % S2(NLM_SIM3_REANCHOR=1)时本块照常执行: 离线验证的形态是 "A-fix爬坡 + S2重锚"
 % 叠加(爬坡先抵消 t_now 阶梯, 保证 S2 的400帧拟合窗口无阶梯污染); 单独S2会
 % 因阶梯污染拟合窗口而大量事件被尺度门拒绝(实测 4/16 事件, 103.9m), 劣于叠加
-% (10/16 事件, 61.6m, 见 NLM_LOOP_DESIGN.md §9)。
+% (10/16 事件, 61.6m)。
 if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
     n_lc = num_frames;
     f0v = (1:n_lc)';
@@ -846,7 +846,7 @@ if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
             max(sum(L_field.^2, 2)) ^ 0.5);
 end
 
-% [S2] 闭环全Sim(3)重锚 (创新核心升级, 设计见 neuro/kbs/NLM_LOOP_DESIGN.md §9):
+% [S2] 闭环全Sim(3)重锚 (创新核心升级):
 % 当前A-fix只注入平移, 吸收不了长程累积的尺度/旋转漂移(首100帧锚定Sim3口径下
 % 平移A-fix反而 755→861m)。S2在每次闭环把"当前帧之后到下一闭环"整段用
 % 全Sim(3)变换(尺度+旋转+平移, procrustes拟合)拉回首锚坐标系: 消除节点坐标

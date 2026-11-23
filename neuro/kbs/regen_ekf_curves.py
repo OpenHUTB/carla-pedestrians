@@ -18,10 +18,14 @@ import scipy.io as sio
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+plt.rcParams.update({'font.family': 'sans-serif',
+                        'font.sans-serif': ['DejaVu Sans'],
+                        'mathtext.fontset': 'dejavusans'})
 
 # 数据根可覆盖（与 se3_metrics.py 同约定），资产包可直接重绘
-DS = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/')
-OUT = '../kbs/fig/'
+_HERE = os.path.dirname(os.path.abspath(__file__))
+DS = os.environ.get('NLM_DATA_ROOT', os.path.join(_HERE, '..', 'data', '01_NeuroSLAM_Datasets')).rstrip('/')
+OUT = os.path.join(_HERE, 'fig') + '/'
 
 def procrustes_full(est, gt, tag=''):
     est = np.asarray(est, dtype=float); gt = np.asarray(gt, dtype=float)

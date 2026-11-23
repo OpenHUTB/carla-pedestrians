@@ -1,0 +1,501 @@
+%% ==================== 方法（扩展版，中文版） ====================
+\section{方法}
+\label{sec:method}
+
+\subsection{符号与约定}
+\textbf{符号约定.} 上标表示感官模态（$^{\text{vis}}$：视觉，$^{\text{imu}}$：惯性，$^f$：融合）或细胞类型（$^g$：网格细胞，$^h$：头方向细胞）。下标 $t$ 表示时间。粗体大写字母表示矩阵或高维数组；粗体小写字母表示向量；花体表示集合。
+
+\textbf{尺度与深度组件符号.} $s$ 为连接度量单位与 VO 相对单位的全局单目尺度因子，以第 10 个 EKF 状态 $\log s$ 承载；$s^{*}$ 为真值尺度（仅训练期使用）。$\hat z_t$ 为冻结的单目深度基础模型（DAv2）的度量深度图，$g_\theta$ 为轻量尺度校正头（第~\ref{sec:scale_recovery}节）；$\boldsymbol{e}_t$ 为闭环线所消费的学习全局场景嵌入（第~\ref{sec:loop_closure}节）。
+
+\subsection{框架架构与全局状态空间表述}
+\label{sec:framework_arch}
+
+\begin{figure*}[!htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig/2_framework.pdf}
+    \caption{所提出的多模态视觉-惯性框架的自包含端到端数据流。原始输入为单目RGB图像与IMU测量值。视觉模块将信号分为场景识别与运动估计两支路；前庭模块输出高频惯性运动。两种模态通过频域互补滤波融合。融合后的运动学驱动空间网络更新统一定义于式~\eqref{eq:global_state} 的4自由度全局状态 $\mathbf{X}_t$。经验图模块执行闭环松弛以消除长期轨迹漂移。所有子模块共享本小节提出的标准化状态空间变量。}
+    \label{fig:system_overview}
+\end{figure*}
+本工作为机器人定位设计了一个多模态视觉-惯性信号处理系统，它由三个紧耦合的功能子系统组成：分层多尺度视觉特征算子、前庭-惯性传感器状态估计器、度量空间状态编码网络。\textcolor{red}{而非在联合非线性优化中对视觉特征做边缘化处理，所提出的系统将融合核保持在固定状态维数：两种模态的频域分工实例化为带五个门控观测分支（第3.5节）的10状态松耦合EKF，其每次更新的代价与跟踪特征数量无关}，并通过连续吸引子空间网络更新全局度量状态以抑制长期轨迹漂移。
+
+\subsubsection{全局离散状态空间模型}
+为后续所有子模块推导提供统一的数学基础，我们首先定义 $t$ 时刻系统的离散状态空间表示。
+
+1) 多模态原始输入向量
+\begin{equation}
+    \mathbf{U}_t = \left[ I_t,\, \mathbf{a}_t^\top,\, \boldsymbol{\omega}_t^\top \right]
+    \label{eq:input_vec}
+\end{equation}
+其中 $I_t$ 表示采集的单目RGB图像；$\mathbf{a}_t$ 与 $\boldsymbol{\omega}_t$ 分别为加速度计线加速度与陀螺仪角速度测量值。
+
+2) 核心4自由度全局位姿状态向量
+\begin{equation}
+    \mathbf{X}_t = \left[ x_t,\, y_t,\, z_t,\, \psi_t \right]^\top \in \mathbb{R}^3 \times \mathrm{SO}(2)
+    \label{eq:global_state}
+\end{equation}
+在该表述中，$(x_t, y_t, z_t) \in \mathbb{R}^3$ 表示全局3D平移坐标（单位：米），$\psi_t \in [-\pi,\pi)$ 表示水平偏航角（单位：弧度）。
+
+3) 统一状态演化映射函数
+\begin{equation}
+    \mathbf{X}_{t+1} = \mathcal{F}\big(\mathbf{X}_t,\, \mathbf{U}_t\big)
+    \label{eq:state_evolution}
+\end{equation}
+映射 $\mathcal{F}(\cdot)$ 封装了完整的前向流水线，包括多尺度视觉特征提取、惯性运动计算、频域多模态融合与空间网络路径积分。$\mathcal{F}(\cdot)$ 的详细数学分解见第~\ref{sec:visual_cortex}--\ref{sec:fusion} 节（视觉皮层、前庭系统与互补融合）与第~\ref{sec:scale_recovery}--\ref{sec:loop_closure} 节（尺度恢复与空间记忆系统）。
+
+如图~\ref{fig:system_overview} 所示，端到端数据流水线由五个顺序耦合的模块组成：
+1. 分层双流视觉前端：构建并行的腹侧/背侧支路，分别独立生成场景描述子并计算逐像素自运动，消除识别与跟踪任务间的相互干扰。
+2. 前庭IMU处理模块：从原始惯性数据中推导高频瞬态运动信号，无需迭代式在线偏置标定。
+3. 互补融合单元：采用一阶IIR滤波器分离低频视觉漂移与高频惯性噪声，输出平滑的平移与旋转运动学量。
+4. 度量空间编码网络：使用融合运动线索更新分布式空间细胞状态，并通过视觉模板锚定约束抑制积分漂移。
+5. 拓扑经验图：记录历史视觉描述子与空间细胞快照，在检测到闭环时执行一次全局图松弛，以保证全局一致的度量位姿。
+
+\noindent 在这条五模块流水线之上，部署系统额外增加两个作用于融合估计（而非原始传感流）的高层校正：单目尺度恢复支路（第~\ref{sec:scale_recovery}节），用冻结深度基础模型之上的轻量、一次训练头驱动 EKF 的尺度状态；以及基于学习嵌入的闭环线（第~\ref{sec:loop_closure}节），在经校验的重访处重新锚定轨迹。两者均仅在仿真数据上训练一次、部署时冻结——与基线的运动学尺度可观性形成对比，后者只会停在 VO 相对尺度、恢复不了绝对尺度。二者共同把跟踪核从一个 up-to-scale 的 VIO 估计器升级为实验中所评估的度量尺度系统。
+
+\subsection{视觉皮层：腹侧与背侧通路}
+\label{sec:visual_cortex}
+
+视觉前端——从神经解剖学上说，即视觉皮层的腹侧（"what"）与背侧（"where"）双通路——实现了受灵长类视觉皮层分层架构启发的生物学合理处理流水线，将原始RGB图像转化为适合地点识别与运动估计的紧凑场景描述子。
+
+\textbf{分层特征提取.} 给定RGB图像 $I_t\in\mathbb{R}^{H\times W\times 3}$，我们定义一组模仿从视网膜到颞下皮层各处理阶段的算子。
+
+\textbf{阶段1：视网膜与LGN处理.} 初始预处理模拟视网膜与外侧膝状体（LGN）的早期视觉处理：
+\begin{align}
+     & \text{亮度通道：}\quad Y_t = \mathcal{G}(I_t) = 0.299R+0.587G+0.114B              \\
+     & \text{局部对比度增强：}\quad U_t = \mathcal{C}_\lambda(Y_t),\quad \lambda=0.02 \\
+     & \text{感受野模拟：}\quad V_t = U_t * \mathcal{K}_\sigma,\quad \sigma=0.5
+\end{align}
+其中 $\mathcal{G}$ 为灰度转换算子，$\mathcal{C}_\lambda$ 为限幅对比度自适应直方图均衡（CLAHE），限幅为 $\lambda$；$\mathcal{K}_\sigma$ 为标准差 $\sigma$ 的高斯核。CLAHE在自适应增强局部对比度的同时防止噪声被过度放大，模仿视网膜神经节细胞的中心-周围拮抗组织结构。
+
+\textbf{阶段2：初级视觉皮层（V1-V4）处理.} 中层处理对表征进行归一化与标准化：
+\begin{align}
+     & \text{动态范围归一化：}\quad \tilde V_t = \frac{V_t-\min(V_t)}{\max(V_t)-\min(V_t)}     \\
+     & \text{空间标准化：}\quad Z_t = \mathcal{D}(\tilde V_t)\in\mathbb{R}^{12\times16}        \\
+     & \text{全局均值减去：}\quad Z_t(i,j)\leftarrow Z_t(i,j)-\frac{1}{192}\sum_{k=1}^{12}\sum_{l=1}^{16}Z_t(k,l)
+\end{align}
+其中 $\mathcal{D}$ 为下采样算子（双线性插值）。全局均值减去可去除整体强度变化同时保留空间结构，类似于V1与V2中的除性归一化。
+
+\textbf{阶段3：颞下（IT）表征.} 最终表征为紧凑的向量化描述子：
+\begin{equation}
+    \boldsymbol{\phi}_t=\mathrm{vec}(Z_t)\in\mathbb{R}^{192}
+\end{equation}
+其中 $\mathrm{vec}(\cdot)$ 表示将二维特征图映射为一维描述子的向量化算子，$\boldsymbol{\phi}_t$ 为时间戳 $t$ 处的整体场景特征向量。
+该 $12 \times 16 = 192$ 维特征向量作为整体场景描述子，类似于IT皮层中视图选择、位置不变的表征。
+
+\textbf{视觉模板匹配与地点识别.} 地点识别通过基于余弦相似度的模板匹配实现，其鲁棒性优于绝对差之和（SAD）等基于强度的度量：
+\begin{equation}
+    d_{\cos}(\boldsymbol{\phi}_t,\boldsymbol{\phi}_i)=1-\frac{\boldsymbol{\phi}_t^\top\boldsymbol{\phi}_i}{\lVert\boldsymbol{\phi}_t\rVert\,\lVert\boldsymbol{\phi}_i\rVert}
+\end{equation}
+当当前场景与所有现有模板均足够不同时，创建新的视觉模板（VT）：
+\begin{equation}
+    \text{若 }\min_{i \in \mathcal{VT}} d_{\cos}(\boldsymbol{\phi}_t, \boldsymbol{\phi}_i)>\tau_{vt}\text{ 则创建新VT},\quad \tau_{vt}=0.08
+\end{equation}
+阈值 $\tau_{vt}=0.08$ 显著低于传统取值（OpenRatSLAM中的0.15），使相似场景间的判别更精细。实验验证表明，这可使模板数量增加最多315倍（城市环境中从5个增至195个），提供更丰富的地点表征。
+
+\textbf{双流架构与受生物启发的时序建模.} 在上述分层特征提取的基础上，我们的视觉处理融入了两项关键的受生物启发创新：(1) 模仿腹侧/背侧通路的双流架构；(2) 无需训练数据、用于时序一致性的固定门LSTM。
+
+\textbf{双流视觉处理.}
+遵循生物视觉双流理论~\cite{Goodale1992, Mishkin1983}，我们从V1输出显式建模两条并行处理通路：
+
+\textcolor{red}{\textbf{定向梯度通道}（空间布局分支，V1$\rightarrow$V4）：通过基于梯度的特征处理空间位置与外观结构：}
+\begin{equation}
+    \mathbf{F}^{\text{grad}}_t = 0.6 \cdot \|\nabla Z_t\| + 0.4 \cdot Z_t
+\end{equation}
+其中 $\|\nabla Z_t\|$ 为通过Sobel算子计算的梯度幅值，捕获边缘方向，类似于V4的定向选择性响应。\textcolor{red}{通道权重 $0.6/0.4$ 为我们实现的常数。}
+
+\textbf{腹侧通路}（“what”通路，V1$\rightarrow$V4$\rightarrow$IT）：通过纹理与对比度处理物体身份与场景特征：
+\begin{equation}
+    \mathbf{F}^{\text{ventral}}_t = 0.4 \cdot Z_t + 0.3 \cdot \sigma_{\text{local}}(Z_t) + 0.3 \cdot \mathcal{C}_\lambda(Z_t)
+\end{equation}
+其中 $\sigma_{\text{local}}$ 计算局部标准差（纹理特征），$\mathcal{C}_\lambda$ 提供对比度增强，模仿V4对复杂特征的选择性与IT的不变物体表征。
+
+随后，两条支路通过一种轻量全局-局部特征调制机制（详见第~\ref{sec:related_learning} 节）进行集成，该机制使用全局统计量而非完整 Query-Key-Value 运算来近似自注意力效果，保持 $\mathcal{O}(N)$ 复杂度以满足实时性能。
+
+\textbf{用于零样本时序建模的固定门LSTM.}
+与需要在领域特定数据集上大量训练的传统数据驱动LSTM不同，我们的时序模块采用人工调定的固定门值，灵感来自生物学前庭-视觉整合原理~\cite{Angelaki2004, Cullen2012}：
+\begin{align}
+    \text{输入门: }  & i_t = 0.5 \quad \text{（控制新信息摄入）} \\
+    \text{遗忘门: } & f_t = 0.5 \quad \text{（保留50\%历史上下文）} \\
+    \text{输出门: } & o_t = 0.9 \quad \text{（强调当前感知）}
+\end{align}
+其中 $i_t$、$f_t$、$o_t$ 分别为受生物启发的LSTM模块的固定输入门、遗忘门、输出门。
+
+该设计为SLAM应用提供了三个关键优势：
+
+\textbf{(1) 零样本部署能力：} 无需训练数据，可立即部署到新环境。这对SLAM至关重要，因为每个环境都有独特的视觉特性，且收集有代表性的训练数据并不可行。我们在六个多样化场景（城市、高速公路、室内）上不做任何环境特定调优的验证，展示了其鲁棒的泛化能力。
+
+\textbf{(2) 生物学可解释性：} 门值反映了神经科学中经实证验证的原则。遗忘门（$f_t=0.5$）实现了与海马重放动力学一致的短期空间记忆保持，其中近期经验被优先保留用于路径积分。高输出门（$o_t=0.9$）优先处理当前感觉输入，模仿前庭系统对即时自运动线索在平衡与导航中的强调。中等输入门（$i_t=0.5$）在新奇检测与稳定性之间取得平衡。
+
+\textbf{(3) 计算效率：} 消除了训练开销（无反向传播、无梯度计算），同时保持实时性能（CPU实测39--76~FPS）。固定门可直接在硬件（如FPGA、神经形态芯片）上实现，无需权重存储或更新逻辑，使其能在资源受限平台上部署。
+
+LSTM按序处理融合后的\textcolor{red}{梯度-腹侧}特征，跨时间步维持隐藏状态 $\mathbf{H}_t$ 与细胞状态 $\mathbf{C}_t$：
+\begin{align}
+    \mathbf{C}_t & = f_t \odot \mathbf{C}_{t-1} + i_t \odot \tanh(\mathbf{F}^{\text{fused}}_t) \\
+    \mathbf{H}_t & = o_t \odot \tanh(\mathbf{C}_t)
+\end{align}
+其中 $\odot$ 表示逐元素Hadamard积，$\mathbf{C}_t$ 为LSTM细胞状态，$\mathbf{H}_t$ 为时序隐藏状态，$\mathbf{F}^{\text{fused}}_t$ 集成了\textcolor{red}{定向梯度与腹侧外观}特征。
+
+\textbf{与基于学习方法对比.} 第~\ref{sec:experiments} 节表明，我们的固定门LSTM取得了与NeuroSLAM学习得到的LSTM相当或更优的性能（RMSE改善55\%），同时提供零样本部署能力。这验证了：当底层任务结构与生物机制一致时，有原则的受生物启发设计可以匹配甚至超越数据驱动学习——在本例中即是空间导航，生物系统已在数百万年的进化中形成高度优化的解决方案。
+
+\textbf{视觉运动提取.} 除场景识别外，视觉前端还从帧间特征对应中提取自运动线索，模仿MST（内侧上颞区）的背侧通路处理。
+
+\textbf{稀疏特征对应.} 设 $\mathbf{K}\in\mathbb{R}^{3\times 3}$ 为相机内参矩阵。\textcolor{red}{每帧由 $N$ 个ORB关键点（$N{=}2000$）及旋转BRIEF描述子表征；候选对应关系由 k 近邻匹配加 Lowe 比值检验建立（$k{=}2$，比值 $0.7$）。}匹配点归一化到相机坐标：
+\begin{equation}
+    \tilde{\mathbf{q}}_i^t = \mathbf{K}^{-1}\begin{bmatrix}\mathbf{p}_i^t\\ 1\end{bmatrix},\qquad \mathbf{q}_i^t = \pi(\tilde{\mathbf{q}}_i^t)=\frac{1}{\tilde{q}_{i,3}^t}\begin{bmatrix}\tilde{q}_{i,1}^t\\ \tilde{q}_{i,2}^t\end{bmatrix}
+\end{equation}
+其中 $\pi$ 为透视投影。
+
+\textcolor{red}{\textbf{旋转—平移估计.} 归一化对应点 $\{(\mathbf{q}_i^{t-1},\,\mathbf{q}_i^{t})\}$ 满足对极约束}
+\begin{equation}
+    {\mathbf{q}_i^{t}}^{\top}\,\mathbf{E}\,\mathbf{q}_i^{t-1}=0,\qquad \mathbf{E}=[\mathbf{t}]_{\times}\mathbf{R},
+\end{equation}
+\textcolor{red}{其中 $\mathbf{E}$ 为本质矩阵，$[\mathbf{t}]_{\times}$ 为平移向量的反对称矩阵。$\mathbf{E}$ 由 RANSAC 包装的最小解求解器估计（概率 $0.999$，阈值 $1.0$ 像素），并经 $\mathrm{recoverPose}$ 分解为帧间旋转 $\mathbf{R}$ 与平移方向。鲁棒性由两级保障：描述子层的唯一性（Lowe 比值检验）与几何层的共识集（RANSAC 内点集 $w_i\in\{0,1\}$）。视觉偏航角速度 $r_t^{\mathrm{vis}}$ 从 $\mathbf{R}$ 的 ZYX 欧拉分解中提取（含万向锁保护）；平移仅返回单位范数方向 $\hat{\mathbf{t}}$——单目分解只确定方向，不确定量纲。}
+
+\textcolor{red}{\textbf{尺度模糊与观测注入.} 由于 $\hat{\mathbf{t}}_t$ 为单位范数，分解不含米制量纲：单个帧间区间上的米制位移为 $\Delta\mathbf{p}^{\mathrm{vis}}_t = s_t\,\hat{\mathbf{t}}_t$，其中 $s_t = \exp(\log s_t)$ 为 EKF 维护的在线尺度状态（第~\ref{sec:scale_recovery}节），单位为米/VO单位；全文对该量统一使用单一符号 $s$。EKF 在真实更新间隔上将该位移转换为速度（第4.1节）。内点共识集同时充当退化门：少于 20 个对应点时，该帧被视为退化、不作为可靠运动量测；前端返回的零位移占位符以同一品质因子放大的观测噪声进入滤波器，因此它充当无运动先验，而非独立的速度量测。否则内点数映射为品质因子 $q_f$（60 内点 $\to q_f{=}1$，20 内点 $\to q_f{=}3$ 之间线性插值），用于放大 EKF 观测协方差，钳位于 $[0.008,10]$。}
+
+\textcolor{red}{除运动流外，视觉前端还提供像素级度量深度场 $\hat z_t$（冻结 DAv2 主干）与学习场景嵌入 $\boldsymbol{e}_t$，供两个高层校正消费（第~\ref{sec:scale_recovery}节）；上述运动通路从不消费深度——$\hat z_t$ 与 $\boldsymbol{e}_t$ 异步推理并缓存，只进入尺度支路与闭环线，不在实时关键路径上。}
+
+\subsection{前庭系统}
+\label{sec:vestibular}
+
+前庭前端处理惯性测量值以提取自运动线索，类比哺乳动物的前庭系统。前庭器官由半规管（角速度）与耳石器（线加速度）组成。
+
+\textbf{角速度提取.} 由陀螺仪测量值 $\mathbf{g}_t\in\mathbb{R}^3$（IMU坐标系），我们直接使用 $z$ 轴陀螺而不做在线偏置去除，并按实现转换为度/秒。在平面约束下的4自由度定位-建图中，偏航（方位角）角速度近似为
+\begin{equation}
+    r_t \approx \mathbf{e}_z^\top\,\boldsymbol{\omega}_t^g,\quad \mathbf{e}_z=(0,0,1)^\top.
+\end{equation}
+其中 $\boldsymbol{\omega}_t^g$ 为IMU测得的原始陀螺角速度向量，$\mathbf{e}_z$ 为单位竖直基向量。
+这对应水平半规管线索，足以满足我们与视觉的互补融合需求。
+
+\textbf{线加速度使用（简化）.} 我们采用与代码库一致的轻量近似：使用加速度计幅值与 $z$ 轴读数，减去常数重力 $g\!=\!9.81$，在帧间隔 $\Delta t$ 上推导指示性的平移与垂向速度分量：
+\begin{align}
+    v^\mathrm{imu}_{trans}(t) & \approx \max\big(0, (\lVert\mathbf{a}_t\rVert - g)\,\Delta t\,k_t\big), \\
+    v^\mathrm{imu}_{z}(t)     & \approx (a_{t,z} - g)\,\Delta t\,k_z,
+\end{align}
+其中 $g=9.81\,\mathrm{m/s^2}$ 为重力加速度，$k_t, k_z$ 为与实现常数匹配的常值缩放增益，$\Delta t$ 为帧采样间隔。这避免了显式偏置/重力向量估计，同时提供随后通过互补融合与视觉里程计结合的高频运动线索。
+
+\textbf{偏置处理.} \textcolor{red}{前庭前端输出原始角速度与比力。进入运动学线索的加速度计与陀螺仪零偏由静态启动标定一次性估计——平台静止，对每条序列的前 200 个样本执行一次（见3.5.3小节），随后保持常数；不进行在线重力向量估计，比力补偿采用常数重力模。这使前端无需额外的滤波器状态，在全文采用的 20~Hz 采样节拍下已然充分；固定重力模的残余影响作为失效模式在 §4.4 中分析。}
+
+\subsection{前庭-视觉融合：频域原理与部署滤波器}
+\label{sec:fusion}
+
+\textcolor{red}{\textbf{NeuroLocMap 如何运行.} 各模块单向耦合，因此可以在给出方程之前先陈述运行链。对每个相机帧 $t$：(1) 视觉前端返回相对位移、偏航增量与内点数；(2) 滤波器按 IMU 步跨帧间区间传播（3.5.3 小节的预测与协方差方程）；(3) 表~\ref{tab:gating}的门控校正按固定顺序施加——速度幅值、姿态、尺度、位置——因为每个分支提供的量会被后续分支消费（位置锚定经尺度状态以米表达，速度幅值以同一单位比较）；表中的航向分支已实现但在产生全部报告数字的配置中关闭，因此该链条在四个活动分支上运行；(4) 滤波后的位姿被发布，并在 EKF 里程计模式下作为空间层的运动源交给后者；(5) 网格细胞吸引子将帧间位移积分成活动包，头方向层承载偏航（第3.7节）；(6) 当当前视觉模板与空间编码均为新异时，创建经验节点并链接到其前驱（第3.8节）；(7) 被接受的闭环事件对存储轨迹松弛一个漂移场并重锚定路径积分器。步骤 (1)-(4) 构成滤波器；步骤 (5)-(7) 作用于其输出、从不写回。}
+
+\textcolor{red}{三个设计选择使这条链成立。第一，频率分配把每个模态指派到它可靠的频段，滤波器从不在两个同等可信的绝对观测之间做仲裁。第二，状态维数固定为十，每次更新的代价不随跟踪特征数增长，且任何单一分支都可以在不扰动其余分支的情况下关闭（3.5.3小节）。第三，每个高层校正都作用在下游——作用于输出轨迹——这使第4.3节的消融是因果的：两个配置之间的差异可归因于被移除的模块。第3.6--3.8节按相同顺序规定这条链的步骤 (3)-(7)：什么进入、什么被计算、什么离开。}
+
+视觉与惯性模态提供互补信息：视觉里程计给出精确的低频运动估计但长期会漂移，而IMU积分提供可靠的高频运动线索但会累积偏置漂移。利用这种频域分离可实现鲁棒融合，而无需对视觉特征做联合非线性优化。\textcolor{red}{该框架以两种明确分离的形式承载这一原理。MATLAB参考实现将其直接落地为互补低通与高通通道的固定权重凸组合（第3.5.5小节）；部署系统将其实例化为状态维数固定的松耦合EKF——惯性通道提供高频预测，视觉通道提供低频门控校正，第3.5.3小节的五个观测分支在观测域表达同样的分工。本文报告的全部结果均由部署滤波器产生；固定权重组合仅作为消融参考保留，并作为§4.3逐模块运行时测量的对象。}图~\ref{fig:imu_visual_fusion} 展示了该互补融合策略的频域特性及其在前庭-视觉整合中的生物学对应。
+
+\begin{figure*}[!t]
+    \centering
+    \includegraphics[width=\textwidth]{fig/imu_visual_complementary_fusion.pdf}
+    \caption{互补IMU-视觉融合架构。(a) 展示互补滤波特性的频域分析。(b) 时域信号对比。(c) 中枢神经系统中前庭-视觉整合的生物学类比。}
+    \label{fig:imu_visual_fusion}
+\end{figure*}
+
+\subsubsection{生物学原理与频域互补}
+
+\textbf{滤波器设计.} 设 $\mathcal{L}_\tau$ 表示时间常数为 $\tau$ 的低通滤波器，$\mathcal{H}_\tau$ 表示满足 $\mathcal{L}_\tau + \mathcal{H}_\tau = \mathrm{Id}$（$\mathrm{Id}$ 即单位算子）的互补高通滤波器：
+\begin{align}
+    \text{低通: }  & \;L_t = \alpha L_{t-1} + (1-\alpha) x_t,\quad L_0=0 \\
+    \text{高通: } & \;H_t = x_t - L_t
+\end{align}
+其中 $\alpha$ 为IIR滤波器遗忘因子，$L_t$ 存储低频平滑信号，$H_t$ 存储残余高频信号分量。
+
+\textbf{生物学类比.} 这是前庭核与后顶叶皮层（7a区）多感官整合的离散对应物：视觉与前庭信号在此结合以估计自运动。这些区域的神经元表现出两种调制特性的加权组合，且权重随信号可靠性动态变化。
+
+\textbf{离散时间实现.} 在采样间隔 $\Delta t$ 下，我们实现一阶IIR（无限脉冲响应）滤波器，并由目标时间常数给出遗忘因子 $\alpha=\exp(-\Delta t/\tau)$ 与 $\alpha_r=\exp(-\Delta t/\tau_r)$，使式(27)的模拟截止频率在本文的 20~Hz 节拍下得以复现。
+
+\textbf{频域传递函数.} 在 $s = j\omega$（频率变量）的拉普拉斯域中，一阶低通与高通滤波器的传递函数为：
+\begin{align}
+    H_{LP}(s) & = \frac{1}{1 + \tau s} = \frac{1/\tau}{s + 1/\tau}, \label{eq:h_lp} \\
+    H_{HP}(s) & = \frac{\tau s}{1 + \tau s} = \frac{s}{s + 1/\tau}, \label{eq:h_hp}
+\end{align}
+满足 $H_{LP}(s) + H_{HP}(s) = 1$（全频域单位增益）。截止频率 $\omega_c = 1/\tau$ 分隔低频与高频区域：当 $\omega \ll \omega_c$ 时，$|H_{LP}| \approx 1$ 且 $|H_{HP}| \approx 0$，视觉通路占主导（无漂移、动力学较慢）；而当 $\omega \gg \omega_c$ 时，$|H_{LP}| \approx 0$ 且 $|H_{HP}| \approx 1$，IMU线索占主导（快但漂移）。
+
+取 $\tau = 0.1$ s 时，截止频率为 $\omega_c = 10$ rad/s（$\approx 1.6$ Hz），确保IMU处理高频运动（$>$2 Hz，如振动、快速转弯），而视觉校正低频漂移（$<$1 Hz）。这模仿了生物学前庭-视觉整合，其中前庭器官响应0.1-10 Hz的频率，而低于0.5 Hz时视觉运动感知占主导 \cite{Angelaki2004}。
+
+\subsubsection{时间对齐}
+
+\textcolor{red}{融合之前，两条数据流已完成时间对齐。在20~Hz同步采集设置下，两个传感器由统一节拍驱动（$\Delta t = 0.05$~s）；轻量对齐器以$0.02$~s容差、贪心一对一匹配的方式将每帧相机图像配对到最近的IMU采样（每个IMU样本至多消费一次）。对齐数据流逐帧核验了时间戳连续性——全部5000帧无间隙、无丢帧——因此融合在预对齐样本上进行，无需帧内插值。}
+
+\subsubsection{部署实现：全状态EKF与误差形式协方差}
+
+\textcolor{red}{\textbf{状态向量.} 部署融合核为全状态（total-state）EKF、协方差以误差状态形式传播，状态为}
+\begin{equation}
+    \mathbf{x}_t = \big[x,\ y,\ z,\ v_x,\ v_y,\ v_z,\ \phi,\ \theta,\ \psi,\ \log s_t\big]^{\top}
+\end{equation}
+\textcolor{red}{即位置、速度、欧拉姿态与第十个状态 $\log s_t$——连接VO坐标系与米制世界的在线尺度因子（符号定义见第3.1节；尺度支路详见第~\ref{sec:scale_recovery}节）。}
+
+\textcolor{red}{\textbf{预测步.} 观测之间，状态由IMU运动学传播：}
+\begin{equation}
+    \boldsymbol{\Theta}_{t+1} = \mathrm{wrap}\!\left(\boldsymbol{\Theta}_t + (\boldsymbol{\omega}_t - \mathbf{b}_g)\,\Delta t\right),\quad
+    \mathbf{v}_{t+1} = \mathbf{v}_t + \mathbf{R}(\boldsymbol{\Theta}_t)(\mathbf{a}_t - \mathbf{b}_a)\,\Delta t + \mathbf{g}_w\,\Delta t,
+\end{equation}
+\textcolor{red}{$\mathbf{p}_{t+1} = \mathbf{p}_t + \mathbf{v}_t\,\Delta t + \tfrac{1}{2}\mathbf{a}^w_t\,\Delta t^2$，其中 $\mathbf{g}_w = [0, 0, -9.81]^\top$~m/s$^2$ 为常数重力向量，欧拉角做环绕处理以避免分支歧义。协方差按}
+\begin{equation}
+    \mathbf{P}_{t+1} = \mathbf{F}_t \mathbf{P}_t \mathbf{F}_t^\top + \mathbf{Q}_c\,\Delta t
+\end{equation}
+\textcolor{red}{传播，过程噪声与初始协方差对所有序列一次性固定：$\mathbf{Q}_c = \mathrm{diag}(0.18, 0.18, 0.09,\ 0.72, 0.72, 0.36,\ 7.2{\times}10^{-3},\ 7.2{\times}10^{-3},\ 1.8{\times}10^{-2},\ 2.0{\times}10^{-5})$，$\mathbf{P}_0 = \mathrm{diag}(2, 2, 0.5,\ 2, 2, 1,\ 0.05, 0.05, 0.05,\ 0.64)$，按 $(\mathbf{p}, \mathbf{v}, \boldsymbol{\Theta}, \log s)$ 顺序排列，单位分别为 m$^2$/s、(m/s)$^2$/s、rad$^2$/s 与 rad$^2$；尺度方差 0.64 对应 $\sigma_0 = 0.8$ 的对数域先验，$\log s$ 初始化为 0（单位尺度），仅经分支 4 更新。并行维护一份纯IMU航位推算副本作为消融基线。}
+
+\textcolor{red}{\textbf{门控观测更新.} 每个分支产生新息 $\mathbf{y} = \mathbf{z} - h(\hat{\mathbf{x}})$，协方差 $\mathbf{S} = \mathbf{H}\mathbf{P}\mathbf{H}^\top + \mathbf{R}$，仅当}
+\begin{equation}
+    \mathbf{y}^\top \mathbf{S}^{-1} \mathbf{y} < \chi^2(d;\ \alpha)
+\end{equation}
+\textcolor{red}{时接受，并以保持对称正定性的Joseph形式应用：}
+\begin{equation}
+    \mathbf{P}_+ = (\mathbf{I} - \mathbf{K}\mathbf{H})\mathbf{P}(\mathbf{I} - \mathbf{K}\mathbf{H})^\top + \mathbf{K}\mathbf{R}\mathbf{K}^\top, \quad \mathbf{K} = \mathbf{P}\mathbf{H}^\top\mathbf{S}^{-1}.
+\end{equation}
+\textcolor{red}{各分支的观测模型与部署门限列于表~\ref{tab:gating}。分支1从转弯运动学恢复偏航：在平均速度超过 3~m/s、$|a_\perp| > 0.3$~m/s$^2$ 且 $|\omega_z| < 1.2$~rad/s 的帧上，比值 $a_\perp/|v|$ 被积分到独立于陀螺仪与当前航向估计的航向基上，得到带每帧 0.26~rad（约 15°）硬步长限制的偏航角观测。分支4为双路径对数域尺度观测：第~\ref{sec:scale_recovery}节的标定深度尺度优先，在 $0.30$ 死区内冻结\textcolor{red}{（约 1.35 倍尺度，即状态已与深度线索一致时保持不动；用于全部报告运行，并设为发布代码默认值）}；当深度路径不可用、被跳过或被门控剔除时，采用运动学线索 $|a_\perp|/(|\omega|v)$。\textcolor{red}{需要说明的是：分支1为编译开关控制的实现项，在全部报告运行中默认关闭（其门限未参与任何报告结果）；表~\ref{tab:gating}列出该行仅为架构完整性。}}
+
+\begin{table*}[!t]
+\caption{10状态融合核的部署观测分支（门限为所有报告运行所用）}
+\label{tab:gating}
+\centering
+\begin{tabular}{clccc}
+\toprule
+\# & 观测 $\mathbf{z}$（维数） & $h(\hat{\mathbf{x}})$ & $\chi^2(d;\alpha)$ & $R_{\mathrm{nom}}$ \\
+\midrule
+1 & 转弯帧上 $\int a_\perp/|v|\,\mathrm{d}t$ 得到的偏航 (1)（\textcolor{red}{报告运行中关闭}） & $\psi$ & 3.84 (1;0.95) & 0.05 \\
+2 & VO位移 $\times s$，投影到航向 (1) & $\|\mathbf{v}\|$ & 9.21 (2;0.99) & 0.20 \\
+3 & 来自前庭线索的roll/pitch (2) & $(\phi,\theta)$ & 9.21 (2;0.99) & $\mathrm{diag}(0.05, 0.50)$ \\
+4 & 对数尺度：深度中值或 $|a_\perp|/(|\omega|v)$ (1) & $\log s$ & 6.63 (1;0.99) & 0.05/0.02 \\
+5 & 重锚定VO增量 $\times s$，30帧 (2) & $(x,y)$ & 13.82 (2;0.999) & $\mathrm{diag}(0.06, 0.06)$ \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\textcolor{red}{分支5伴随弱高度先验（$R = 25$~m$^2$）。分支2将2自由度门限用于标量残差（刻意放宽）。每个 $R$ 均按下述因子缩放；门限与协方差在消融运行前一次性固定，五个序列完全一致。}
+
+\textcolor{red}{\textbf{质量自适应噪声.} VO内点数 $n_{\mathrm{inl}}$ 给出 $q_f = \mathrm{clip}(60/n_{\mathrm{inl}},\ 1/3,\ 3)$，上一窗口的新息给出平滑残差因子 $\rho = \mathrm{clip}\!\left(q_f\,[\,0.05 + (d/\mathrm{dof})^{1.5}\,],\ 0.008,\ 10\right)$，其中 $d$ 为归一化Mahalanobis距离；表~\ref{tab:gating}的名义协方差乘以 $\rho$。退化帧因此贡献更小，完全退化的帧只贡献一个放大噪声的无运动先验。}
+
+\textcolor{red}{\textbf{数值稳定性与消融完整性.} 所有更新采用式(33)的Joseph形式并做更新后正则化（对称化加最小特征值钳位），使协方差在5000帧序列上保持正定而无需重新初始化。由于每个分支都是独立的门控项，关闭任一分支后其余计算逐位不变——这正是§4.3消融矩阵成立的前提。}
+
+\subsubsection{计算代价}
+
+\textcolor{red}{部署滤波器携带固定的 $10 \times 10$ 协方差，每次更新因此是常数尺寸的矩阵运算（$\mathcal{O}(10^3)$），与视觉特征数量无关——这与给状态增补特征克隆的滤波器（MSCKF、VINS-Mono）的 $\mathcal{O}(N n^3)$ 代价形成对比；MATLAB前端的逐模块计时见表4。}
+
+\subsubsection{参考实现：固定权重凸组合（仅消融）}
+
+\textcolor{red}{MATLAB参考实现将第3.5.1小节的原理直接落地为带二值活动门控的固定权重凸组合：平移用 $\eta = 0.3$、偏航用 $\eta_r = 0.7$、高度用 $0.5$，回退线索在视觉通道不活跃时取自重力补偿比力幅值。权重与钳位对所有序列一次性固定、保持一致，无逐序列调参；其具体形式见 Supplementary S.2。该组件作为消融中的固定权重参考与运行时测量的对象，不是主结果的来源。其每次更新的代价为 $\mathcal{O}(1)$，每路融合信号只需两个标量状态，是流水线中最轻的组件。}
+
+\subsection{单目尺度恢复支路}
+\label{sec:scale_recovery}
+
+\textbf{问题.} \textcolor{red}{EKF 第十个状态 $\log s$ 由两条线索驱动：其一为转弯运动学——仅在转弯帧可观测（KITTI~07 上 294/1101 帧），且按构造只能恢复 \emph{VO 相对}尺度；其二为部署配置下本节的标定深度路径——只要可用即优先（见3.5.3小节分支4）。两条线索各自都无法单独确定视觉帧与米制世界之间的绝对尺度。}单目度量深度网络提供了独立线索，但其零样本预测带场景相关偏置（初步研究表明原始深度尺度跨场景不可靠），因此原始深度不能直接作为尺度观测。我们不直接信任深度网络，而是学习一个轻量\emph{标定}：把深度统计特征映射到真实全局尺度——仅在仿真上训练一次，部署时冻结。
+
+\textbf{结构.} 对每帧 $t$，设 $\hat z_t$ 为冻结的单目深度基础模型（Depth-Anything-V2，户外头）预测的度量深度图。将其归纳为 8 维特征向量
+\begin{align}
+    \mathbf{f}_t = \big[&\log \hat s^{\,\mathrm{dav2}}_t,\ \log d^{\mathrm{med}}_t,\ \log (d^{\mathrm{std}}_t{+}\epsilon),\ \log d^{\mathrm{p10}}_t,\ \log d^{\mathrm{p90}}_t, \nonumber\\
+    &\log (\hat s^{\,\mathrm{inl}}_t{+}1),\ f_x/W,\ 1\big]^{\top},
+\end{align}
+其中 $\hat s^{\,\mathrm{dav2}}_t$ 为窗口中值零样本深度尺度估计（帧间 VO 位移除以中值度量深度），$d^{\mathrm{med}}, d^{\mathrm{p10}}, d^{\mathrm{p90}}, d^{\mathrm{std}}$ 为度量深度的中值、分位数与标准差，$\hat s^{\,\mathrm{inl}}_t$ 为特征内点一致尺度，$f_x/W$ 编码相机几何。每个特征经窗口中值平滑（$W{=}50$ 区间）。尺度头 $g_\theta$ 为紧凑 MLP $8{\to}64{\to}64{\to}1$（ReLU，${\sim}4.8$k 参数），预测对数尺度
+\begin{equation}
+    \hat \ell_t = g_\theta(\mathbf{f}_t) \;\approx\; \log s^{*}_t,
+\end{equation}
+监督信号（仅训练期）为逐区间真值尺度
+\begin{equation}
+    \ell^{*}_t = \log \frac{\lVert \mathbf{p}^{*}_t - \mathbf{p}^{*}_{t-1} \rVert}{\lVert \mathbf{p}_t - \mathbf{p}_{t-1} \rVert},
+\end{equation}
+其中 $\mathbf{p}^{*}$ 为真值度量位置（仿真中可得），$\mathbf{p}$ 为 VO 位置。
+
+\textbf{一次训练协议.} 头在三个仿真城镇（Town05/03/07）上以 Adam（学习率 $10^{-3}$，权重衰减 $10^{-3}$）、标准化特征上的 MSE 损失与留出集（$10\%$）早停训练；特征标准化随权重一起冻结。第四城镇（Town10HD）完全留出，且不见任何真实数据。训练后\emph{全部参数冻结}：部署时无逐序列标定、无在线自适应——头在每条测试序列上原样使用。
+
+\textbf{门控整合.} 预测 $\hat s_t = \exp(g_\theta(\mathbf{f}_t))$ 作为对数域尺度支路观测进入 EKF：(i) 支路启用时替换 $\log s$ 的深度中值初值；(ii) 通过带对数域死区的卡方门控更新持续拉动尺度态；(iii) 启用时抑制运动学尺度观测，使两个尺度证据源不互相打架。该校正是刻意\emph{仅尺度}的：只调整第 10 个状态并经它调整视觉速度观测——从不直接改写位置或朝向，因此错误的尺度预测会优雅退化而非污染融合轨迹。
+
+\textcolor{red}{\textbf{运行方式.} 该支路按帧间区间运行，而非按 IMU 步。每个区间，冻结的深度模型输出一张度量深度图；由其构造八项深度统计量并在 $W{=}50$ 个区间上做中值平滑；尺度头给出单一对数尺度预测，其滑动中值与滤波器状态比较。仅当结果落在 3.5.3 小节的 $0.30$ 死区之外时才进入表~\ref{tab:gating}的分支 4。因此尺度头绝不是位姿估计器：它以远低于帧率的频率贡献一个标量，无法独自移动轨迹，且在其不可用或新息被门控剔除时被旁路。}
+
+\textbf{零样本行为与诚实边界.} 在仿真域内，学到的映射跨场景泛化——包括留出城镇——并在全部五条评估序列上胜过普通最小二乘标定基线。然而跨 sim-to-real 边界时映射不迁移：在 KITTI~07 上头预测的尺度校正方向相反（轨迹实际需要 $\approx1.8$ 而预测 $s\approx0.3$），部署它反而劣化 EKF（补充材料第 S.1 节量化该失效）。因此本文所有真实世界结果均不带尺度支路运行——这是我们在实验中回到的诚实局限。头的计算开销可忽略：${\sim}4.8$k 参数、每帧亚毫秒 CPU 推理，不在实时关键路径上；冻结的深度主干异步评估并缓存。
+
+\subsection{内嗅皮层：网格细胞与头方向细胞}
+
+\textcolor{red}{\textbf{空间层处于哪个环节.} 网格细胞层与头方向层不是第二个估计器。它们消费滤波后的位姿——EKF 里程计模式下的帧间位移与偏航——将其积分成活动包，并把得到的空间编码暴露给经验节点创建；头方向层提供 4 自由度编码的偏航通道。对活动包解码返回的位姿用于新异性门控与定义闭环约束，而不用于校正滤波器；吸引子动力学因此是稳定表征，而不是修正估计。这一方向性——滤波器、空间码、约束、输出轨迹——保持了该层的生物学可解释性，而不使其变成竞争估计器。}
+
+空间表征模块——从神经解剖学上说即内嗅皮层，其网格细胞与头方向细胞构成大脑的度量坐标系——通过结合式位姿细胞（conjunctive pose cells）使用受生物启发的神经坐标系编码机器人的4自由度位姿。3D位置 $(x, y, z)$ 由使用3D多维连续吸引子网络（MD-CAN）的网格细胞表示，而朝向 $\psi$（偏航）由多层头方向细胞编码。这些表征通过吸引子动力学实现稳定、容噪的路径积分。
+
+\textbf{3D网格细胞网络.} 3D网格细胞网络借鉴哺乳动物大脑中的3D空间表征——特别是蝙蝠内嗅皮层中发现的3D网格细胞~\cite{finkelstein2016three} 与啮齿动物中刻画的周期性网格结构~\cite{hafting2005microstructure}——编码位置并为路径积分提供度量基底。我们的实现将这一表征落实为3D连续吸引子网络：在立方细胞晶格与环面卷绕拓扑上，通过沿三轴可分离的高斯激励-抑制连接，把2D吸引子动力学扩展到完整3D空间，保持度量路径积分与噪声鲁棒性。
+
+\textbf{网络架构.} 3D网格细胞网络是维度为 $N_x \times N_y \times N_z$（本实现取 $N_x = N_y = N_z = 36$）的3D多维连续吸引子网络（MD-CAN）。网络活动 $\mathbf{A}^\mathrm{g}_t \in \mathbb{R}^{N_x \times N_y \times N_z}$ 表示机器人3D位置 $(x_t, y_t, z_t)$ 的分布式群体编码，其中每个细胞 $(i,j,k)$ 调谐于环境中的某个偏好空间位置。活动形成以当前位置为中心局域化的“凸起”（或活动包），类似于啮齿动物内嗅皮层记录中观察到的活动凸起。
+
+网络拓扑采用环面卷绕的周期性边界条件，实现无界空间表征。细胞间连接沿三轴局域且可分离：每个细胞对 $7\times7\times7$ 的高斯邻域（每轴 $\sigma = 1.5$ 个细胞）施加兴奋，对展布更宽的 $5\times5\times5$ 邻域（每轴 $\sigma = 2$ 个细胞）施加抑制，两种核均环面卷绕，使活动包无缝跨越边界。这一局域激励-抑制结构维持单一稳定凸起，支撑连续的3D路径积分。
+
+\begin{figure*}[!t]
+    \centering
+    \includegraphics[width=\textwidth]{fig/3d_grid_cell_network.pdf}
+    \caption{3D网格细胞网络。(a) 通过分布式群体编码表示位置 $(x,y,z)$ 的3D活动包。(b) 可分离高斯激励核（$7\times7\times7$ 细胞，每轴 $\sigma=1.5$ 细胞）及环面卷绕。(c) 结合位置与朝向表征的4自由度编码方案。}
+    \label{fig:3D_grid_cell_network}
+\end{figure*}
+
+图~\ref{fig:3D_grid_cell_network} 示意性地展示了：(a) 位置 $(x, y, z)$ 处的3D活动凸起，以等值面表示以可视化局域化兴奋；(b) 立方细胞晶格上的可分离高斯激励核及其环面卷绕；(c) 集成位置与朝向表征的完整4自由度编码流水线。
+
+\textbf{连续吸引子动力学.} 网络通过三个关键机制维持局域化的活动“凸起”：
+
+\textbf{(1) 局域兴奋.} 细胞按高斯连接核兴奋其邻居。采用可分离核
+\begin{equation}
+    \mathcal{K}^\mathrm{g}_{a,b,c}=\mathcal{N}(a;0,\sigma_x)\mathcal{N}(b;0,\sigma_y)\mathcal{N}(c;0,\sigma_z)
+\end{equation}
+其中 $\mathcal{N}(\cdot;\mu,\sigma)$ 表示一维高斯分布，$\sigma_x,\sigma_y,\sigma_z$ 为三轴上的空间核宽度。
+兴奋性更新为：
+\begin{equation}
+    \Delta A^\mathrm{g}_{i,j,k}=\sum_{p,q,r} A^\mathrm{g}_{p,q,r}\,\mathcal{K}^\mathrm{g}_{\langle i-p\rangle_{N_x},\langle j-q\rangle_{N_y},\langle k-r\rangle_{N_z}}
+\end{equation}
+其中 $\langle \cdot \rangle_N$ 表示周期性边界条件下的模 $N$ 卷绕。本实现取 $\sigma_x = \sigma_y = \sigma_z = 1.5$ 个细胞，核大小为 $7\times7\times7$。
+
+\textbf{(2) 全局抑制与归一化.} 均匀全局抑制以带整流的方式减去固定阈值 $\theta_g$，压制微弱背景活动同时保持凸起：
+\begin{equation}
+    A^\mathrm{g}_{i,j,k}\leftarrow \big[A^\mathrm{g}_{i,j,k}+\Delta A^\mathrm{g}_{i,j,k}-\theta_g\big]_+,\quad [\cdot]_+ = \max(0, \cdot)
+\end{equation}
+本实现取 $\theta_g = 2\times10^{-4}$。抑制之后，活动做 $L_1$ 归一化：
+\begin{equation}
+    A^\mathrm{g}\leftarrow \frac{A^\mathrm{g}}{\lVert A^\mathrm{g}\rVert_1}=\frac{A^\mathrm{g}}{\sum_{i,j,k}|A^\mathrm{g}_{i,j,k}|}
+\end{equation}
+该归一化确保活动模式具有单位总质量，使读出（质心）对整体活动幅度不敏感。
+
+\textbf{(3) 路径积分.} 活动凸起按融合速度线索 $\mathbf{v}^\mathrm{f}_t = (v^f_x, v^f_y, v^f_z)$ 移动。索引移动量计算为：
+\begin{equation}
+    (\Delta i,\Delta j,\Delta k)=\big(\lfloor \gamma_x v^f_x\Delta t\rfloor,\ \lfloor \gamma_y v^f_y\Delta t\rfloor,\ \lfloor \gamma_z v^f_z\Delta t\rfloor\big)
+\end{equation}
+其中 $\gamma_x,\gamma_y,\gamma_z$ 为度量-索引增益因子，将物理速度转换为网络网格移动。
+\begin{equation}
+    A^\mathrm{g}_{i,j,k}\leftarrow A^\mathrm{g}_{\langle i-\Delta i\rangle_{N_x},\langle j-\Delta j\rangle_{N_y},\langle k-\Delta k\rangle_{N_z}}
+\end{equation}
+该离散移动操作在环面网络拓扑上高效实现了路径积分。
+
+\textbf{视觉锚定与漂移校正.} 纯路径积分会随时间累积漂移。为防止误差无界增长，网格细胞活动通过视觉模板关联锚定到视觉地标。该关联在模板创建时静态建立：视觉模板 $m$ 记录其创建时刻的网格细胞坐标 $(g^x_m,g^y_m,g^z_m)$ 与头朝向细胞航向（即创建瞬间的路径积分状态）。当模板 $m$ 被后续帧匹配时，向其记录的网格坐标注入校正活动：
+\begin{equation}
+    \Delta A^\mathrm{g}_{g^x_m,g^y_m,g^z_m} \mathrel{+}= E_0\cdot\frac{30-e^{1.2 d_m}}{30},\qquad d_m\in[0,d_{\max}]
+\end{equation}
+其中 $E_0$ 为注入基准能量，$d_m$ 为模板活跃度：匹配发生时重置为上限 $d_{\max}$，此后随时间线性衰减。注入幅度随模板久未匹配而增强——由刚匹配时的约 $E_0/3$ 单调升至 $d_m\to 0$ 时的趋近 $E_0$。采用这种衰减式弱注入而非一次性强校正，是 RatSLAM 式的防捕获设计：单次不良匹配（例如代理静止时发生的误匹配）不足以捕获网格细胞网络，需要多个视觉模板的一致注入才能形成有效锚定。
+
+需要说明的是，在最终系统配置中，该模板级注入通路处于停用状态（部署的视觉模板实现不翻转其首次匹配标志，注入条件恒不满足）；部署系统中视觉驱动的漂移修正完全由经验地图的锚定—重锚定机制承担。
+
+\textbf{多层头方向细胞.} 多层头方向细胞（HDC）网络使用维度为 $N_\psi \times N_h$（方位角分箱 $\times$ 高度层）的2D MD-CAN表示机器人的朝向。不同高度层允许表示不同垂直位置处的朝向，支持朝向可能随高度变化的3D运行。
+
+\textbf{网络架构.} 多层头方向网络的活动为 $\mathbf{A}^\mathrm{h} \in \mathbb{R}^{N_\psi \times N_h}$（典型取 $N_\psi = 360$ 个方位角分箱，$N_h = 5$ 个高度层）。每个细胞 $(u, h)$ 调谐于方位角 $\theta_u = 2\pi u / N_\psi$ 与高度层 $h$。
+
+\textbf{吸引子动力学.} 与网格细胞网络类似，HDC网络采用局域兴奋、全局抑制与路径积分。采用高斯核 $\mathcal{K}^\mathrm{h}$：
+\begin{equation}
+    \Delta A^\mathrm{h}_{\psi,h}=\sum_{u,v}A^\mathrm{h}_{u,v}\,\mathcal{K}^\mathrm{h}_{\langle \psi-u\rangle_{N_\psi},\langle h-v\rangle_{N_h}}
+\end{equation}
+随后进行固定阈值全局抑制（$\theta_h = 2\times10^{-4}$，与上式相同的整流相减形式）与 $L_1$ 归一化：
+\begin{equation}
+    A^\mathrm{h}\leftarrow \frac{\tilde{A}^\mathrm{h}}{\lVert \tilde{A}^\mathrm{h}\rVert_1},\qquad \tilde{A}^\mathrm{h}=\big[A^\mathrm{h}+\Delta A^\mathrm{h}-\theta_h\big]_+
+\end{equation}
+路径积分按偏航角速度 $r^f$ 与垂向速度 $v^f_z$ 移动活动凸起：
+\begin{equation}
+    \Delta\psi=\lfloor \gamma_\psi r^f \Delta t\rfloor,\quad \Delta h=\lfloor \gamma_h v^f_z \Delta t\rfloor
+\end{equation}
+其中 $\gamma_\psi$ 将角速度转换为方位角分箱，$\gamma_h$ 将垂向速度映射为高度层移动量。
+
+\textbf{位姿读出.} 度量位姿估计通过质心计算（群体向量解码）从空间细胞活动中解码得到：
+\begin{align}
+    \hat{\mathbf{p}}_t & = ({\hat x}_t, {\hat y}_t, {\hat z}_t) = \frac{\sum_{i,j,k} \mathbf{c}_{i,j,k} A^\mathrm{g}_{i,j,k,t}}{\sum_{i,j,k} A^\mathrm{g}_{i,j,k,t}}, \quad \mathbf{c}_{i,j,k} = (x_i, y_j, z_k) \\
+    \hat{\psi}_t       & = \mathrm{atan2}\left(\sum_{u,h} A^\mathrm{h}_{u,h,t} \sin\theta_u, \sum_{u,h} A^\mathrm{h}_{u,h,t} \cos\theta_u\right), \quad \theta_u = 2\pi u / N_\psi
+\end{align}
+该解码天然处理朝向的环形拓扑（使用 $\mathrm{atan2}$ 避免角度回绕问题），并通过加权平均为位置提供亚分箱分辨率。
+
+\subsection{海马经验地图与闭环}
+\label{sec:loop_closure}
+
+在大脑中，海马体将地点表征链接为遍历空间的情节记忆，其重放与再巩固支撑记忆引导的导航。多层经验地图正对应这一组织：它将3D空间经验表示为图结构，提供一种混合拓扑-度量表征，兼具离散基于地点的地图（拓扑鲁棒性、闭环）与连续度量表征（精确定位）的优点。
+
+\textbf{经验表征.} 每个经验节点 $\mathcal{E}_i$ 编码一段独立的空间情节，包含激活的视觉模板与描述子 $(VT_i,\,\boldsymbol{\phi}_i\in\mathbb{R}^{192})$、同步的空间细胞编码 $\mathbf{P}^{gc}_i=\mathbf{A}^\mathrm{g}_i\in\mathbb{R}^{N_x\times N_y\times N_z}$ 与 $\mathbf{P}^{hdc}_i=\mathbf{A}^\mathrm{h}_i\in\mathbb{R}^{N_\psi\times N_h}$、从这些活动解码出的度量位姿 $(x_i, y_i, z_i, \psi_i)$，以及用于时序排序的时间戳 $t_i$。
+这种丰富的多模态编码通过视觉匹配实现鲁棒的闭环检测，同时通过空间细胞编码保持度量信息。
+
+\textbf{经验创建与连接.} 随着机器人导航，当当前空间表征与所有现有经验都足够不同时，创建新经验。创建准则综合视觉与空间细胞相似度：
+\begin{equation}
+    \begin{aligned}
+        \text{若 }\; & d_{cos}(\boldsymbol{\phi}_t, \boldsymbol{\phi}_j) > \tau_{VT} \quad \text{对所有 } j \in \mathcal{E} \\
+                                           & \text{或 } \lVert (\hat{x}_t, \hat{y}_t, \hat{z}_t) - (x_j, y_j, z_j) \rVert > d_{thresh} \text{ 则创建新经验}
+    \end{aligned}
+\end{equation}
+其中 $\tau_{VT} = 0.08$ 为视觉模板匹配阈值，$d_{thresh}$ 为空间距离阈值（典型 0.5~m）。
+
+相邻经验由编码相对位姿转移的有向边连接：
+\begin{align}
+    \mathbf{T}_{i \to i+1} &= (\Delta x, \Delta y, \Delta z, \Delta \psi) \nonumber\\
+    &= (x_{i+1} - x_i,\ y_{i+1} - y_i,\ z_{i+1} - z_i,\ \psi_{i+1} - \psi_i)
+\end{align}
+这些边构成经验地图图 $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ 的主要拓扑结构。
+
+\textbf{闭环检测.} 当当前视觉模板与某历史经验匹配超过最小时间间隔（以避免平凡闭环）时，检测到闭环：
+\begin{equation}
+    \begin{aligned}
+        \text{若存在 } j:\; & d_{cos}(\boldsymbol{\phi}_t, \boldsymbol{\phi}_j) < \tau_{loop} \\
+                                                      & |t - t_j| > T_{min} \text{ 则检测到闭环}
+    \end{aligned}
+\end{equation}
+其中 $\tau_{loop} = 0.05$（比模板创建阈值更严格，以减少误报），$T_{min} = 50$ 帧（10 Hz下约5秒）。
+
+检测到闭环后，向图中添加一条带位姿残差的闭环边：
+\begin{equation}
+    \mathbf{T}_{loop} = (\hat{x}_t - x_j, \hat{y}_t - y_j, \hat{z}_t - z_j, \hat{\psi}_t - \psi_j)
+\end{equation}
+该闭环约束通常违背图一致性（由于累积漂移），从而触发地图松弛。
+
+\textbf{地图松弛.} 地图松弛将闭环误差分布到闭环路径上的所有经验，以最小化全局不一致。我们采用迭代松弛算法：
+
+\textbf{第1步：识别闭环路径.} 给定从经验 $j$ 到经验 $t$ 的闭环边，识别沿路径的经验序列 $\mathcal{P} = \{j, j+1, \ldots, t-1, t\}$。
+
+\textbf{第2步：计算位姿残差.} 沿闭环累积的位姿转移理想情况下应当闭合（回到原点）：
+\begin{equation}
+    \mathbf{e}_{loop} = \sum_{k \in \mathcal{P}} \mathbf{T}_{k \to k+1} - \mathbf{T}_{loop}
+\end{equation}
+其中 $\mathbf{e}_{loop}$ 为闭合轨迹周围的累积位姿漂移残差，$\mathcal{P}$ 表示构成闭环的有序经验序列。
+
+\textbf{第3步：分布校正.} 将校正量按比例分布到闭环经验上：
+\begin{equation}
+    \mathbf{T}_{k \to k+1} \leftarrow \mathbf{T}_{k \to k+1} - \frac{\mathbf{e}_{loop}}{|\mathcal{P}|}
+\end{equation}
+该均匀分布假设漂移以恒定速率累积，是一个合理的一阶近似。
+
+\textbf{第4步：更新经验位姿.} 通过对校正后的转移量积分，重新计算所有经验位姿：
+\begin{equation}
+    (x_{k+1}, y_{k+1}, z_{k+1}, \psi_{k+1}) = (x_k, y_k, z_k, \psi_k) + \mathbf{T}_{k \to k+1}
+\end{equation}
+
+\textbf{第5步：重新锚定空间细胞.} 将校正后的位姿 $(\hat{x}, \hat{y}, \hat{z}, \hat{\psi})_{corr}$ 通过在校正位置处重新初始化活动凸起，重新注入空间细胞网络。这从校正后的参考点“重置”路径积分，防止后续运行中误差累积。
+
+该松弛过程迭代运行直至收敛或达到最大迭代次数，确保经验地图保持全局一致，同时保留局部度量精度。
+
+\textbf{部署闭环线：帧基候选.} 所报告系统的闭环检测建立在\emph{帧}而非经验节点之上：每帧由冻结 DINOv2-S 全局场景嵌入 $\mathbf{e}_t$ 描述，再经与尺度支路同一一次训练协议训练的细调头精炼（仅用仿真数据）。当前帧的候选匹配是历史帧 $j^{*} = \arg\max_{j} \cos(\mathbf{e}_t, \mathbf{e}_j)$，限制于 EKF 里程计弧长间隔超过 $\mathrm{arc}_{\min}$（50~m）的帧——排除了平凡的自匹配，同时保持对一切可信远历史的全局搜索。这一帧级候选阶段把闭环检测与经验节点生成解耦，为门链提供逐帧稠密证据。
+
+\textbf{四重门链.} 候选须通过四个固定门（所有阈值在五场景上一次设定）方可成为被接受的闭环事件：
+\begin{align}
+    \mathrm{accept}(t, j^{*}) \iff{}
+    & \cos(\mathbf{e}_t, \mathbf{e}_{j^{*}}) \ge \tau
+    \;\wedge\; \mathrm{streak}(t, j^{*}) \ge 15 \nonumber\\
+    &\;\wedge\; |\Delta\psi_{t j^{*}}| \le 60^{\circ}
+    \;\wedge\; \lVert \mathbf{c}_{t j^{*}} \rVert \le 25\,\mathrm{m},
+\end{align}
+另有全轨迹累计校正预算 $\sum_i \lVert \mathbf{c}_i \rVert \le 35$~m，以及历史锚点去重（每帧历史至多锚定一次）。\emph{相似度门}（$\tau = 0.94$）由五场景扫描标定：观测到的假候选得分 0.907--0.935，而强真实重访得分 $\ge 0.949$。\emph{持续性门}（$\ge 15$ 个连续候选帧，$\pm 10$ 容差）利用真实重访的结构性性质：车辆驶过同一条街会生成持续的高相似度帧串，而感知混叠只产生单帧或短突发尖峰——此门无尺度依赖，跨域原样迁移。\emph{朝向门}（航向差 $60^{\circ}$）容许同向与反向重访，同时拒绝几何上不可行的匹配。校正预算限制任何单次误接受的损害。该链刻意保守：KITTI~09 唯一的真环位于末尾两帧，串长至多 $2 < 15$，门正确拒绝——即使事后放行，误差也仅变化 $-0.12$~m——而朝向门拒绝了该序列上两个高相似但几何不一致的候选（补充材料第 S.3 节）。宁缺毋滥。
+
+\textbf{注入.} 被接受的事件注入一次性平移校正 $\mathbf{c}_{t j^{*}}$（步长 $\beta = 1.0$），把当前段拉向匹配节点的地图位姿，把一条 link 边写入经验图，并将该事件交给下文的全 Sim(3) 重锚定算子；校正后的段随后进入上方的漂移场松弛。
+
+\textbf{分布式闭环漂移场.} 每次重锚定事件（闭环或匹配到已有节点）都会重置增量航位推算状态，使原始输出轨迹在帧 $f_i$ 处包含一个幅值为 $\mathbf{c}_i$ 的离散校正阶跃。这些阶跃累积成阶梯函数 $\mathbf{C}_{\mathrm{cum}}(f)$，其离散跳变是经验地图校正输出与滤波前端之间逐帧不一致的主要来源。受海马-内嗅系统中空间记忆慢速再巩固的启发，我们将每个阶跃松弛为连续漂移场。对每个幅值 $\lVert\mathbf{c}_i\rVert \le C_{\max}$ 的重锚定脉冲，施加持续 $W_i$ 帧的升余弦斜坡：
+\begin{equation}
+    F_i(f) =
+    \begin{cases}
+        \tfrac{1}{2}\bigl(1-\cos(\pi (f-f_i)/W_i)\bigr), & f_i \le f < f_i + W_i \\
+        1, & f \ge f_i + W_i
+    \end{cases}
+\end{equation}
+校正后的轨迹为
+\begin{equation}
+    \hat{\mathbf{p}}(f) = \mathbf{p}_{\mathrm{exp}}(f) + \Bigl(\sum_i F_i(f)\,\mathbf{c}_i \;-\; \sum_{i:\,f_i \le f}\mathbf{c}_i\Bigr),
+\end{equation}
+即每次校正在斜坡结束后仍以保持值 $\mathbf{c}_i$ 持续生效，但其起始过程在 $W_i$ 帧内被平滑，阶梯 $\mathbf{C}_{\mathrm{cum}}$ 被连续场精确替代。三个经五个户外序列离线扫参验证的设计选择塑造该场：
+\begin{itemize}
+    \item \textbf{自适应松弛时程.} $W_i = \mathrm{clip}(W_0 + W_{\perp}\,\lVert\mathbf{c}_i\rVert,\; W_0,\; W_{\max})$：跳变越大松弛越慢，类比更强的空间记忆更慢的再巩固，以及网格细胞漂移校正的更长时间常数。
+    \item \textbf{末端自然终止.} 每个斜坡截断于轨迹末端：$W_i \leftarrow \min(W_i,\, f_{\mathrm{end}}{-}f_i{+}1)$，使漂移场在末帧完全松弛，避免半松弛斜坡残留的末端偏置。
+    \item \textbf{幅值门控.} $\lVert\mathbf{c}_i\rVert > C_{\max}$ 的跳变瞬时施加、不进入漂移场：大校正对应远距真闭环（早期节点位置可信），小校正（近邻重访、哈希碰撞）不确定而受益于缓慢松弛。扫参显示把\emph{所有}阶跃摊平反而降低精度（如 Town01：RMSE +0.64\%），而门控后在全部五个序列上同时优于未松弛基线与EKF前端。
+\end{itemize}
+在EKF里程计模式（$\mathrm{NLM\_USE\_EKF\_ODO}$）下，经验地图以融合后的EKF轨迹作为运动源（帧间位移与航向增量），新经验节点钉扎在EKF地图坐标上，使网格细胞路径积分器与经验图运行于同一套受约束的度量地基之上；漂移场随后仅校正其上残余的重锚定阶跃。
+
+\textbf{闭环全Sim(3)重锚定.} 上述每个重锚定脉冲只平移其后轨迹，不改变其全局尺度与朝向，故单目尺度模糊在闭环之间持续累积。我们因此补充一个闭环触发的算子：在每次被接受的闭环事件的帧 $t_{\mathrm{now}}$ 处，对\emph{锚点窗} $\mathbf{A}$（轨迹前 $\mathrm{win}$ 个运动帧，自动跳过静止前导）与\emph{当前窗} $\mathbf{C}$（截至 $t_{\mathrm{now}}$ 的 $\mathrm{win}$ 帧，以下一事件为界）做 Procrustes 全相似拟合
+\begin{equation}
+    \mathbf{A} \approx s\,(\mathbf{C}\mathbf{R}) + \mathbf{t}, \qquad s \in [0.05,\,20],
+\end{equation}
+其中 $\mathrm{win} = 250$ 帧（离线窗口扫参自校准），尺度门剔除退化拟合。$t_{\mathrm{now}}$ 之后（至下一事件）的整段轨迹随之被拉回首锚坐标系：
+\begin{equation}
+    \hat{\mathbf{p}}(f) = s\,(\mathbf{p}(f)\mathbf{R}) + \mathbf{t}, \qquad t_{\mathrm{now}} < f < t_{\mathrm{next}},
+\end{equation}
+且各事件独立地基于校正前轨迹施加（非链式，故前一事件的重拟合不会污染后一事件的窗口）。由于每条被接受的闭环都是同一物理地点的真重访，该重锚定是无真值信息的全局一致性校正；在无闭环路线上是严格空操作。在专门的闭环基准（一条在不同时刻多次穿越同一路段的城市路线）上，该全 Sim(3) 重锚定相对 EKF 基线多恢复 $15\times$ 累积全局漂移（55.92~m 对 842.54~m，锚定 Sim(3) 口径）：闭环间累积的主导全局误差正是单目尺度误差，唯有全相似重拟合能将其消除。

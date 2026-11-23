@@ -34,10 +34,10 @@ The cameras are arranged without overlap, collectively covering a total filed of
 
 Using the experienced agent, vehicle-based cameras and hero vehicle, driving data is collected in progressively more crowed scenarios.
 Firstly, data is collected in Carla's Town01, a small scene that allows contains one lane merely, meaning we can't change lanes.
-% 中午、傍晚、大雨的中午、潮湿的中午
+% noon, dusk, rainy noon, wet noon
 Specifically, 1620K frames approximately at 10 fps from vehicle-based RGB sensor is utilized on 4 different learning weather types.
 %: ClearNoon, ClearSunset, HardRainNoon, and WetNoon. 
-% 测试：Town02 细雨的傍晚、潮湿的傍晚
+% test: drizzling dusk and wet dusk in Town02
 For generalization testing, we use Carla's Town02, evaluating the agent under SoftRainSunset and WetSunset weather conditions. 
 Next, the benchmark is collected on several simulator scene to capture crowed driving scenes, such as T junctions, highway entrances, exits, and crossing the intersections. 
 To maintain consistency with setup in MBI~\cite{Hu:2022}, Town05 is reserved for testing, and totaling approximately 2,100K image per sensor is gathered at 10 fps in Town01 to Town06. 
@@ -53,7 +53,7 @@ The batch size is 100,
 and model training is performed for 100 epochs on a single NVIDIA RTX A6000 GPU.
 
 
-% Cornet详细信息
+% CORnet details
 In ventral stream, after the input is processed by V2$_\text{COR}$ once, the resulting output is inputted back to V2$_\text{COR}$.
 This process forms a recurrent connection.
 We run V2$_\text{COR}$ and IT$_\text{COR}$ two times, and execute V4$_\text{COR}$ four times repeatedly, respectively.
@@ -63,7 +63,7 @@ Layer normalization is unique to each time step.
 The existing description of the ventral pathway does not include the connection that span across different regions, and retinal and lateral geniculate nucleus processing are not explicitly modeled.
 
 
-% 各种环境下的场景说明
+% scenario description under different weather
 % Roach_carla0913_fps10_dense_normalcamera_NoCrash_3cam/RouteScenario_0000/rgb_central001215.png
 \begin{figure}[t]
 	\centering
@@ -83,7 +83,7 @@ The existing description of the ventral pathway does not include the connection 
 	\label{fig:structure_analysis}
 \end{figure}
 
-% 驾驶评估的3个不同数据集（不包含实验结果）
+% the three driving-evaluation datasets (results excluded)
 \subsection{Driving Evaluation}
 \label{sec:Metrics}
 \hspace{1pc}The BID agent's capabilities are constrained by the proficiency of the expert it is emulating. 
@@ -96,7 +96,7 @@ When optimized, the model's output closely matches the expert's performance, as 
 We conduct experiments on small single-lane town following the nocrash dataset~\cite{Zhang:2021,Hu:2022}, and on multiple towns (Sec.~\ref{sec:small_town_results}) based on the offline Carla leaderboard dataset~\cite{Zhang:2021,Hu:2022}. 
 
 
-% 三种不同场景的性能
+% performance in the three scenarios
 \begin{table*}
 	\caption{Results in Town02.
 		The expert refers to reinforcement learning~\cite{Zhang:2021}, while RL-Coach refers to Coach imitation learning. 
@@ -162,14 +162,14 @@ We conduct experiments on small single-lane town following the nocrash dataset~\
 
 \subsubsection{Official Measurement}\label{lb_metrics}
 \hspace{1pc}We utilize the officiial measurement in several simulation scenes in order to match the evaluation with Carla leaderboard\cite{Hu:2022}.
-% Avg.DS 平均驾驶分数、平均路线完成
+% Avg.DS: average driving score and average route completion
 The average path accomplishment (\emph{APA}) and the average drive grade (\emph{ADG}) are the most important measurement index. 
 While \emph{APA} measures the average distance that the agent can run toward the goal,
 \emph{ADG} penalizes driving performance according to the criteria outlines for the Carla measurement.
-% Avg.RC：自车辆能够行驶至目标的平均距离。
+% Avg.RC: average distance the ego vehicle travels towards the goal
 
 
-% 高层导航命令
+% high-level navigation command
 \subsubsection{Goal Instruction} 
 \hspace{1pc}During training, we employ basic goal instructions like ``turn left" or ``go straight" when reaching a crossroad, just like in LBC\cite{Codevilla:2019}.
 After passing a crossroad in more complex scenes, the ego-vehicle maybe legal when entering one of the several available routes. 
@@ -183,7 +183,7 @@ An example of this process is shown in Fig.~\ref{fig:command_ambiguous}.
 \hspace{1pc}Based on the quantity of variational actors ({\ie}, human, cars) in Carla scene, the benchmark comprises 3 mission with varying degrees of challenge: crowded, normal and none.
 Town02 specifies that there are zero human and zeros cars (none); fifty human and fifteen cars (normal); and one hundred fifty human and seventy cars (crowded).
 %
-% 默认的配置会导致拥堵死锁
+% the default configuration deadlocks in dense traffic
 The initial actors quantity in nocrash benchmark frequently causes crowded and congestion at intersections in the crowded scenario~\cite{Zhang:2021}.
 To address this, we adopt the \emph{crowded} scenarios described in RL-Coach~\cite{Zhang:2021}, reducing human population from one hundred and fifty to seventy. 
 %A task consist of two weather conditions never seen it before and twenty-five goal-oriented scenarios.
@@ -191,20 +191,20 @@ To address this, we adopt the \emph{crowded} scenarios described in RL-Coach~\ci
 %The driving rate is penalized for unexpected violations in accordance with the guidelines outlined in these benchmark.
 
 
-% 度量标准的说明
+% description of the metrics
 The success rate (\emph{SR}), which represents the proportion of runs that are normally finished, is the primary evaluation index for comparing agents.
-% 严格的成功率
+% strict success rate
 We also offer the rigorous \emph{SR} (\emph{SSR}) for a more detailed measurement, which calculates the proportion of normal runs under a 0 violation policy for any rules, like running at a no passing traffic sign or deviating from planned route.
-% T.L：在红灯时不停的次数
+% T.L: number of times the vehicle does not stop at a red light
 Additionally, we include other violative measurement.
 The quantity of vehicle that fails to stop at a red traffic sign is represented by \emph{TL}.
-% 和其他车辆碰撞的次数
+% number of collisions with other vehicles
 The quantity of crashes with other cars is denoted by \emph{CV}.
-% R.Dev：当高层命令没有很好地执行，路线偏差的次数
+% R.Dev: route deviations when the high-level command is not followed well
 The quantity of path inconformity where the high level navigation is not properly run is denoted by \emph{RD}.
-% O.L：考虑了自主车辆驶出车道的情况（例如，在对面车道或人行道上）
+% O.L: off-lane cases, e.g. oncoming lane or sidewalk
 \emph{OL} is the quantity of the agent deviate from its lane ({\eg}, to the sidewalk or to the opposite lane).
-% C.L：与城镇布局发生碰撞的次数
+% C.L: collisions with the town layout
 The quantity of crashes with scene is symbolized by \emph{CL}.
 %Per kilometer driving, we normalize all the number of violations.
 
@@ -213,7 +213,7 @@ The quantity of crashes with scene is symbolized by \emph{CL}.
 
 \subsection{Experiment Result}
 \label{sec:Results}
-% 基于模型的模仿学习
+% model-based imitation learning
 \hspace{1pc}We contrast BID with three state-of-the-art, vision-based AD models: the Coach IL method (here RL-Coach) \cite{Zhang:2021}, MBI~\cite{Hu:2022} and MVA\cite{xiao2023scaling}. 
 It is important to note that while BID employ sample produced by the RL-Coach method, optimizing a BID doesn't need image annotated by humans. 
 In this instance, the RL-Coach model acts as the experienced driver during sample collection.
@@ -250,7 +250,7 @@ However, MBI has the highest \emph{ADG} score (73\%), while BID achieves 68\%.
 We attribute this difference to the fact that MBI rarely drives outside the pre-designed lane, as it is provided with the route map as input. 
 In contrast, BID does not use an explicit route map and instead relies solely on high level  goal instructions.
 
-% 不同迭代时的消融实验
+% ablation over training iterations
 % CILv2_multiview\network\models\architectures\CIL_multiview\evaluator.py
 \begin{figure*}[t]
 	\centering
@@ -267,12 +267,12 @@ In contrast, BID does not use an explicit route map and instead relies solely on
 \end{figure*}
 
 
-% 在密集场景中的消融实验
+% ablation in dense scenarios
 % table:sucess_rate_nc_dense
 \begin{table}
 	\caption{\textbf{Camera-based imitation learning agent's \emph{SR} on crowded environments.}
 		The mean value and deviation are computed based on 5 random seeds. 
-		% 数据聚合方法：DAGGER：试图在学习策略诱导的状态分布下收集专家演示
+		% data aggregation (DAgger): collect expert demonstrations under the state distribution induced by the learned policy
 		% Our models are from DAGGER iteration 5. 
 		NCC: nocrash-crowded. ts: train scene. tw: train scene and weather have never seen before. ns: new scene. nw: new scene and weather have never seen before.
 		In EDA, ``(E)" denotes an assembly of iteration sets, while ``+" indicates the additive jitter on the benchmark.}
@@ -370,7 +370,7 @@ In contrast, BID does not use an explicit route map and instead relies solely on
 \end{table*}
 
 
-% 可视化注意力
+% attention visualisation
 \subsubsection{BID's Activation Visualization}
 \label{sec:Visualization}
 \hspace{1pc}We want to know which parts of the image BID focuses on during decision-making. 
@@ -390,7 +390,7 @@ Specifically, BID chooses to slow down because of the crossing human, despite th
 This indicates that BID appropriately prioritizes the presence of pedestrians over the traffic signal and navigation command.
 
 
-% 验证集的1350帧，激活图的第45张
+% frame 1350 of the validation set, the 45th activation map
 \begin{figure}[ht!]
 	\centering
 	\includegraphics[width=\linewidth]{fig/attention_ped_greed.pdf}
@@ -403,7 +403,7 @@ This indicates that BID appropriately prioritizes the presence of pedestrians ov
 
 
 
-% 消融实验：速度（包括背侧通路）、导航
+% ablation: speed (including the dorsal pathway) and navigation
 \subsubsection{Ablation}
 
 \hspace{1pc}An imitation learning ego-vehicle's ability to perform is inherently constrained by the quality of experienced driver it imitates. 
@@ -413,9 +413,9 @@ We optimize the BID (Fig.~\ref{fig:score_eu_lb_tt_tn}) and conduct ablation stud
 As shown in Table~\ref{table:sucess_rate_nc_dense}, the optimal configuration from the ablative experiments is also assessed on benchmark in crowded actors for a more meaningful comparison with latest models.
 
 
-% 说明消融的各个指标？
-% L_N 导航信号
-% L_D 背侧流信号
+% explain each ablation metric?
+% L_N: navigation signal
+% L_D: dorsal-stream signal
 Fig.~\ref{fig:score_eu_lb_tt_tn} shows the behavior grades of experienced and imitation learning drivers for an epoch on offical benchmark with crowded actors.
 The basic $\mathcal{L}$ represents the proposed implementation of the baseline BID trained by expert. 
 According to the leaderboard instructions, this additional navigation vector helps separating scenes where the map's complexity may make it difficult to understand the labels of each frame.
@@ -423,7 +423,7 @@ Given the improvements in our best-performing BID, it is expected that $\mathcal
 The significant performance gap between the baseline and $\mathcal{L}_D + \mathcal{L}_N$, especially when transferring to the scene never seen it before, highlights the basic approach limitations.
 
 
-% 一步步添加后的效果
+% effect of adding components step by step
 $\mathcal{L}_D$ outperforms $\mathcal{L}_b$ overall by incorporating the dorsal stream and speed embedding into the baseline $\mathcal{L}_b$.
 Additionally, learning from the action distribution allows $\mathcal{L}_D$ to generalize superior than $\mathcal{L}_b$ on the benchmark dataset, but not on the offical leaderboard.
 When $E_S$ is given merely, the feature required to generate accurate driving action does representation mapping to enhance performance.

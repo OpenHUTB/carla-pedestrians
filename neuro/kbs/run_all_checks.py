@@ -13,7 +13,7 @@
 
   python3 neuro/kbs/run_all_checks.py --data-root <dir> --backup-root <dir> --json report.json
 
-分 A/B/C/D/F 五段 (E 段 Table 5 运行时是 MATLAB 实测, 脚本无法重算, 见 CHECKLIST_VERIFY.md):
+分 A/B/C/D/F 五段 (E 段 Table 5 运行时是 MATLAB 实测, 脚本无法重算):
   A 输入清单   —— 每个集该有的文件在不在、行数对不对
   B Table 3    —— NLM/EKF/VO 的 Sim(3) RMSE 与 drift, 模板/节点/闭环计数, GT 长度
   C Table 4    —— 双口径四配置 8 格/集 (缺 slam_results_scale_nlm / orbonly / fp_head030 时记 SKIP)
@@ -337,7 +337,7 @@ def main():
         for nm, got, e in res['fails']:
             print(f'  ! {nm}: got {got}, expected {e}')
     if res['skips']:
-        print('\n因缺产物跳过 (不含 Table 3 的 Ours/EKF+尺度/ORB-only):')
+        print('\n因缺产物跳过 (不含 Table 3 的 Ours/EKF+scale/ORB-only):')
         for nm in res['skips']:
             print(f'  - {nm}')
 

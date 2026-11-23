@@ -38,7 +38,7 @@ Data root convention for all groups: `NLM_DATA_ROOT` (defaults to `../data/01_Ne
 | `pr_scale_head.py` | trains the monocular scale-correction head |
 | `predict_kitti_depth_head.py` | zero-shot scale prediction on KITTI 07 with the shipped head |
 | `replay_depth_ab.py` | EKF replay A/B over depth inputs |
-| `scale_series_p1.py` | three-way scale series and bias measurement |
+| `scale_series_p1.py` | three-way scale series and bias measurement (needs the original work tree under `NLM_WORK_ROOT`, not the released bundle) |
 | `diag_pr_gates.py` | offline replica of the MATLAB PR-detector gate chain |
 
 ## 3. One-off analyses and sweeps (not in the paper pipeline)
@@ -51,34 +51,34 @@ documented rather than hidden:
 
 | script | role |
 |---|---|
-| `afix_prototype.py` | A-fix 字段形态原型 (Python, 不跑 MATLAB) |
-| `dc_review.py` | NLM DC v3 审阅材料: 5集逐帧误差对比图(base NLM / DC v3 / EKF) + 指标汇总 |
-| `dc_sweep.py` | 分布式闭环漂移场(DC v3)离线扫参, 7-DoF Procrustes 口径(论文Table口径) |
-| `nlm_eval.py` | NLM 回归评测工具 (2026-10-04) |
-| `promote_t94_final.py` | τ=0.94 定解一键定稿 (2026-10-14) |
-| `sweep_metrics.py` | 汇总 /tmp/nlm_sweep_newfoot 各 (VT,CE) 组合的 ATE |
-| `sweep_weak_sets.py` | 弱集 (Town03/Town07/Town10HD) 定向扫参, 2026-10-12 |
-| `tar_afix_sweep.py` | Turnaround 折返集 A-fix 闭环约束漂移场离线扫参 |
-| `tau_scan.py` | PR 分支相似度阈值 τ 细扫 (0.90-0.98, 事件级明细) |
-| `turnaround_sim3_eval.py` | 折返集 A/B 换算到论文口径(首100帧锚定 Sim(3) 7-DoF Procrustes, 3D)。 |
-| `route2_dyaw_events.py` | 路线2: 对 NLM 记录的全部闭环事件对测量视觉相对位姿 (dyaw) |
+| `afix_prototype.py` | A-fix field-shape prototype (Python, does not invoke MATLAB) |
+| `dc_review.py` | review material for NLM DC v3: per-frame error comparison plots over five sequences (base NLM / DC v3 / EKF) plus a metric summary |
+| `dc_sweep.py` | offline sweep of the distributed closed-loop drift field (DC v3) in the 7-DoF Procrustes caliber used by the paper tables |
+| `nlm_eval.py` | NLM regression evaluation helper (2026-10-04) |
+| `promote_t94_final.py` | one-shot promotion of the τ=0.94 solution to final (2026-10-14) |
+| `sweep_metrics.py` | aggregate ATE over the (VT, CE) combinations under /tmp/nlm_sweep_newfoot |
+| `sweep_weak_sets.py` | targeted sweep on the weak sets (Town03/Town07/Town10HD), 2026-10-12 |
+| `tar_afix_sweep.py` | offline sweep of the A-fix closed-loop constraint drift field on the Turnaround sequence |
+| `tau_scan.py` | fine scan of the PR-branch similarity threshold τ (0.90–0.98, event-level detail) |
+| `turnaround_sim3_eval.py` | A/B variants of the Turnaround sequence converted to the paper caliber (first-100-frame anchored Sim(3) 7-DoF Procrustes, 3D) |
+| `route2_dyaw_events.py` | route 2: measure the visual relative pose (dyaw) for every closed-loop event pair recorded by NLM |
 | `pr_ab_sim3.py` | no description in source |
-| `pr_eval.py` | DL-NLM Phase 0 零样本闭环评估 (DINOv2 vs ORB vs oracle) |
-| `pr_export_embeddings.py` | DINOv2 嵌入 npy → MATLAB .mat (PR 分支用) |
-| `pr_geom_gate.py` | Phase 0.5: DINOv2 候选闭环的几何验证门 (SIFT + RANSAC 本质矩阵) |
-| `pr_mapdist_gate.py` | Phase 0.5c: 地图直线距离门 (正确的闭环判别器) |
-| `pr_oracle_loops.py` | 真闭环上限 (DL-NLM Phase 0, 事件级) |
-| `pr_oracle_revisit.py` | oracle 回访上限 (DL-NLM Phase 0) |
-| `pr_pnp_gate.py` | Phase 0.5b: 基于位姿假设的 PnP 几何验证门 (判别力天花板测试) |
+| `pr_eval.py` | DL-NLM Phase 0 zero-shot loop evaluation (DINOv2 vs ORB vs oracle) |
+| `pr_export_embeddings.py` | DINOv2 embeddings, npy → MATLAB .mat (for the PR branch) |
+| `pr_geom_gate.py` | Phase 0.5: geometric verification gate for DINOv2 loop candidates (SIFT + RANSAC essential matrix) |
+| `pr_mapdist_gate.py` | Phase 0.5c: straight-line map-distance gate (the correct loop discriminator) |
+| `pr_oracle_loops.py` | true-loop upper bound (DL-NLM Phase 0, event level) |
+| `pr_oracle_revisit.py` | oracle revisit upper bound (DL-NLM Phase 0) |
+| `pr_pnp_gate.py` | Phase 0.5b: PnP geometric gate on pose hypotheses (discriminative-ceiling test) |
 | `diag_bidir_drive.py` | no description in source |
 | `diag_collector_seq.py` | no description in source |
 | `diag_planner_route.py` | no description in source |
-| `probe_bidir.py` | 在指定 CARLA 端口/地图上找一条"真闭环"双向折返起点。 |
+| `probe_bidir.py` | find a bidirectional turnaround start point that forms a true loop on a given CARLA port / map |
 | `scan_bidir_routes.py` | no description in source |
 | `validate_bidir_candidates.py` | no description in source |
-| `xodr_bidir_scan.py` | 离线解析 OpenDRIVE, 找"双向折返真闭环"候选起点。 |
-| `kitti09_assemble_raw.py` | 从 raw 0033_sync.zip 解压结果组装 kitti_prepare_fusion.py 输入布局 |
-| `kitti_prepare_fusion.py` | KITTI 转换管线: 原始 KITTI odometry 数据 → 标准 IMU_Fusion 格式 + 真视觉惯性 EKF |
+| `xodr_bidir_scan.py` | offline OpenDRIVE parsing to find candidate bidirectional turnaround start points |
+| `kitti09_assemble_raw.py` | unpack the raw 0033_sync.zip results into the input layout expected by kitti_prepare_fusion.py |
+| `kitti_prepare_fusion.py` | KITTI conversion pipeline: raw KITTI odometry data → standard IMU_Fusion layout plus a true visual-inertial EKF |
 | `_diag_kitti.py` | no description in source |
 | `_improve_exp.py` | no description in source |
 
@@ -92,7 +92,7 @@ documented rather than hidden:
 | `test_roundtrip.py` | no description in source |
 | `test_spawn_z.py` | no description in source |
 | `test_vehicle_diff.py` | no description in source |
-| `validate_dataset.py` | 数据集完整性校验: GT 跳变 / VO 封顶 / 帧数 / 时间戳连续性 / 文件行数一致性。 |
+| `validate_dataset.py` | dataset integrity check: GT jumps / VO saturation / frame counts / timestamp continuity / row-count agreement |
 
 `validate_dataset.py` also serves as an offline consistency check of a run tree
 (GT jumps, VO saturation, frame counts, timestamp monotonicity).

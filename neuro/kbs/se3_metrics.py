@@ -7,18 +7,22 @@
   2) 同口径输出 sim3_full, 与 final_metrics.json 规范数字交叉校验 (必须逐位一致)。
   3) 输出 sim3_full 拟合的全局尺度因子 s — 量化 "评测吸收了多大全局尺度误差"。
 配置 (每集, 存在即算):
-  VO / EKF / EKF+尺度 (fp_head030, P2 尺度头 replay db=0.30, 无闭环) /
-  NLM-闭环线 (slam_results, τ0.94 规范) / NLM-全系统 (slam_results_scale_nlm) /
+  VO / EKF / EKF+scale (fp_head030, P2 尺度头 replay db=0.30, 无闭环) /
+  NLM-loopline (slam_results, τ0.94 规范) / NLM-fullsystem (slam_results_scale_nlm) /
   ORB-only (slam_results_orbonly, 消融)
 输出: neuro/kbs/se3_metrics.json + 打印摘要
 """
-import numpy as np, pandas as pd, scipy.io as sio, json, os
+import numpy as np, pandas as pd, scipy.io as sio, json, os, sys
 
 # 锚定到脚本所在目录: 本脚本含 ../ 相对路径, 需保证从任意 cwd 调用均正确
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # 数据根可覆盖: NLM_DATA_ROOT=/path/01_NeuroSLAM_Datasets (默认 ../data/01_NeuroSLAM_Datasets)
 D  = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/') + '/'
+if not os.path.isdir(D):
+    print(f'[ERROR] data root not found: {os.path.abspath(D)}\n'
+          f'        set NLM_DATA_ROOT=<bundle>/datasets (or a full run tree) and retry')
+    sys.exit(2)
 # _meta 里记录可移植的记号: 设了环境变量就写 $NLM_DATA_ROOT/, 否则写默认相对路径。
 # (曾经写死实际绝对路径, 会把作者本机的 workspace 路径提交进仓库)
 ROOT_NOTE = '$NLM_DATA_ROOT/' if 'NLM_DATA_ROOT' in os.environ else D
@@ -81,15 +85,15 @@ for sd in SETS:
     cfg = {
         'VO': loadcsv(base, 'visual_odometry.txt', ['vo_x', 'vo_y', 'vo_z']),
         'EKF': loadcsv(base, 'fusion_pose.txt', ['pos_x', 'pos_y', 'pos_z']),
-        'EKF+尺度': None,
-        'NLM-闭环线': loadmat(base, 'slam_results/trajectories.mat', 'exp_trajectory'),
-        'NLM-全系统': loadmat(base, 'slam_results_scale_nlm/trajectories.mat', 'exp_trajectory'),
+        'EKF+scale': None,
+        'NLM-loopline': loadmat(base, 'slam_results/trajectories.mat', 'exp_trajectory'),
+        'NLM-fullsystem': loadmat(base, 'slam_results_scale_nlm/trajectories.mat', 'exp_trajectory'),
         'ORB-only': loadmat(base, 'slam_results_orbonly/trajectories.mat', 'exp_trajectory'),
     }
     if cfg['VO'] is None:   # KITTI VO 在 raw 转换目录 (有头 vo_x/y/z)
         cfg['VO'] = loadcsv(D + '../KITTI_07/', 'visual_odometry_ekf.txt', ['vo_x', 'vo_y', 'vo_z'])
-    if sd in SHORT:         # EKF+尺度基座 (P2 尺度头 replay fp_head030, 无 NLM)
-        cfg['EKF+尺度'] = loadcsv(BK + SHORT[sd] + '/', 'fp_head030.txt', ['pos_x', 'pos_y', 'pos_z'])
+    if sd in SHORT:         # EKF+scale基座 (P2 尺度头 replay fp_head030, 无 NLM)
+        cfg['EKF+scale'] = loadcsv(BK + SHORT[sd] + '/', 'fp_head030.txt', ['pos_x', 'pos_y', 'pos_z'])
     row = {'gt_len_m': round(float(np.linalg.norm(np.diff(gt, axis=0), axis=1).sum()), 1)}
     for name, traj in cfg.items():
         if traj is None or len(traj) < 50:
@@ -135,7 +139,7 @@ OUT['_meta'] = {
                       ' or the repo default ../data/01_NeuroSLAM_Datasets/',
     'note': 'Keys computed from the data root are plain. Keys with "carried": true were '
             'computed in an earlier batch and their artifact is NOT under the data root '
-            '(EKF+尺度 needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-全系统 needs '
+            '(EKF+scale needs _p11_backup_20261014/<seq>/fp_head030.txt, NLM-fullsystem needs '
             'slam_results_scale_nlm/, ORB-only needs slam_results_orbonly/); they are '
             'carried over from the previous JSON so that Table 4 stays complete, and are '
             'replaced the moment the artifact is present.',
@@ -151,18 +155,30 @@ for sd, row in OUT.items():
 OUT['_meta']['configs_computed'] = sorted(present)
 OUT['_meta']['configs_carried'] = sorted(carried)
 OUT['_meta']['table3_notes'] = [
-    'KITTI07 Ours cell (18.45 / 29.99) equals NLM-闭环线: the scale branch is inactive '
+    'KITTI07 Ours cell (18.45 / 29.99) equals NLM-loopline: the scale branch is inactive '
     'zero-shot on real imagery (Supplementary S.1), so the full system there IS the loop line.',
-    'Town10HD Ours == EKF+尺度 (14.44): the single accepted loop link is inert on the open layout.',
-    'Table 4 EKF+尺度 and ORB-only cells come from artifacts outside the released asset bundle '
+    'Town10HD Ours == EKF+scale (14.44): the single accepted loop link is inert on the open layout.',
+    'Table 4 EKF+scale and ORB-only cells come from artifacts outside the released asset bundle '
     'unless export_repro_bundle.py has been run over the original run tree.',
 ]
 
+# 有几格是本次真算的? 全是 carried/空集时不得写文件、不得 PASS
+N_COMPUTED = sum(1 for sd, row in OUT.items() if not sd.startswith('_')
+                 for k, v in row.items()
+                 if k not in ('gt_len_m', 'carried_row') and isinstance(v, dict)
+                 and not v.get('carried') and not row.get('carried_row'))
+if N_COMPUTED == 0:
+    print(f'[ERROR] nothing was recomputed under {os.path.abspath(D)} -- refusing to write se3_metrics.json '
+          f'and refusing to report a cross-check\n'
+          f'        set NLM_DATA_ROOT=<bundle>/datasets (or a full run tree) and retry')
+    sys.exit(2)
+
 with open('../kbs/se3_metrics.json', 'w') as f:
     json.dump(OUT, f, indent=2, ensure_ascii=False)
+    f.write('\n')
 
 # ─────────────────── 打印 ───────────────────
-CMPS = ['VO', 'EKF', 'EKF+尺度', 'NLM-闭环线', 'NLM-全系统', 'ORB-only']
+CMPS = ['VO', 'EKF', 'EKF+scale', 'NLM-loopline', 'NLM-fullsystem', 'ORB-only']
 print('=' * 96)
 for sd, row in OUT.items():
     if sd.startswith('_'):
@@ -181,15 +197,18 @@ FM = json.load(open('../kbs/final_metrics.json'))
 t1 = FM['table1']
 print('\n── 与 final_metrics.json 交叉校验 (sim3_full 应一致) ──')
 ok = True
+NCMP = 0
 for sd, row in OUT.items():
     if sd.startswith('_') or sd not in t1:
         continue  # 补充材料数据集 (如 KITTI09) 不在主表, 跳过交叉
-    for name, key in [('NLM-闭环线', 'nlm'), ('EKF', 'ekf'), ('VO', 'vo')]:
+    for name, key in [('NLM-loopline', 'nlm'), ('EKF', 'ekf'), ('VO', 'vo')]:
         ref = t1[sd].get(key)
-        if name in row and ref:
+        if name in row and ref and not row[name].get('carried'):
             a, b = row[name]['sim3_rmse'], ref['rmse']
+            NCMP += 1
             mark = 'OK' if abs(a - b) < 0.011 else 'MISMATCH'
             if mark != 'OK':
                 ok = False
             print(f'  {sd:28s} {name:10s} {a:8.2f} vs {b:8.2f}  {mark}')
-print('CROSS-CHECK', 'PASS' if ok else 'FAIL')
+print('CROSS-CHECK', 'PASS' if ok else 'FAIL', f'({NCMP} computed cells compared)')
+sys.exit(0 if ok else 1)
