@@ -239,6 +239,14 @@ bundle:
 | `se3_ekf.txt` | EKF core (`fusion_pose.txt`) | **842.54 m** | 477.76 m |
 | `se3_pres2.txt` | before the loop correction (A only) | 565.31 m (not reported) | 331.66 m |
 
+Per-event transients: `neuro/kbs/loop_event_deltas.py` reports, for each of the 36
+accepted events, the anchored error immediately before and at the event frame
+(`loop_event_deltas.json`). 32 of the 36 events raise the instantaneous error, the
+worst being frame 9970 ($+$349.41 m). The 55.92 m of Section 4.5 is the terminal
+value at frame 9999, i.e. **29 frames after that last event**, once the relaxation
+has acted; both numbers describe the same run and are reported separately on
+purpose.
+
 Ground truth length 881.5 m over 10000 frames; 36 accepted events
 (`a_final/loop_constraint_events.mat`, `NLM_LOOP_EVENTS` = 36 rows). Ratio
 842.54 / 55.92 = 15.07, the "15x" of §4.5.

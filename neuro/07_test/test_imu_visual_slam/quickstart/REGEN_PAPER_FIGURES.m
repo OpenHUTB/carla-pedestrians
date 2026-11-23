@@ -4,8 +4,13 @@
 %  口径: 7-DoF Procrustes 全轨迹对齐 (与 compute_final_metrics.py 一致)
 %  用法: matlab -batch "addpath('<quickstart目录>'); REGEN_PAPER_FIGURES" (无头)
 %-----------------------------------------------------------------------------
-ROOT  = '/home/yangrb/openhutb/neuro/data';
-OUT   = '/home/yangrb/openhutb/neuro/kbs/fig';
+% ---- paths (override with the NLM_DATA_ROOT environment variable) ----
+NLM_DATA_ROOT = getenv('NLM_DATA_ROOT');
+if isempty(NLM_DATA_ROOT)
+    NLM_DATA_ROOT = fullfile(fileparts(mfilename('fullpath')), '..', '..', '..', 'data', '01_NeuroSLAM_Datasets');
+end
+ROOT = fileparts(NLM_DATA_ROOT);
+OUT  = fullfile(fileparts(mfilename('fullpath')), '..', '..', '..', 'kbs', 'fig');
 C_NLM = hex2rgb('4490C2');
 C_EKF = hex2rgb('F4A582');
 C_VO  = hex2rgb('92C59B');
@@ -34,8 +39,8 @@ end
 
 %=============================================================================
 function fig_representative()
-ROOT = '/home/yangrb/openhutb/neuro/data';
-OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
+ROOT = fileparts(NLM_DATA_ROOT);
+OUT  = fullfile(fileparts(mfilename('fullpath')), '..', '..', '..', 'kbs', 'fig');
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
 ds_a = 'Town05';
 ds_b = 'Town10HD';   % 第二个代表场景 (重采数据到位后可换 Town03/Town07)
@@ -104,8 +109,8 @@ end
 
 %=============================================================================
 function fig_performance_summary()
-ROOT = '/home/yangrb/openhutb/neuro/data';
-OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
+ROOT = fileparts(NLM_DATA_ROOT);
+OUT  = fullfile(fileparts(mfilename('fullpath')), '..', '..', '..', 'kbs', 'fig');
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
 ds_list = {'Town05','Town03','Town07','Town10HD','KITTI07'};
 nd = numel(ds_list);
@@ -195,8 +200,8 @@ end
 
 %=============================================================================
 function fig_ablation()
-ROOT = '/home/yangrb/openhutb/neuro/data';
-OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
+ROOT = fileparts(NLM_DATA_ROOT);
+OUT  = fullfile(fileparts(mfilename('fullpath')), '..', '..', '..', 'kbs', 'fig');
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
 ds_list = {'Town05','Town03','Town07','Town10HD','KITTI07'};
 nd = numel(ds_list);
@@ -257,8 +262,8 @@ end
 
 %=============================================================================
 function fig_kitti_io()
-ROOT = '/home/yangrb/openhutb/neuro/data';
-OUT  = '/home/yangrb/openhutb/neuro/kbs/fig';
+ROOT = fileparts(NLM_DATA_ROOT);
+OUT  = fullfile(fileparts(mfilename('fullpath')), '..', '..', '..', 'kbs', 'fig');
 C_NLM = hex2rgb('4490C2'); C_EKF = hex2rgb('F4A582'); C_VO = hex2rgb('92C59B');
 sub = [ROOT '/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion'];
 gt  = load_pos(fullfile(sub,'ground_truth.txt'), [2 3 4]);
@@ -445,7 +450,7 @@ end
 
 %=============================================================================
 function ok = ds_ready(ds)
-sub = ['/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/' ds 'Data_IMU_Fusion'];
+sub = fullfile(NLM_DATA_ROOT, [ds 'Data_IMU_Fusion']);
 ok = isfile(fullfile(sub, 'ground_truth.txt')) && ...
      isfile(fullfile(sub, 'fusion_pose.txt')) && ...
      isfile(fullfile(sub, 'slam_results/trajectories.mat')) && ...
@@ -455,7 +460,7 @@ end
 
 %=============================================================================
 function d = load_ds(ds)
-ROOT = '/home/yangrb/openhutb/neuro/data';
+ROOT = fileparts(NLM_DATA_ROOT);
 sub = [ROOT '/01_NeuroSLAM_Datasets/' sprintf('%sData_IMU_Fusion', ds)];
 gt  = load_pos(fullfile(sub,'ground_truth.txt'), [2 3 4]);
 nm  = load(fullfile(sub,'slam_results/trajectories.mat'), 'exp_trajectory');
@@ -491,7 +496,7 @@ end
 
 %=============================================================================
 function m = load_map(ds)
-ROOT = '/home/yangrb/openhutb/neuro/data';
+ROOT = fileparts(NLM_DATA_ROOT);
 p = [ROOT '/01_NeuroSLAM_Datasets' sprintf('/%sData_IMU_Fusion/slam_results/experiences.mat', ds)];
 E = load(p, 'EXPERIENCES');
 E = E.EXPERIENCES;

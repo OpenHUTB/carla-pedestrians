@@ -293,6 +293,19 @@ def main():
         cmp('RMSE EKF (m)', round(re_, 2), cl['rmse']['ekf'])
         cmp('ratio EKF/final', round(te / tf, 2), cl['ratio'])
 
+    # ── D2 per-event re-anchoring effect (Section 4.5 transparency) ──
+    print('\n── D2 Loop-event transients (Town01 turnaround) ' + '─' * 28)
+    led = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'loop_event_deltas.json')
+    if not os.path.exists(led):
+        mark('events', None, 'loop_event_deltas.json missing')
+    else:
+        d = json.load(open(led))
+        cmp('events counted', d['n_events'], 36, 'count')
+        cmp('events where error rises', d['n_error_increased'], 32, 'count')
+        worst = max(d['events'], key=lambda r: r['delta_m'])
+        cmp('worst event frame', worst['frame'], 9970, 'count')
+        cmp('worst event delta (m)', worst['delta_m'], 349.41)
+
     # ── F Table 6 (external comparison, our rows) ──
     print('\n── F Table 6 (external comparison, our rows) ' + '─' * 24)
     t6 = exp.get('table6')

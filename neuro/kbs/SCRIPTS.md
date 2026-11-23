@@ -22,6 +22,7 @@ Data root convention for all groups: `NLM_DATA_ROOT` (defaults to `../data/01_Ne
 | `regen_table.py` | recompute Table-4-style metrics from trajectories (imported by perframe_err.py) |
 | `regen_figures.py` | redraw the four main figures |
 | `make_all_results_fig.py` | redraw the five-scenario overview + KITTI RTE figure |
+| `loop_event_deltas.py` | per-event effect of the loop re-anchoring on the closed-loop benchmark (Section 4.5 transparency) |
 | `kitti_rte.py` | Table 6, our rows: official KITTI relative translation error (raw / Sim(3)-aligned / after dropping top-50 frames) |
 | `regen_ekf_curves.py` | redraw the EKF error curves of the failure analysis |
 | `perframe_err.py` | per-frame error localisation, NLM vs EKF (needs full run trees) |
