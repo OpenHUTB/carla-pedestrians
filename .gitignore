@@ -181,3 +181,6 @@ carla/
 !neuro/kbs/repro_assets/**/slam_results/
 !neuro/kbs/repro_assets/**/slam_results/**
 
+
+# 轨迹复现资产仅本地维护(桌面有副本), 不入公开仓库
+neuro/kbs/repro_assets/
