@@ -11,7 +11,7 @@
 %    v1_weight: V1基础特征权重 (当前0.18)
 %  
 %  运行方式：
-%    cd('E:\Neuro_end\neuro');
+%    cd('<repo>/neuro');
 %    addpath('07_test/07_test/test_imu_visual_slam/parameter_search');
 %    addpath('07_test/07_test/test_imu_visual_slam/utils');
 %    GRID_SEARCH_TRANSFORMER_WEIGHTS

@@ -1,5 +1,9 @@
 % SYNTAX_CHECK_B.m — B方案改动三文件语法检查
-p = '/home/yangrb/openhutb/neuro';
+nlmRoot = getenv('NLM_ROOT');
+if isempty(nlmRoot)
+    nlmRoot = fileparts(fileparts(fileparts(fileparts(fileparts(mfilename('fullpath'))))));
+end
+p = fullfile(nlmRoot, 'neuro');
 files = {[p '/02_multilayered_experience_map/exp_map_iteration.m'], ...
          [p '/02_multilayered_experience_map/create_new_exp.m'], ...
          [p '/07_test/test_imu_visual_slam/core/test_imu_visual_fusion_slam.m'], ...

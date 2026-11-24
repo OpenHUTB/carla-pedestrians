@@ -5,12 +5,12 @@
 %    - alpha_yaw: IMU偏航权重 [0.000, 0.005, 0.010, 0.012, 0.015, 0.020, 0.030]
 %
 %  数据路径：
-%    - IMU数据: E:\Neuro_end\neuro\data\KITTI_07\KITTI_07\fusion_pose.txt
-%    - 图像: E:\Neuro_end\neuro\data\KITTI_07\KITTI_07\image_0(1)\image_0\*.png
-%    - Ground Truth: E:\Neuro_end\neuro\data\KITTI_07\KITTI_07\poses.txt
+%    - IMU数据: <repo>/neuro/data\KITTI_07\KITTI_07\fusion_pose.txt
+%    - 图像: <repo>/neuro/data\KITTI_07\KITTI_07\image_0(1)\image_0\*.png
+%    - Ground Truth: <repo>/neuro/data\KITTI_07\KITTI_07\poses.txt
 %
 %  运行方式：
-%    cd('E:\Neuro_end\neuro');
+%    cd('<repo>/neuro');
 %    addpath('07_test/07_test/test_imu_visual_slam/parameter_search');
 %    GRID_SEARCH_KITTI_ALPHA_YAW
 

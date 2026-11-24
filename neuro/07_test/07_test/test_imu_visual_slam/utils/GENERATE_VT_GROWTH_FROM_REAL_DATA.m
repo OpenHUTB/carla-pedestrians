@@ -15,7 +15,7 @@ FONT_SIZE_LABEL = 11;
 FONT_SIZE_TICK = 10;
 FONT_SIZE_LEGEND = 10;
 
-output_dir = 'E:\Neuro_end\neuro\kbs\kbs\NeuroSLAM_KBS_Submission\fig';
+output_dir = '<repo>/neuro/kbs\kbs\NeuroSLAM_KBS_Submission\fig';
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end
@@ -25,12 +25,12 @@ fprintf('[1/2] 读取1月5日的真实VT数据...\n');
 
 % 数据路径
 datasets = {
-    'Town01', 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion\slam_results\vt_stats_Town01Data_IMU_Fusion.mat', [0.0, 0.45, 0.74];
-    'Town02', 'E:\Neuro_end\neuro\data\Town02Data_IMU_Fusion\slam_results\vt_stats_Town02Data_IMU_Fusion.mat', [0.85, 0.33, 0.10];
-    'Town10', 'E:\Neuro_end\neuro\data\Town10Data_IMU_Fusion\slam_results\vt_stats_Town10Data_IMU_Fusion.mat', [0.47, 0.67, 0.19];
-    'KITTI07', 'E:\Neuro_end\neuro\data\KITTI_07\slam_results\vt_stats_KITTI_07.mat', [0.49, 0.18, 0.56];
-    'MH01', 'E:\Neuro_end\neuro\data\MH_01_easy\MH_01_easy\slam_results\vt_stats_MH_01_easy.mat', [0.93, 0.69, 0.13];
-    'MH03', 'E:\Neuro_end\neuro\data\MH_03_medium\MH_03_medium\slam_results\vt_stats_MH_03_medium.mat', [0.30, 0.75, 0.93];
+    'Town01', '<repo>/neuro/data\Town01Data_IMU_Fusion\slam_results\vt_stats_Town01Data_IMU_Fusion.mat', [0.0, 0.45, 0.74];
+    'Town02', '<repo>/neuro/data\Town02Data_IMU_Fusion\slam_results\vt_stats_Town02Data_IMU_Fusion.mat', [0.85, 0.33, 0.10];
+    'Town10', '<repo>/neuro/data\Town10Data_IMU_Fusion\slam_results\vt_stats_Town10Data_IMU_Fusion.mat', [0.47, 0.67, 0.19];
+    'KITTI07', '<repo>/neuro/data\KITTI_07\slam_results\vt_stats_KITTI_07.mat', [0.49, 0.18, 0.56];
+    'MH01', '<repo>/neuro/data\MH_01_easy\MH_01_easy\slam_results\vt_stats_MH_01_easy.mat', [0.93, 0.69, 0.13];
+    'MH03', '<repo>/neuro/data\MH_03_medium\MH_03_medium\slam_results\vt_stats_MH_03_medium.mat', [0.30, 0.75, 0.93];
 };
 
 vt_data = cell(size(datasets, 1), 1);

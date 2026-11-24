@@ -167,7 +167,7 @@ def train(train_loader, model, criterion, optimizer,
         if glob_step % lr_decay == 0 or glob_step == 1:
             lr_now = utils.lr_decay(optimizer, glob_step, lr_init, lr_decay, gamma)
         inputs = Variable(inps.cuda())
-        targets = Variable(tars.cuda(async=True))
+        targets = Variable(tars.cuda(non_blocking=True))
 
         outputs = model(inputs)
 
@@ -210,7 +210,7 @@ def test(test_loader, model, criterion, stat_3d, procrustes=False):
 
     for i, (inps, tars) in enumerate(test_loader):
         inputs = Variable(inps.cuda())
-        targets = Variable(tars.cuda(async=True))
+        targets = Variable(tars.cuda(non_blocking=True))
 
         outputs = model(inputs)
 

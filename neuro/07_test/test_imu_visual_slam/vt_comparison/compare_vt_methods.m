@@ -3,13 +3,22 @@
 %  只替换VT特征提取方法
 
 clear all; close all; clc;
+%% 仓库根目录（NLM_ROOT 优先，否则由本文件位置上溯到含 kbs/run_all_checks.py 的目录）
+rootDir = getenv('NLM_ROOT');
+if isempty(rootDir)
+    rootDir = fileparts(mfilename('fullpath'));
+    while ~exist(fullfile(rootDir,'kbs','run_all_checks.py'),'file') && ...
+            ~strcmp(fileparts(rootDir), rootDir)
+        rootDir = fileparts(rootDir);
+    end
+end
+
 
 fprintf('========================================\n');
 fprintf('  原始VT vs 增强VT 对比测试\n');
 fprintf('========================================\n\n');
 
 %% 公共设置
-rootDir = '/home/dream/neuro_111111/carla-pedestrians/neuro';
 addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/3d_grid_cells_network'));
 addpath(fullfile(rootDir, '01_conjunctive_pose_cells_network/yaw_height_hdc_network'));
 addpath(fullfile(rootDir, '04_visual_template'));
@@ -18,7 +27,7 @@ addpath(fullfile(rootDir, '02_multilayered_experience_map'));
 addpath(fullfile(rootDir, '05_tookit/process_visual_data/process_images_data'));
 addpath(fullfile(rootDir, '09_vestibular'));
 
-dataPath = '/home/dream/neuro_111111/carla-pedestrians/neuro/data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion';
+dataPath = fullfile(rootDir, 'data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion');
 
 % 读取Ground Truth和IMU数据（只读一次）
 fprintf('读取Ground Truth和IMU数据...\n');

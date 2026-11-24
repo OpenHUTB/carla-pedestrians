@@ -187,3 +187,8 @@ neuro/kbs/repro_assets/
 
 # 中文稿仅本地维护, 不入公开仓库
 neuro/kbs/*_zh.tex
+
+# run outputs (来自复核者 (3) 包)
+**/dc_review_out/
+/results/
+neuro/results/

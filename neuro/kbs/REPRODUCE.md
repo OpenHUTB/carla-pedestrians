@@ -262,6 +262,9 @@ released bundle (or at a full run tree) before running them:
 export NLM_DATA_ROOT=<repro_assets>/datasets        # <seq>/ with GT, fusion_pose, VO, slam_results
 export NLM_KITTI_DIR=<repro_assets>/KITTI_07        # optional, defaults to $NLM_DATA_ROOT/../KITTI_07
 export NLM_BACKUP_ROOT=<repro_assets>/_p11_backup_20261014   # only for the ablation figure
+export NLM_OUT_ROOT=<dir>                          # optional, scratch dir for dc_review.py (default: neuro/kbs/dc_review_out)
+export NLM_FIG_OUT_ROOT=<dir>                      # optional, where the MATLAB figure scripts write (default: script dir / pwd)
+export NLM_GT_ROOT=<dir>                           # optional, SynPerData GT for neuro/06_main/run_main.m (NOT in the bundle)
 
 python3 neuro/kbs/regen_figures.py         # representative_performance, performance_summary, ablation, KITTI in/out
 python3 neuro/kbs/make_all_results_fig.py  # 5-scenario Sim(3)/SE(3) overview + KITTI external RTE
@@ -314,6 +317,7 @@ Cover letter: `cover_letter_KBS.tex`. Highlights: `highlights.tex`.
 | KITTI 09 row (Supplementary S.2) | sequence not in the released bundle; row is carried over from the 2026-10 batch |
 | EKF gate thresholds not swept by a shipped script | fixed before the ablation runs, values are source constants |
 | `*.m` legacy scripts | kept for provenance; published numbers come from the Python path |
+| SynPerData ground truth (`01_SynPerData_GT.txt`) | not in the repository nor in the asset bundle; point `NLM_GT_ROOT` at your own copy if you rerun `neuro/06_main/run_main.m` |
 | Table 5 raw timing runs | the two MATLAB drivers (`FPS_CLEAN_RUN.m`, `FPS_PROBE_RUN.m`) were session scripts under `/tmp` and are not in the repository; the measured values are kept in an internal log, but the measurement cannot be re-executed from the repo alone |
 
 `se3_metrics.json` records this itself: computed cells are plain, carried cells

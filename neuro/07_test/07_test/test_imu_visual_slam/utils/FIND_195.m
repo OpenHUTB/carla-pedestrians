@@ -5,9 +5,9 @@ fprintf('\n寻找你记得的195个VT...\n\n');
 
 % 检查所有Town数据集
 datasets = {
-    'Town01', 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion\slam_results\vt_stats_Town01Data_IMU_Fusion.mat';
-    'Town02', 'E:\Neuro_end\neuro\data\Town02Data_IMU_Fusion\slam_results\vt_stats_Town02Data_IMU_Fusion.mat';
-    'Town10', 'E:\Neuro_end\neuro\data\Town10Data_IMU_Fusion\slam_results\vt_stats_Town10Data_IMU_Fusion.mat';
+    'Town01', '<repo>/neuro/data\Town01Data_IMU_Fusion\slam_results\vt_stats_Town01Data_IMU_Fusion.mat';
+    'Town02', '<repo>/neuro/data\Town02Data_IMU_Fusion\slam_results\vt_stats_Town02Data_IMU_Fusion.mat';
+    'Town10', '<repo>/neuro/data\Town10Data_IMU_Fusion\slam_results\vt_stats_Town10Data_IMU_Fusion.mat';
 };
 
 for i = 1:size(datasets, 1)

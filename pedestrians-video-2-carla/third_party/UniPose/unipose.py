@@ -94,8 +94,8 @@ class Trainer(object):
         self.bestPCKh = 0
 
     # Print model summary and metrics
-    dump_input = torch.rand((1, 3, 368, 368]))
-    print(get_model_summary(self.modelmodel, dump_input))
+    dump_input = torch.rand((1, 3, 368, 368))
+    print(get_model_summary(self.model, dump_input))
 
     def training(self, epoch):
         train_loss = 0.0

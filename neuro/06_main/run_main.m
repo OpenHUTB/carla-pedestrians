@@ -5,11 +5,26 @@
 currentDir = fileparts(mfilename('fullpath'));
 
 % 配置相对路径（基于脚本所在目录计算）
-visualDataFile = fullfile(currentDir, '../data/01_NeuroSLAM_Datasets/Town01Data');  % 向上1级到neuro目录，再进入data
-groundTruthFile = fullfile(currentDir, '../../../../Dataset/02_NeuroSLAM_Groudtruth/01_SynPerData_GT.txt');  % 向上4级到Neuro_WS，再进入Dataset
+% 数据根: NLM_DATA_ROOT 优先(与 neuro/kbs 下 Python 脚本同一约定), 默认 ../data
+dataRoot = getenv('NLM_DATA_ROOT');
+if isempty(dataRoot)
+    dataRoot = fullfile(currentDir, '../data');
+end
+visualDataFile = fullfile(dataRoot, '01_NeuroSLAM_Datasets/Town01Data');
 
-% 结果保存路径（向上4级到Neuro_WS，创建results文件夹）
-resultsDir = fullfile(currentDir, '../../../../results');
+% SynPerData 的 GT 不在随仓库发布的资产包内: 用 NLM_GT_ROOT 指向自备目录
+gtRoot = getenv('NLM_GT_ROOT');
+if isempty(gtRoot)
+    gtRoot = fullfile(dataRoot, '02_NeuroSLAM_Groudtruth');
+end
+groundTruthFile = fullfile(gtRoot, '01_SynPerData_GT.txt');
+if ~exist(groundTruthFile, 'file')
+    warning('NLM:gtMissing', ['GT 文件不存在: ' groundTruthFile ...
+        ' —— 该 GT 未随仓库/资产包发布, 请用 NLM_GT_ROOT 指向自备目录']);
+end
+
+% 结果保存路径（仓库内 results/, 已被 .gitignore 排除）
+resultsDir = fullfile(currentDir, '../results');
 if ~exist(resultsDir, 'dir')
     mkdir(resultsDir);
     disp(['已自动创建结果文件夹：', resultsDir]);

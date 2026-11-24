@@ -2,14 +2,23 @@
 % 帮助理解为什么VT数量只有5个
 
 clear all; close all; clc;
+%% 仓库根目录（NLM_ROOT 优先，否则由本文件位置上溯到含 kbs/run_all_checks.py 的目录）
+rootDir = getenv('NLM_ROOT');
+if isempty(rootDir)
+    rootDir = fileparts(mfilename('fullpath'));
+    while ~exist(fullfile(rootDir,'kbs','run_all_checks.py'),'file') && ...
+            ~strcmp(fileparts(rootDir), rootDir)
+        rootDir = fileparts(rootDir);
+    end
+end
+
 
 %% 配置
-data_dir = '/home/dream/neuro_111111/carla-pedestrians/neuro/data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion';
+data_dir = fullfile(rootDir, 'data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion');
 img_dir = fullfile(data_dir, 'images');
 num_samples = 200;  % 采样图像数量
 
 % 添加路径
-rootDir = '/home/dream/neuro_111111/carla-pedestrians/neuro';
 addpath(fullfile(rootDir, '04_visual_template'));
 
 %% 提取特征

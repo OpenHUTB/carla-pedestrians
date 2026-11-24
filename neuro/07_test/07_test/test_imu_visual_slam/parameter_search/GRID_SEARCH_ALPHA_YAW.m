@@ -6,7 +6,7 @@
 %    - vt_match_threshold: VT匹配阈值 [0.04, 0.06, 0.08, 0.10]
 %
 %  运行方式：
-%    cd('E:\Neuro_end\neuro');
+%    cd('<repo>/neuro');
 %    run('07_test/07_test/test_imu_visual_slam/parameter_search/GRID_SEARCH_ALPHA_YAW.m');
 
 clear; close all; clc;

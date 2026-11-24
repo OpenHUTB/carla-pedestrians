@@ -40,7 +40,7 @@ NUM_EXPS_OURS = evalin('base', 'ours_num_exps');
 %% Setup parameters
 dataset_name = 'Town01Data_IMU_Fusion';
 num_frames = size(baseline_odo_traj, 1);
-data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+data_path = '<repo>/neuro/data\Town01Data_IMU_Fusion';
 result_path = fullfile(data_path, 'comparison_results');
 
 if ~exist(result_path, 'dir')
@@ -79,7 +79,7 @@ if exist(gt_file, 'file')
     ours_exp_trim(:, 3) = 0;
     
     % Add path
-    addpath('E:\Neuro_end\neuro\07_test\07_test\test_imu_visual_slam\utils');
+    addpath('<repo>/neuro/07_test\07_test\test_imu_visual_slam\utils');
     
     % Axis matching
     n_map = min(min_len, 1000);

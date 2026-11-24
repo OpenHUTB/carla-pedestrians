@@ -110,7 +110,9 @@ grid on; axis equal;
 set(gca, 'FontSize', 12);
 
 % 保存
-data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+% 保存目录: NLM_FIG_OUT_ROOT 优先, 默认当前工作目录
+if isempty(getenv('NLM_FIG_OUT_ROOT')), out_dir = pwd; else, out_dir = getenv('NLM_FIG_OUT_ROOT'); end
+data_path = out_dir;
 try
     print(gcf, fullfile(data_path, 'trajectory_fine_tuned.png'), '-dpng', '-r300');
     fprintf('\n图片已保存!\n');

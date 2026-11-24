@@ -8,7 +8,7 @@ fprintf('  详细检查MAT文件内容\n');
 fprintf('========================================\n\n');
 
 % 检查Town10（你记得是195）
-town10_file = 'E:\Neuro_end\neuro\data\Town10Data_IMU_Fusion\slam_results\vt_stats_Town10Data_IMU_Fusion.mat';
+town10_file = '<repo>/neuro/data\Town10Data_IMU_Fusion\slam_results\vt_stats_Town10Data_IMU_Fusion.mat';
 
 if exist(town10_file, 'file')
     fprintf('正在检查Town10 MAT文件...\n');
