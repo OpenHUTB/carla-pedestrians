@@ -193,23 +193,13 @@ Visual and inertial modalities provide complementary information: visual odometr
 \begin{equation}
     L_t = \alpha_{\mathrm{iir}} L_{t-1} + (1-\alpha_{\mathrm{iir}}) x_t,\qquad L_0=0 \label{eq:lowpass}
 \end{equation}
-\begin{equation}
-    H_t = x_t - L_t \label{eq:highpass}
-\end{equation}
-where $\alpha_{\mathrm{iir}}$ is the IIR forgetting factor, $L_t$ the low-frequency smoothed signal, and $H_t$ its residual high-frequency component.
+where $\alpha_{\mathrm{iir}}$ is the IIR forgetting factor and $L_t$ the low-frequency smoothed signal.
 
 \textbf{Biological Analogy.} This is the discrete counterpart of multisensory integration in the ves\-tib\-u\-lar nuclei and posterior parietal cortex (area~7a), where visual and ves\-tib\-u\-lar signals are combined to estimate self-motion; neurons in these regions exhibit weighted combinations of the two tuning profiles, with dynamic weighting according to signal reliability.
 
 \textbf{Discrete-Time Implementation.} With sampling interval $\Delta t$ we implement first-order IIR filters and set the forgetting factors from the target time constants, $\alpha_{\mathrm{iir}}=\exp(-\Delta t/\tau)$ and $\alpha_{r,\mathrm{iir}}=\exp(-\Delta t/\tau_r)$, so that the analogue cut-off is reproduced at the 20\,Hz cadence used here.
 
-\textbf{Frequency-Domain Transfer Functions.} In the Laplace domain with $s_{\mathrm{lap}}=j\omega$,
-\begin{equation}
-    H_{LP}(s_{\mathrm{lap}}) = \frac{1}{1+\tau s_{\mathrm{lap}}} = \frac{1/\tau}{s_{\mathrm{lap}}+1/\tau}, \label{eq:h_lp}
-\end{equation}
-\begin{equation}
-    H_{HP}(s_{\mathrm{lap}}) = \frac{\tau s_{\mathrm{lap}}}{1+\tau s_{\mathrm{lap}}} = \frac{s_{\mathrm{lap}}}{s_{\mathrm{lap}}+1/\tau}, \label{eq:h_hp}
-\end{equation}
-satisfying $H_{LP}(s_{\mathrm{lap}})+H_{HP}(s_{\mathrm{lap}})=1$ (unity gain at all frequencies). The cut-off $\omega_c=1/\tau$ separates the two regions: for $\omega\ll\omega_c$, $|H_{LP}|\approx1$ and $|H_{HP}|\approx0$, so the visual pathway dominates (drift-free, slower dynamics); for $\omega\gg\omega_c$ the IMU cues dominate (fast but drifting). With $\tau=0.1$\,s the cut-off is $\omega_c=10$\,rad/s ($\approx1.6$\,Hz), so that IMU handles high-frequency motion ($>2$\,Hz: vibration, rapid turns) while vision corrects low-frequency drift ($<1$\,Hz). This mimics ves\-tib\-u\-lar--visual integration, where ves\-tib\-u\-lar organs respond in 0.1--10\,Hz and visual motion perception dominates below 0.5\,Hz~\cite{Angelaki2004}.
+\textbf{Frequency-Domain Transfer Functions.} In the Laplace domain with $s_{\mathrm{lap}}=j\omega$ the two filters satisfy $H_{LP}(s_{\mathrm{lap}})+H_{HP}(s_{\mathrm{lap}})=1$ (unity gain at all frequencies). The cut-off $\omega_c=1/\tau$ separates the two regions: for $\omega\ll\omega_c$, $|H_{LP}|\approx1$ and $|H_{HP}|\approx0$, so the visual pathway dominates (drift-free, slower dynamics); for $\omega\gg\omega_c$ the IMU cues dominate (fast but drifting). With $\tau=0.1$\,s the cut-off is $\omega_c=10$\,rad/s ($\approx1.6$\,Hz), so that IMU handles high-frequency motion ($>2$\,Hz: vibration, rapid turns) while vision corrects low-frequency drift ($<1$\,Hz). This mimics ves\-tib\-u\-lar--visual integration, where ves\-tib\-u\-lar organs respond in 0.1--10\,Hz and visual motion perception dominates below 0.5\,Hz~\cite{Angelaki2004}.
 
 \subsubsection{Temporal Alignment}
 \label{sec:alignment}
@@ -253,14 +243,8 @@ ordered as $(p,v,\Theta,\log s)$: the entries of $\mathbf{Q}_c$ carry the units 
 
 \textbf{Gated Observation Update.} Each branch produces an innovation $\mathbf{y}=\mathbf{z}-h(\hat{\mathbf{x}})$ with $\mathbf{S}=\mathbf{H}\mathbf{P}\mathbf{H}^{\top}+\mathbf{R}_{\mathrm{obs}}$, accepted only if
 \begin{equation}
-    \mathbf{y}^{\top}\mathbf{S}^{-1}\mathbf{y}<\chi^2(d;\alpha_\chi),
+    \mathbf{y}^{\top}\mathbf{S}^{-1}\mathbf{y}<\chi^2(d;\alpha_\chi).
     \label{eq:gate}
-\end{equation}
-and applied in the Joseph form, which preserves symmetry and positive definiteness:
-\begin{equation}
-    \mathbf{P}^{+}=(\mathbf{I}-\mathbf{K}_{\mathrm{kal}}\mathbf{H})\mathbf{P}(\mathbf{I}-\mathbf{K}_{\mathrm{kal}}\mathbf{H})^{\top}+\mathbf{K}_{\mathrm{kal}}\mathbf{R}_{\mathrm{obs}}\mathbf{K}_{\mathrm{kal}}^{\top},
-    \quad \mathbf{K}_{\mathrm{kal}}=\mathbf{P}\mathbf{H}^{\top}\mathbf{S}^{-1}.
-    \label{eq:joseph}
 \end{equation}
 
 The branches, their models and the deployed thresholds are listed in Table~\ref{tab:gates}, and they are applied in the order of the table for the dependency reason given above. Branch~1 (disabled in the deployed runs, Table~\ref{tab:gates}) would recover yaw from turn kinematics: on frames with mean speed $>3$\,m/s, $|a_\perp|>0.3$\,m/s$^2$ and $|\omega_z|<1.2$\,rad/s, the ratio $a_\perp/|v|$ is integrated onto a heading base that is independent of both the gyroscope and the current heading estimate, giving a yaw-angle observation with a per-frame step limit of 0.26\,rad ($\approx15^{\circ}$). Branch~4 is a dual-path, log-domain scale observation: the calibrated depth scale of Section~\ref{sec:scale_recovery} takes precedence and is frozen inside a 0.30 dead band in the log domain ($\approx1.35\times$; used for all reported runs and set as the released-code default); the kinematic cue $|a_\perp|/(|\omega|v)$ is used whenever the depth path is unavailable, skipped or gated out. Each active branch carries its own observation model, gate threshold and residual window, and no branch observes a quantity from the same signal that it later corrects, which is why the four active gates are tested separately within one frame rather than jointly.
@@ -288,7 +272,7 @@ The branches, their models and the deployed thresholds are listed in Table~\ref{
 
 \textbf{Quality-Adaptive Noise.} The VO inlier count $n_{\mathrm{inl}}$ gives $q_f=\operatorname{clip}(60/n_{\mathrm{inl}},\tfrac13,3)$, and the smooth residual factor comes from the mean of that branch's last 10 Mahalanobis distances, $\rho=\operatorname{clip}\big(q_f[\,0.05+(d/5d_{\mathrm{of}})^{1.5}\,],0.008,10\big)$; the nominal covariance of Table~\ref{tab:gates} is multiplied by $\rho$. Degraded frames thus contribute less and degenerate frames contribute nothing beyond an inflated no-motion prior.
 
-\textbf{Numerical Stability and Ablation Integrity.} All updates use \eqref{eq:joseph} with post-update regularisation (symmetrisation plus a minimum-eigenvalue clamp), so the covariance stays positive definite over the 5000-frame CARLA collection runs (KITTI~07 is 1101 frames) without reinitialisation. Because each branch is an independent gated term with its own observation model, gate threshold and residual window, disabling one leaves the other branches' formulations untouched; the single coupling runs through the tenth state, which the scale-branch ablation isolates by construction. This is what makes the ablation matrix of Section~\ref{sec:ablation} interpretable rather than merely descriptive.
+\textbf{Numerical Stability and Ablation Integrity.} All updates use the Joseph form with post-update regularisation (symmetrisation plus a minimum-eigenvalue clamp), so the covariance stays positive definite over the 5000-frame CARLA collection runs (KITTI~07 is 1101 frames) without reinitialisation. Because each branch is an independent gated term with its own observation model, gate threshold and residual window, disabling one leaves the other branches' formulations untouched; the single coupling runs through the tenth state, which the scale-branch ablation isolates by construction. This is what makes the ablation matrix of Section~\ref{sec:ablation} interpretable rather than merely descriptive.
 
 \subsubsection{Computational Cost}
 \label{sec:cost}
