@@ -116,7 +116,7 @@ where $i_t$, $f_t$, $o_t$ represent fixed input gate, forget gate, output gate o
 
 This design offers three critical advantages for SLAM applications:
 
-\textbf{(1) Zero-shot deployment capability:} No training data required, enabling immediate deployment in novel environments. This is crucial for SLAM where each environment presents unique visual characteristics and collecting representative training data is impractical. Our validation across six diverse scenarios (urban, highway, indoor) without any environment-specific tuning demonstrates robust generalization.
+\textbf{(1) Zero-shot deployment capability:} No training data required, enabling immediate deployment in novel environments. This matters for SLAM where each environment presents unique visual characteristics and collecting representative training data is impractical. Our validation across six diverse scenarios (urban, highway, indoor) without any environment-specific tuning demonstrates robust generalization.
 
 \textbf{(2) Biological interpretability:} Gate values reflect em\-pir\-i\-cal\-ly-val\-i\-dat\-ed principles from neuroscience. The forget gate ($f_t=0.5$) implements short-term spatial memory retention consistent with hippocampal replay dynamics, where recent experiences are preferentially retained for path integration. The high output gate ($o_t=0.9$) prioritizes current sensory input, mimicking the ves\-tib\-u\-lar system's emphasis on immediate self-motion cues for balance and navigation. The moderate input gate ($i_t=0.5$) balances novelty detection with stability.
 
@@ -372,7 +372,7 @@ This discrete shifting operation efficiently implements path integration on the 
 \end{equation}
 where $E_0$ is the baseline injection energy and $d_m$ is the template activity level: it is reset to the cap $d_{\max}$ upon each match and decays linearly over time. The injected amplitude grows as a template remains unmatched for longer, from $\approx E_0/3$ at $d_m=d_{\max}$ toward $E_0$ as $d_m\to 0$. This decayed, weak injection is a RatSLAM-style anti-capture design: a single spurious match (e.g., during agent stasis) cannot capture the grid-cell network; a consistent injection from multiple visual templates is required to form an effective anchoring.
 
-We note that in the final system configuration, this template-level injection pathway is deactivated (the deployed visual-template implementation never clears its first-match flag, so the injection condition is never met); visually driven drift correction in the deployed system is carried entirely by the anchoring--re-anchoring mechanism of the experience map.
+In the final system configuration this template-level injection pathway is deactivated (the deployed visual-template implementation never clears its first-match flag, so the injection condition is never met); visually driven drift correction in the deployed system is carried entirely by the anchoring--re-anchoring mechanism of the experience map.
 
 \textbf{Multilayered Head Direction Cells.} The multilayered head direction cell (HDC) network represents the robot's orientation using a 2D MD-CAN with dimensions $N_\psi \times N_h$ (azimuth bins by height layers). Different height layers allow representation of heading at various vertical positions, supporting 3D operation where orientation may vary with altitude.
 
