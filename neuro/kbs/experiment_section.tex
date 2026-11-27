@@ -68,6 +68,7 @@ We evaluate NeuroLocMap on five scenarios spanning simulated urban driving (CARL
         \begin{tablenotes}
             \scriptsize
             \item Bold = best of the four configurations in that caliber. NeuroLocMap outperforms the EKF on all five scenarios under both calibers (Sim(3) $+$16.5\% to $+$59.3\%; SE(3) $+$1.5\% to $+$33.9\%) and monocular VO on all five (Sim(3) $+$33.7\% to $+$68.8\%).
+            \item \emph{Anchored Sim(3) caliber} (closed-loop benchmark only): both trajectories are anchored at the loop event, and the reported quantity is the terminal displacement between them; the released evaluation script reproduces these two numbers.
             \item Drift rates (terminal error / length): NeuroLocMap 2.9--11.7\% (Sim(3)) and 0.2--15.2\% (SE(3)), versus 1.6--13.3\% and 5.0--19.0\% for the EKF and 9.9--24.2\% and 13.7--17.2\% for VO.
             \item n/a: the zero-shot scale head is not deployed on KITTI~07 (real-image domain gap; Supplementary Section~S.1); the KITTI result is the loop-closure line over the EKF core. On Town07 the scale branch alone is strongest (loop contribution $+0.85$~m); elsewhere the full system is best.
         \end{tablenotes}
