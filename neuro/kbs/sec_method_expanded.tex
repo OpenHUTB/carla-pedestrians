@@ -436,7 +436,8 @@ where $\tau_{VT} = 0.08$ is the visual template matching threshold and $d_{thres
 
 Consecutive experiences are linked by directed edges encoding the relative pose transition:
 \begin{equation}
-    \mathbf{T}_{i \to i+1} = (\Delta x, \Delta y, \Delta z, \Delta \psi) = (x_{i+1} - x_i, y_{i+1} - y_i, z_{i+1} - z_i, \psi_{i+1} - \psi_i)
+    \boldsymbol{\delta}_{i \to i+1} = (\Delta x, \Delta y, \Delta z, \Delta \psi) = (x_{i+1} - x_i, y_{i+1} - y_i, z_{i+1} - z_i, \psi_{i+1} - \psi_i)
+    \label{eq:edge}
 \end{equation}
 These edges form the primary topological structure of the experience map graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$.
 
@@ -452,6 +453,7 @@ where $\tau_{loop} = 0.05$ (stricter than the template creation threshold to red
 Upon detecting a loop closure, a loop edge is added to the graph with the pose residual:
 \begin{equation}
     \mathbf{T}_{loop} = (\hat{x}_t - x_j, \hat{y}_t - y_j, \hat{z}_t - z_j, \hat{\psi}_t - \psi_j)
+    \label{eq:loopres}
 \end{equation}
 This loop constraint typically violates graph consistency (due to accumulated drift), triggering map relaxation.
 
@@ -459,22 +461,22 @@ This loop constraint typically violates graph consistency (due to accumulated dr
 
 \textbf{Step 1: Identify loop path.} Given a loop closure edge from experience $j$ to experience $t$, identify the sequence of experiences $\mathcal{P} = \{j, j+1, \ldots, t-1, t\}$ along the path.
 
-\textbf{Step 2: Compute pose residual.} The accumulated pose transition along the loop should ideally close (return to the origin):
+\textbf{Step 2: Compute pose residual.} The increments accumulated along the loop should reproduce the loop-closure residual; any mismatch is the drift to be removed:
 \begin{equation}
-    \mathbf{e}_{loop} = \log\!\left(\mathbf{T}_{t \to j}^{-1}\prod_{k \in \mathcal{P}} \mathbf{T}_{k \to k+1}\right)
+    \mathbf{e}_{loop} = \sum_{k \in \mathcal{P}} \boldsymbol{\delta}_{k \to k+1} - \mathbf{T}_{loop}
 \end{equation}
-where $\mathbf{T}_{t \to j}$ is the loop-closure measurement, $\prod_{k \in \mathcal{P}} \mathbf{T}_{k \to k+1}$ is the transition accumulated along the path, $\log(\cdot)$ maps a pose element to its tangent vector, and $\mathcal{P}$ denotes the ordered sequence of experiences forming the loop. The residual vanishes exactly when the accumulated transitions close the loop.
+where $\boldsymbol{\delta}_{k \to k+1}$ is the 4-DoF increment of Eq.~\eqref{eq:edge}, $\mathbf{T}_{loop}$ is the loop-closure residual of Eq.~\eqref{eq:loopres}, and $\mathcal{P}$ is the ordered sequence of experiences along the loop. Both terms live in the same $(x,y,z,\psi)$ parameterization, so the subtraction is well defined. The residual is nonzero whenever the increments accumulated along the loop disagree with the visual match, which is the case that triggers relaxation.
 \textbf{Step 3: Distribute correction.} Distribute the correction proportionally across the loop experiences:
 \begin{equation}
-    \mathbf{T}_{k \to k+1} \leftarrow \exp\!\left(\frac{1}{|\mathcal{P}|}\mathbf{e}_{loop}\right)\mathbf{T}_{k \to k+1}
+    \boldsymbol{\delta}_{k \to k+1} \leftarrow \boldsymbol{\delta}_{k \to k+1} - \frac{1}{|\mathcal{P}|}\mathbf{e}_{loop}
 \end{equation}
-Even distribution assumes that drift accumulates at a constant rate, which is a first-order approximation.
+Even distribution assumes that drift accumulates at a constant rate. Because the increments are treated as vectors, this composition is first-order in yaw; corrections that exceed this regime are applied by the Sim(3) re-anchoring operator described below.
 
 \textbf{Step 4: Update experience poses.} Recompute all experience poses by integrating the corrected transitions:
 \begin{equation}
-    \mathbf{X}_{k+1} = \mathbf{X}_{k} \oplus \mathbf{T}_{k \to k+1}
+    \mathbf{X}_{k+1} = \mathbf{X}_{k} + \boldsymbol{\delta}_{k \to k+1}
 \end{equation}
-where $\oplus$ denotes the 4-DoF pose composition of Eq.~\eqref{eq:global_state}.
+consistent with the increment definition of Eq.~\eqref{eq:edge}.
 
 \textbf{Step 5: Re-anchor spatial cells.} Inject the corrected pose $(\hat{x}, \hat{y}, \hat{z}, \hat{\psi})_{corr}$ back into the spatial cell networks by reinitializing the activity bumps at the corrected locations. This ``resets'' the path integration from the corrected reference, preventing error accumulation in subsequent operation.
 
