@@ -125,6 +125,25 @@ On the real-world 692~m highway (KITTI~07), NeuroLocMap runs with the loop-closu
 
 \textbf{Learned Embeddings vs.\ Classical Descriptors.} Within the loop-closure line, replacing the learned scene embeddings with classical ORB-bag descriptors collapses the loop benefit: on Town05 the ORB-descriptor loop line yields 44.72~m --- numerically indistinguishable from the bare EKF (44.44~m) under a single run; no significance test is performed in this work --- whereas the learned-embedding loop line reaches 41.14~m (Sim(3)). The persistence and orientation gates do the same work in both cases; it is the embedding quality that decides whether a revisited street is recognized at all.
 
+\textbf{Bio-Inspired Spatial Modules.} Table~\ref{tab:ablation_bio} ablates the two attractor networks: replacing the grid-cell and head-direction readouts by their dead-reckoning counterparts (the networks disabled, the rest of the pipeline unchanged) degrades Town05 from 18.07 to 41.14~m, Town07 from 28.75 to 39.65/39.49~m, and Town03 from 15.31 to 22.77/22.54~m. The two ablation rows are nearly identical by construction: the grid cells and head-direction cells form a coupled position/heading encoder, so disabling either collapses the same node-transition signal of the experience map. On the open Town10HD layout the damage is smaller (14.44 $\rightarrow$ 18.60~m), and on KITTI~07 --- where the result is carried by the loop line alone --- it is within single-run noise (18.45 $\rightarrow$ 18.33/18.35~m). Ablating the ventral template stream entirely removes the experience map's input and is therefore equivalent to the loop-line-only configuration already listed in Table~\ref{tab:results}.
+
+\begin{table}[!t]
+    \centering
+    \setlength{\tabcolsep}{4pt}
+    \footnotesize
+    \caption{Single-module ablation of the bio-inspired spatial networks (Sim(3)-aligned ATE, RMSE, m; single run). The disabled network is replaced by its dead-reckoning readout; the loop line (fine-tuned embeddings, $\tau=0.94$, A-fix) remains active.}
+    \label{tab:ablation_bio}
+    \begin{tabular}{@{}l ccccc@{}}
+        \toprule
+        Configuration & Town05 & Town03 & Town07 & Town10HD & KITTI~07 \\
+        \midrule
+        Full system               & \textbf{18.07} & \textbf{15.31} & \textbf{28.75} & \textbf{14.44} & \textbf{18.45} \\
+        w/o grid cells            & 41.14 & 22.77 & 39.65 & 18.60 & 18.33 \\
+        w/o head-direction cells  & 41.14 & 22.54 & 39.49 & 18.60 & 18.35 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
 \textbf{Visual Template Economy.} Figure~\ref{fig:ablation_and_vt}(b) shows visual template accumulation across the five scenarios: the framework grows 91--964 templates depending on scene repetitiveness, versus the $\sim$5 templates typical of classical RatSLAM~\cite{Milford2012}. The densest map is the visually non-repeating KITTI~07 highway (964 templates over 692~m, $\sim$1.4 per meter); the CARLA maps hold 91--481, reflecting how much of each route is genuinely re-observed. Growth is monotone (templates are never deleted), and this selective, scene-adaptive template economy enables fine-grained place discrimination without unbounded map growth.
 
 \begin{figure*}[!t]
