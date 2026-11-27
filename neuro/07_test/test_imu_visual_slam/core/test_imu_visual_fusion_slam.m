@@ -404,6 +404,14 @@ if isempty(NLM_SIM3_WIN), NLM_SIM3_WIN = 250; end
 global NLM_USE_PR PR_SIM_THRESHOLD PR_LOOP_RADIUS PR_ARC_GAP PR_MIN_GAP ...
        PR_YAW_GATE PR_LOOP_MIN_GAP PR_EMB_FILE PR_STABLE_MIN;
 if isempty(NLM_USE_PR), NLM_USE_PR = false; end
+% [消融] 脑启发模块单关开关(默认全关=false, 不改变已验证行为):
+%   NLM_ABLATE_GC  = true → 跳过3D CAN迭代, 读出退化为EKF航位推算(地图系)
+%   NLM_ABLATE_HDC = true → 跳过HDC迭代, 读出退化为航位推算航向/高度(bin坐标)
+%   NLM_ABLATE_VT  = true → 腹侧模板流关闭(vtId恒0, 经验图不建节点/不匹配)
+global NLM_ABLATE_GC NLM_ABLATE_HDC NLM_ABLATE_VT;
+if isempty(NLM_ABLATE_GC),  NLM_ABLATE_GC = false; end
+if isempty(NLM_ABLATE_HDC), NLM_ABLATE_HDC = false; end
+if isempty(NLM_ABLATE_VT),  NLM_ABLATE_VT = false; end
 if isempty(PR_SIM_THRESHOLD), PR_SIM_THRESHOLD = 0.7; end
 if isempty(PR_LOOP_RADIUS), PR_LOOP_RADIUS = 10; end
 if isempty(PR_ARC_GAP), PR_ARC_GAP = 50; end
@@ -528,8 +536,12 @@ for frame_idx = 1:num_frames
     curr_yaw = odo_yaw * 180 / pi;  % 转换为degrees
     curr_height = odo_z;
     
-    % 使用类脑特征提取
-    vtId = visual_template_neuro_matlab_only(rawImg, curr_x, curr_y, curr_z, curr_yaw, curr_height);
+    % 使用类脑特征提取 (消融 NLM_ABLATE_VT: 腹侧流关闭, vtId恒0)
+    if NLM_ABLATE_VT
+        vtId = 0;
+    else
+        vtId = visual_template_neuro_matlab_only(rawImg, curr_x, curr_y, curr_z, curr_yaw, curr_height);
+    end
 
     % [PR] DINOv2 场景嵌入闭环分支: 多候选 (sim>=tau + 弧长间隔 + 地图直线距离门)
     % 命中 → 重锚定到旧节点 (与 exp_map_iteration 重锚定同动作) + 写 link + 去抖
@@ -648,16 +660,25 @@ for frame_idx = 1:num_frames
         vtRecog = 0;
     end
     
-    % 更新HDC
-    yaw_height_hdc_iteration(vtId, yawRotV * DEGREE_TO_RADIAN, heightV);
-    [curYawTheta, curHeightValue] = get_current_yaw_height_value();
-    
+    % 更新HDC (消融 NLM_ABLATE_HDC: 跳过吸引子迭代, 读出退化为航位推算)
+    if NLM_ABLATE_HDC
+        curYawTheta = odo_yaw / YAW_HEIGHT_HDC_Y_TH_SIZE;       % 连续bin坐标(0-36循环)
+        curHeightValue = odo_z / YAW_HEIGHT_HDC_Y_TH_SIZE;      % 高度层bin(2π/36≈0.17m/层)
+    else
+        yaw_height_hdc_iteration(vtId, yawRotV * DEGREE_TO_RADIAN, heightV);
+        [curYawTheta, curHeightValue] = get_current_yaw_height_value();
+    end
+
     % 转换为弧度用于GC迭代
     curYawThetaInRadian = curYawTheta * YAW_HEIGHT_HDC_Y_TH_SIZE;
     
-    % 更新3D网格细胞
-    gc_iteration(vtId, transV_gc, curYawThetaInRadian, heightV);
-    [gcX, gcY, gcZ] = get_gc_xyz();
+    % 更新3D网格细胞 (消融 NLM_ABLATE_GC: 跳过吸引子迭代, 读出退化为EKF航位推算)
+    if NLM_ABLATE_GC
+        gcX = odo_x - NLM_INIT_EKF_X0; gcY = odo_y - NLM_INIT_EKF_Y0; gcZ = odo_z - NLM_INIT_EKF_Z0;
+    else
+        gc_iteration(vtId, transV_gc, curYawThetaInRadian, heightV);
+        [gcX, gcY, gcZ] = get_gc_xyz();
+    end
     
     % [DC v2] 重锚定快照: exp_map_iteration内部会重置ACCUM_DELTA, 调用前保存
     % (本帧已含帧间EKF运动), 用于调用后判定节点切换并计算纯锚定阶跃
