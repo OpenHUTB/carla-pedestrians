@@ -1,6 +1,6 @@
 % NLM_DIAG_TOWN01.m — 一次性诊断脚本(Town01, 5000帧全量)
 % 生死门: NLM_USE_EKF_ODO=true 下, Town01闭环数是否>0
-% 运行: cd /home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/quickstart && matlab -batch NLM_DIAG_TOWN01
+% 运行: cd <checkout>/neuro/07_test/test_imu_visual_slam/quickstart && matlab -batch NLM_DIAG_TOWN01
 clear all; close all; clc;
 
 script_dir = fileparts(mfilename('fullpath'));

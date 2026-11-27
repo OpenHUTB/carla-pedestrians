@@ -15,7 +15,7 @@ FONT_SIZE_LABEL = 12;  % 增大到12
 FONT_SIZE_TICK = 11;   % 增大到11
 FONT_SIZE_LEGEND = 11; % 增大到11
 
-output_dir = 'E:\Neuro_end\neuro\kbs\kbs_1\fig';
+output_dir = '<repo>/neuro/kbs\kbs_1\fig';
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end

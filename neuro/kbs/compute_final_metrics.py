@@ -2,17 +2,23 @@
 """kbs/compute_final_metrics.py — 论文定稿指标全量计算 (数据集换 Town05/03/07/10HD 后, 2026-10-12)
 
 产出:
-  Table 1 五行 (CARLA 4: Town05/03/07/10HD + KITTI07 现实验证): NLM/EKF/VO 的
+  Table 3 五行 (CARLA 4: Town05/03/07/10HD + KITTI07 现实验证): NLM/EKF/VO 的
   full-Sim(3) RMSE + drift rate + 模板/节点/闭环计数 (experiences.mat)
 输出: neuro/kbs/final_metrics.json + 打印摘要
 注: 闭环计数口径 = 每 experience 首条 link (论文沿用此口径, 用户已确认)
 """
-import numpy as np, pandas as pd, scipy.io as sio, json, os
+import numpy as np, pandas as pd, scipy.io as sio, json, os, sys
 
 # 锚定到脚本所在目录: 本脚本含 ../ 相对路径, 需保证从任意 cwd 调用均正确
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-D = '../data/01_NeuroSLAM_Datasets/'
+# 数据根可覆盖 (与 se3_metrics.py / check_datasets.py 同一约定):
+# NLM_DATA_ROOT=/path/to/datasets python3 compute_final_metrics.py
+D = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/') + '/'
+if not os.path.isdir(D):
+    print(f'[ERROR] data root not found: {os.path.abspath(D)}\n'
+             f'        set NLM_DATA_ROOT=<bundle>/datasets (or a full run tree) and retry')
+    sys.exit(2)
 OUT = {}
 
 def sim3_full(est, gt):
@@ -39,7 +45,7 @@ def loadcsv(d, fn, cols):
     c = [x for x in cols if x in a.columns]
     return a[c].values if len(c) == 3 else None
 
-# ─────────────────── 1) Table 1 五行 ───────────────────
+# ─────────────────── 1) Table 3 五行 ───────────────────
 t1 = {}
 for d in ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
           'Town10HDData_IMU_Fusion', 'KITTI07Data_IMU_Fusion']:
@@ -101,8 +107,13 @@ for d in ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusi
     t1[d] = row
 
 OUT = {'table1': t1}
+META = {
+    'caliber': 'loop-line configuration (slam_results/), NOT the full system',
+    'table3_source': 'se3_metrics.json -> NLM-fullsystem (slam_results_scale_nlm/)',
+    'batch': '2026-10-14; closed-loop Town01 re-collected 2026-11',
+}
 with open('../kbs/final_metrics.json', 'w') as f:
-    json.dump(OUT, f, indent=2, ensure_ascii=False)
+    json.dump({'_meta': META, **OUT}, f, indent=2, ensure_ascii=False)
 
 # ─────────────────── 打印 ───────────────────
 print('════ Table 1 (full Sim(3), Town05/03/07/10HD + KITTI07) ════')

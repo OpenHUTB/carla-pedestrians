@@ -9,7 +9,7 @@
     c_k = -beta*clamp(r_k, +-STEP_MAX),  beta=1 记录时未触发钳位(max|c|=24.63<25) -> r_k=-c_k
 
 口径: 官方 'simple' 对齐(起点对齐原点+路径长度缩放, 无旋转; align_trajectories.m)
-      ATE = 对齐后逐帧 RMSE (2D=x,y / 3D 双口径校准, 与 NLM_LOOP_DESIGN.md S8.1 对齐)
+      ATE = 对齐后逐帧 RMSE (2D=x,y / 3D 双口径校准)
 
 校准门槛: base ATE ~ 201.16, base+L(beta=1,cosine) ~ 172.12, 且逐帧 vs a_final 落盘轨迹.
 

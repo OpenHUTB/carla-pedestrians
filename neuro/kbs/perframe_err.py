@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """perframe_err.py — 逐帧误差定位: NLM(新,P1ON) vs EKF, 7-DoF 对齐后。
 找 NLM 输 EKF 的帧段, 判断是局部尖峰(可用 P1 平滑)还是持续漂移(架构性)。"""
-import numpy as np, os, json
-exec(open('../kbs/regen_table.py').read().split("# ---------- 口径验证")[0])
-ROOT = '../data/01_NeuroSLAM_Datasets'
+import numpy as np, os, sys, json
+_HERE = os.path.dirname(os.path.abspath(__file__))
+exec(open(os.path.join(_HERE, 'regen_table.py')).read()
+     .split("# ---------- 口径验证")[0])
+ROOT = os.environ.get('NLM_DATA_ROOT', '../data/01_NeuroSLAM_Datasets').rstrip('/')
 
 def err_curve(gt, est, anchor=None):
     n = min(len(gt), len(est)); gt = gt[:n]; est = est[:n]
@@ -23,6 +25,12 @@ datasets = [('Town01Data_IMU_Fusion','Town01'), ('Town02Data_IMU_Fusion','Town02
             ('KITTI07Data_IMU_Fusion','KITTI07')]
 out = {}
 for ds, key in datasets:
+    _need = [f'{ROOT}/{ds}/ground_truth.txt', f'{ROOT}/{ds}/slam_results/exp_trajectory.txt',
+             f'{ROOT}/{ds}/fusion_pose.txt']
+    if not all(os.path.exists(q) for q in _need):
+        print(f'[SKIP] {key}: 缺 %s（需完整运行树，资产包只含 .mat 产物）'
+              % next(q for q in _need if not os.path.exists(q)), file=sys.stderr)
+        continue
     gt  = load_pos(f'{ROOT}/{ds}/ground_truth.txt')
     nlm = load_pos(f'{ROOT}/{ds}/slam_results/exp_trajectory.txt')
     ekf = load_pos(f'{ROOT}/{ds}/fusion_pose.txt')

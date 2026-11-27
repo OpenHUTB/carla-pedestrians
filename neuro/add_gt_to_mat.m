@@ -8,7 +8,7 @@ fprintf('╚══════════════════════�
 %% 1. Read GT data
 fprintf('[1/3] Read Ground Truth data...\n');
 
-data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+data_path = '<repo>/neuro/data\Town01Data_IMU_Fusion';
 gt_file = fullfile(data_path, 'ground_truth.txt');
 
 if ~exist(gt_file, 'file')

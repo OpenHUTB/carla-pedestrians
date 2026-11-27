@@ -424,7 +424,8 @@ function plot_gc_activity_main(visualDataFile, groundTruthFile, expMapHistoryFil
                     fig = get(groot,'CurrentFigure');
                     set (fig,'Position',[300,300,500,400], 'color','w')
                     
-                    path = 'C:\Activity_Fig\GC\GC_Activity\03_Down';
+                    path = fullfile(getenv('NLM_FIG_OUT_ROOT'), 'Activity_Fig', 'GC', 'GC_Activity', '03_Down');
+                    if ~isfolder(path), mkdir(path); end
                     imageID = num2str(curFrame);
                     fileType = '.tif';
                     fileName = strcat(imageID,fileType);
@@ -454,7 +455,8 @@ function plot_gc_activity_main(visualDataFile, groundTruthFile, expMapHistoryFil
                     fig = get(groot,'CurrentFigure');
                     set (fig,'Position',[900,300,500,400], 'color','w')
 
-                    path = 'C:\Activity_Fig\HDC\hdc_activity\03_Down';
+                    path = fullfile(getenv('NLM_FIG_OUT_ROOT'), 'Activity_Fig', 'HDC', 'hdc_activity', '03_Down');
+                    if ~isfolder(path), mkdir(path); end
                     imageID = num2str(curFrame);
                     fileType = '.tif';
                     fileName = strcat(imageID,fileType);

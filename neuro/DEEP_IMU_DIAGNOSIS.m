@@ -5,7 +5,7 @@ fprintf('╔══════════════════════�
 fprintf('║              深度IMU诊断 - 根本原因分析                     ║\n');
 fprintf('╚══════════════════════════════════════════════════════════════╝\n\n');
 
-data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+data_path = '<repo>/neuro/data\Town01Data_IMU_Fusion';
 
 %% 1. 读取数据
 fprintf('[1/6] 读取数据...\n');

@@ -10,13 +10,27 @@
 % 日期: 2024-12
 
 clear all; close all; clc;
+%% 仓库根目录（NLM_ROOT 优先，否则由本文件位置上溯到含 kbs/run_all_checks.py 的目录）
+rootDir = getenv('NLM_ROOT');
+if isempty(rootDir)
+    rootDir = fileparts(mfilename('fullpath'));
+    while ~exist(fullfile(rootDir,'kbs','run_all_checks.py'),'file') && ...
+            ~strcmp(fileparts(rootDir), rootDir)
+        rootDir = fileparts(rootDir);
+    end
+end
+
 
 fprintf('========================================\n');
 fprintf('HART+CORnet 特征提取器快速启动\n');
 fprintf('========================================\n\n');
 
 %% 设置路径
-rootDir = '/home/dream/neuro_111111/carla-pedestrians/neuro';
+% 仓库根目录: 优先 NLM_ROOT 环境变量, 否则由本文件位置向上四层推导
+rootDir = getenv('NLM_ROOT');
+if isempty(rootDir)
+    rootDir = fileparts(fileparts(mfilename('fullpath')));  % repo/neuro
+end
 addpath(fullfile(rootDir, '04_visual_template'));
 
 %% 查找测试图像
@@ -228,6 +242,6 @@ fprintf('  ✓ 注意力: 层次化空间注意力\n');
 fprintf('  ✓ 时序: LSTM递归建模\n');
 fprintf('\n下一步:\n');
 fprintf('  1. 运行完整SLAM测试: test_imu_visual_slam_hart_cornet.m\n');
-fprintf('  2. 查看详细文档: README_HART_CORNET.md\n');
+fprintf('  2. Hart-CORnet module: neuro/04_visual_template/hart_cornet.m\n');
 fprintf('  3. 调整参数优化性能\n');
 fprintf('========================================\n');

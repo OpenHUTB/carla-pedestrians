@@ -67,7 +67,8 @@ We evaluate NeuroLocMap on five scenarios spanning simulated urban driving (CARL
         \end{tabular}
         \begin{tablenotes}
             \scriptsize
-            \item Bold = best of the four configurations in that caliber. NeuroLocMap beats the EKF on all five scenarios under both calibers (Sim(3) $+$16.5\% to $+$59.3\%; SE(3) $+$1.5\% to $+$33.9\%) and monocular VO on all five (Sim(3) $+$33.7\% to $+$68.8\%).
+            \item Bold = best of the four configurations in that caliber. NeuroLocMap outperforms the EKF on all five scenarios under both calibers (Sim(3) $+$16.5\% to $+$59.3\%; SE(3) $+$1.5\% to $+$33.9\%) and monocular VO on all five (Sim(3) $+$33.7\% to $+$68.8\%).
+            \item \emph{Anchored Sim(3) caliber} (closed-loop benchmark only): both trajectories are anchored at the loop event, and the reported quantity is the terminal displacement between them.
             \item Drift rates (terminal error / length): NeuroLocMap 2.9--11.7\% (Sim(3)) and 0.2--15.2\% (SE(3)), versus 1.6--13.3\% and 5.0--19.0\% for the EKF and 9.9--24.2\% and 13.7--17.2\% for VO.
             \item n/a: the zero-shot scale head is not deployed on KITTI~07 (real-image domain gap; Supplementary Section~S.1); the KITTI result is the loop-closure line over the EKF core. On Town07 the scale branch alone is strongest (loop contribution $+0.85$~m); elsewhere the full system is best.
         \end{tablenotes}
@@ -125,6 +126,25 @@ On the real-world 692~m highway (KITTI~07), NeuroLocMap runs with the loop-closu
 
 \textbf{Learned Embeddings vs.\ Classical Descriptors.} Within the loop-closure line, replacing the learned scene embeddings with classical ORB-bag descriptors collapses the loop benefit: on Town05 the ORB-descriptor loop line yields 44.72~m --- numerically indistinguishable from the bare EKF (44.44~m) under a single run; no significance test is performed in this work --- whereas the learned-embedding loop line reaches 41.14~m (Sim(3)). The persistence and orientation gates do the same work in both cases; it is the embedding quality that decides whether a revisited street is recognized at all.
 
+\textbf{Bio-Inspired Spatial Modules.} Table~\ref{tab:ablation_bio} ablates the two attractor networks: replacing the grid-cell and head-direction readouts by their dead-reckoning counterparts (the networks disabled, the rest of the pipeline unchanged) degrades Town05 from 18.07 to 41.14~m, Town07 from 28.75 to 39.65/39.49~m, and Town03 from 15.31 to 22.77/22.54~m. The two ablation rows are nearly identical by construction: the grid cells and head-direction cells form a coupled position/heading encoder, so disabling either collapses the same node-transition signal of the experience map. On the open Town10HD layout the damage is smaller (14.44 $\rightarrow$ 18.60~m), and on KITTI~07 --- where the result is carried by the loop line alone --- it is within single-run noise (18.45 $\rightarrow$ 18.33/18.35~m). Ablating the ventral template stream entirely removes the experience map's input and is therefore equivalent to the loop-line-only configuration already listed in Table~\ref{tab:results}.
+
+\begin{table}[!t]
+    \centering
+    \setlength{\tabcolsep}{4pt}
+    \footnotesize
+    \caption{Single-module ablation of the bio-inspired spatial networks (Sim(3)-aligned ATE, RMSE, m; single run). The disabled network is replaced by its dead-reckoning readout; the loop line (fine-tuned embeddings, $\tau=0.94$, A-fix) remains active.}
+    \label{tab:ablation_bio}
+    \begin{tabular}{@{}l ccccc@{}}
+        \toprule
+        Configuration & Town05 & Town03 & Town07 & Town10HD & KITTI~07 \\
+        \midrule
+        Full system               & \textbf{18.07} & \textbf{15.31} & \textbf{28.75} & \textbf{14.44} & \textbf{18.45} \\
+        w/o grid cells            & 41.14 & 22.77 & 39.65 & 18.60 & 18.33 \\
+        w/o head-direction cells  & 41.14 & 22.54 & 39.49 & 18.60 & 18.35 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
 \textbf{Visual Template Economy.} Figure~\ref{fig:ablation_and_vt}(b) shows visual template accumulation across the five scenarios: the framework grows 91--964 templates depending on scene repetitiveness, versus the $\sim$5 templates typical of classical RatSLAM~\cite{Milford2012}. The densest map is the visually non-repeating KITTI~07 highway (964 templates over 692~m, $\sim$1.4 per meter); the CARLA maps hold 91--481, reflecting how much of each route is genuinely re-observed. Growth is monotone (templates are never deleted), and this selective, scene-adaptive template economy enables fine-grained place discrimination without unbounded map growth.
 
 \begin{figure*}[!t]
@@ -137,6 +157,8 @@ On the real-world 692~m highway (KITTI~07), NeuroLocMap runs with the loop-closu
 \end{figure*}
 
 \textbf{Why No Public Baseline Is Tabulated.} Public systems such as ORB-SLAM3 and VINS-Fusion are not directly comparable on these sequences: they assume a calibrated metric scale or a stereo/IMU rig, whereas our sequences are monocular with no RTK, and our reported calibers deliberately separate shape (Sim(3)) from metric scale (SE(3)). We therefore report internal baselines (EKF core, VO, ORB-only loop line) that share the same inputs and gates.
+
+\textbf{Relation to Recent Brain-Inspired SLAM.} The closest recent system, ORB-NeuroSLAM~\cite{shen2024orbneuro}, couples ORB features with 3D grid cells, multilayered head-direction cells and an experience map on ten KITTI sequences; Hybrid-NeuroSLAM~\cite{lu2025hybridneuro} feeds a visual-inertial odometry into a bayesian-attractor cell network for 11~km scenes. Neither instantiates the vestibular-visual frequency-domain fusion of Section~\ref{sec:fusion}: our metric scale is an explicit, gated EKF state re-anchored by Sim(3) on the output trajectory, not an implicit by-product of the front-end.
 
 \subsection{Discussion and Insights}
 
@@ -155,11 +177,11 @@ On the real-world 692~m highway (KITTI~07), NeuroLocMap runs with the loop-closu
 \textbf{When Does NeuroLocMap Excel?} Three conditions emerge:
 
 \begin{itemize}
-    \item \textbf{Monocular Scale-Error Regime} --- the scale branch pays off wherever the VO scale error is large and systematic: on Town10HD the raw EKF converges to a fitted scale of 0.65 (a 35\% scale error) yet 18.61~m Sim(3) / 57.38~m SE(3); with the scale head the same core reaches 14.44~m / 49.88~m. The SE(3) caliber is where this matters: it is exactly the error the Sim(3) refit would otherwise absorb.
+    \item \textbf{Monocular Scale-Error Regime} --- the scale branch yields its largest gains wherever the VO scale error is large and systematic: on Town10HD the raw EKF converges to a fitted scale of 0.65 (a 35\% scale error) yet 18.61~m Sim(3) / 57.38~m SE(3); with the scale head the same core reaches 14.44~m / 49.88~m. The SE(3) caliber is where this matters: it is exactly the error the Sim(3) refit would otherwise absorb.
 
     \item \textbf{Revisit-Rich Layouts} --- the experience map converts revisits into global constraints: Town05 (7 links) gains a further $-2.03$~m on the scaled core, Town03 (7 links) $-0.76$~m, whereas Town10HD's single inert link contributes nothing --- the system degrades gracefully to EKF+scale rather than being hurt.
 
-    \item \textbf{Real-World Transfer with Honest Limits} --- on KITTI~07 the loop-closure line transfers zero-shot and delivers the $+$16.5\% (Sim(3)) / $+$1.5\% (SE(3)) margin; the scale head does not (Supplementary Section~S.1). The framework therefore remains effective on real data, but its simulated-data scale advantage is currently sim-only, and we say so.
+    \item \textbf{Real-World Transfer and Its Limits} --- on KITTI~07 the loop-closure line transfers zero-shot and delivers the $+$16.5\% (Sim(3)) / $+$1.5\% (SE(3)) margin; the scale head does not (Supplementary Section~S.1). The framework therefore remains effective on real data, but its simulated-data scale advantage is currently sim-only, and we say so.
 \end{itemize}
 
 \subsection{Closed-Loop Re-anchoring Benchmark}

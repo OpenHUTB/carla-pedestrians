@@ -1,8 +1,8 @@
 # NeuroSLAM Data Collection Requirements
 # Python 3.7+
 
-# CARLA client
-carla==0.9.15
+# CARLA client (client version must equal the server version; data collected on 0.9.16)
+carla==0.9.16
 
 # Numerical computing
 numpy>=1.19.0

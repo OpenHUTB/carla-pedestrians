@@ -14,7 +14,8 @@
 import os, sys
 import pandas as pd, scipy.io as sio
 
-D = '../data/01_NeuroSLAM_Datasets/'
+_HERE = os.path.dirname(os.path.abspath(__file__))
+D = os.environ.get('NLM_DATA_ROOT', os.path.join(_HERE, '..', 'data', '01_NeuroSLAM_Datasets')).rstrip('/') + '/'
 TOWNS = ['Town05Data_IMU_Fusion', 'Town03Data_IMU_Fusion', 'Town07Data_IMU_Fusion',
          'Town10HDData_IMU_Fusion']
 KITTI = 'KITTI07Data_IMU_Fusion'

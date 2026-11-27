@@ -38,7 +38,7 @@ LINE_WIDTH_EKF = 2.0;
 LINE_WIDTH_VO = 1.8;
 
 % 输出目录
-output_dir = 'E:\Neuro_end\neuro\kbs\kbs\NeuroSLAM_KBS_Submission\fig';
+output_dir = '<repo>/neuro/kbs\kbs\NeuroSLAM_KBS_Submission\fig';
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end
@@ -50,7 +50,7 @@ fprintf('[1/4] 生成轨迹对比图（Town01 + MH03合并）...\n');
 read_data_file = @(filepath) csvread(filepath, 1, 0);  % 跳过第1行表头，从第0列开始
 
 % 加载Town01数据
-town01_data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+town01_data_path = '<repo>/neuro/data\Town01Data_IMU_Fusion';
 town01_gt = read_data_file(fullfile(town01_data_path, 'ground_truth.txt'));
 town01_fusion = read_data_file(fullfile(town01_data_path, 'fusion_pose.txt'));
 town01_vo = read_data_file(fullfile(town01_data_path, 'visual_odometry.txt'));
@@ -70,7 +70,7 @@ town01_vo_pos = town01_vo(:, 2:4);
 town01_bio_pos = town01_bio(:, 2:4);
 
 % 加载MH03数据
-mh03_data_path = 'E:\Neuro_end\neuro\data\MH_03_medium\MH_03_medium';
+mh03_data_path = '<repo>/neuro/data\MH_03_medium\MH_03_medium';
 mh03_gt = read_data_file(fullfile(mh03_data_path, 'ground_truth.txt'));
 mh03_fusion = read_data_file(fullfile(mh03_data_path, 'fusion_pose.txt'));
 mh03_vo = read_data_file(fullfile(mh03_data_path, 'visual_odometry.txt'));

@@ -1,0 +1,226 @@
+{
+  "_meta": {
+    "caliber": "anchored Sim(3) on first 100 frames, applied unchanged (same as Section 4.5)",
+    "note": "error immediately before the accepted event vs at the event frame"
+  },
+  "n_events": 36,
+  "n_error_increased": 32,
+  "events": [
+    {
+      "frame": 363,
+      "err_before_m": 12.06,
+      "err_after_m": 23.86,
+      "delta_m": 11.8
+    },
+    {
+      "frame": 500,
+      "err_before_m": 41.97,
+      "err_after_m": 34.07,
+      "delta_m": -7.91
+    },
+    {
+      "frame": 646,
+      "err_before_m": 26.12,
+      "err_after_m": 69.92,
+      "delta_m": 43.79
+    },
+    {
+      "frame": 648,
+      "err_before_m": 85.9,
+      "err_after_m": 70.36,
+      "delta_m": -15.55
+    },
+    {
+      "frame": 792,
+      "err_before_m": 27.1,
+      "err_after_m": 83.08,
+      "delta_m": 55.98
+    },
+    {
+      "frame": 808,
+      "err_before_m": 57.37,
+      "err_after_m": 81.44,
+      "delta_m": 24.06
+    },
+    {
+      "frame": 809,
+      "err_before_m": 81.44,
+      "err_after_m": 93.64,
+      "delta_m": 12.2
+    },
+    {
+      "frame": 831,
+      "err_before_m": 56.82,
+      "err_after_m": 97.08,
+      "delta_m": 40.26
+    },
+    {
+      "frame": 832,
+      "err_before_m": 97.08,
+      "err_after_m": 98.41,
+      "delta_m": 1.34
+    },
+    {
+      "frame": 844,
+      "err_before_m": 58.53,
+      "err_after_m": 88.89,
+      "delta_m": 30.36
+    },
+    {
+      "frame": 846,
+      "err_before_m": 88.26,
+      "err_after_m": 98.76,
+      "delta_m": 10.49
+    },
+    {
+      "frame": 849,
+      "err_before_m": 59.33,
+      "err_after_m": 85.76,
+      "delta_m": 26.42
+    },
+    {
+      "frame": 852,
+      "err_before_m": 70.08,
+      "err_after_m": 98.9,
+      "delta_m": 28.82
+    },
+    {
+      "frame": 858,
+      "err_before_m": 59.88,
+      "err_after_m": 80.14,
+      "delta_m": 20.26
+    },
+    {
+      "frame": 859,
+      "err_before_m": 80.14,
+      "err_after_m": 82.19,
+      "delta_m": 2.06
+    },
+    {
+      "frame": 860,
+      "err_before_m": 82.19,
+      "err_after_m": 80.19,
+      "delta_m": -2.01
+    },
+    {
+      "frame": 861,
+      "err_before_m": 80.19,
+      "err_after_m": 81.47,
+      "delta_m": 1.28
+    },
+    {
+      "frame": 865,
+      "err_before_m": 72.43,
+      "err_after_m": 80.19,
+      "delta_m": 7.76
+    },
+    {
+      "frame": 867,
+      "err_before_m": 80.19,
+      "err_after_m": 85.39,
+      "delta_m": 5.2
+    },
+    {
+      "frame": 871,
+      "err_before_m": 69.74,
+      "err_after_m": 80.21,
+      "delta_m": 10.47
+    },
+    {
+      "frame": 872,
+      "err_before_m": 80.21,
+      "err_after_m": 88.66,
+      "delta_m": 8.45
+    },
+    {
+      "frame": 881,
+      "err_before_m": 66.06,
+      "err_after_m": 80.25,
+      "delta_m": 14.19
+    },
+    {
+      "frame": 882,
+      "err_before_m": 80.25,
+      "err_after_m": 95.21,
+      "delta_m": 14.95
+    },
+    {
+      "frame": 885,
+      "err_before_m": 65.67,
+      "err_after_m": 80.27,
+      "delta_m": 14.6
+    },
+    {
+      "frame": 887,
+      "err_before_m": 80.28,
+      "err_after_m": 98.48,
+      "delta_m": 18.21
+    },
+    {
+      "frame": 888,
+      "err_before_m": 98.48,
+      "err_after_m": 80.29,
+      "delta_m": -18.2
+    },
+    {
+      "frame": 889,
+      "err_before_m": 80.29,
+      "err_after_m": 82.34,
+      "delta_m": 2.06
+    },
+    {
+      "frame": 900,
+      "err_before_m": 68.57,
+      "err_after_m": 82.0,
+      "delta_m": 13.43
+    },
+    {
+      "frame": 903,
+      "err_before_m": 65.38,
+      "err_after_m": 91.76,
+      "delta_m": 26.38
+    },
+    {
+      "frame": 919,
+      "err_before_m": 72.97,
+      "err_after_m": 103.03,
+      "delta_m": 30.06
+    },
+    {
+      "frame": 948,
+      "err_before_m": 87.27,
+      "err_after_m": 148.69,
+      "delta_m": 61.42
+    },
+    {
+      "frame": 1002,
+      "err_before_m": 78.17,
+      "err_after_m": 115.39,
+      "delta_m": 37.22
+    },
+    {
+      "frame": 2166,
+      "err_before_m": 98.11,
+      "err_after_m": 179.48,
+      "delta_m": 81.37
+    },
+    {
+      "frame": 3143,
+      "err_before_m": 180.65,
+      "err_after_m": 312.77,
+      "delta_m": 132.12
+    },
+    {
+      "frame": 3881,
+      "err_before_m": 238.81,
+      "err_after_m": 364.69,
+      "delta_m": 125.88
+    },
+    {
+      "frame": 9970,
+      "err_before_m": 543.62,
+      "err_after_m": 893.03,
+      "delta_m": 349.41
+    }
+  ]
+}

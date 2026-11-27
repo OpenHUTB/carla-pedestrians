@@ -10,9 +10,6 @@
 % 口径: 与 DC_FINAL 的 Town01 完全一致(同参数覆盖+同DC参数), 仅数据集不同:
 %   数据集 = Town01Turnaround_IMU_Fusion (采集器 --turnaround --bidir-start 输出)
 mode = 'dc';
-if nargin >= 1
-    mode = char(mode);
-end
 a_mode = strcmp(mode, 'constraint');
 
 script_dir = fileparts(mfilename('fullpath'));

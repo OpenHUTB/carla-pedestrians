@@ -6,7 +6,7 @@ fprintf('║        IMU数据与Ground Truth相关性分析                     
 fprintf('╚══════════════════════════════════════════════════════════════╝\n\n');
 
 %% 1. 读取数据
-data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+data_path = '<repo>/neuro/data\Town01Data_IMU_Fusion';
 
 % 读取Ground Truth
 fprintf('[1/5] 读取Ground Truth...\n');

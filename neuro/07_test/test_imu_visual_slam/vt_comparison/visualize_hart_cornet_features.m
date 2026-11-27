@@ -6,9 +6,18 @@
 % 日期: 2024-12-02
 
 clear all; close all; clc;
+%% 仓库根目录（NLM_ROOT 优先，否则由本文件位置上溯到含 kbs/run_all_checks.py 的目录）
+rootDir = getenv('NLM_ROOT');
+if isempty(rootDir)
+    rootDir = fileparts(mfilename('fullpath'));
+    while ~exist(fullfile(rootDir,'kbs','run_all_checks.py'),'file') && ...
+            ~strcmp(fileparts(rootDir), rootDir)
+        rootDir = fileparts(rootDir);
+    end
+end
+
 
 %% 添加路径
-rootDir = '/home/dream/neuro_111111/carla-pedestrians/neuro';
 addpath(fullfile(rootDir, '04_visual_template'));
 
 %% 读取测试图像

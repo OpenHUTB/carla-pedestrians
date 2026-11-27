@@ -6,7 +6,7 @@ fprintf('  追踪 coder.isColumnMajor 错误来源\n');
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
 
 %% 设置路径
-cd('E:\Neuro_end\neuro');
+cd('<repo>/neuro');
 addpath(genpath('07_test/07_test/test_imu_visual_slam'));
 addpath(genpath('01_conjunctive_pose_cells_network'));
 addpath(genpath('04_visual_template'));
@@ -110,7 +110,7 @@ end
 % 3.4 测试 read_ground_truth
 fprintf('\n  3.4 read_ground_truth: ');
 try
-    gt_file = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion\ground_truth.txt';
+    gt_file = '<repo>/neuro/data\Town01Data_IMU_Fusion\ground_truth.txt';
     gt_data = read_ground_truth(gt_file);
     fprintf('✓ 正常 (rows=%d)\n', size(gt_data.pos, 1));
 catch ME
@@ -171,7 +171,7 @@ end
 %% 测试5: 完整的run_ours_slam_lstm流程（简化版）
 fprintf('\n测试5: 模拟完整SLAM流程\n');
 
-data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+data_path = '<repo>/neuro/data\Town01Data_IMU_Fusion';
 
 % 5.1 读取数据
 fprintf('  5.1 读取IMU数据: ');
@@ -250,7 +250,7 @@ search_dirs = {
 };
 
 for d = 1:length(search_dirs)
-    dir_path = fullfile('E:\Neuro_end\neuro', search_dirs{d});
+    dir_path = fullfile(repo_root_dir(), search_dirs{d});
     m_files = dir(fullfile(dir_path, '**', '*.m'));
     
     for f = 1:length(m_files)
@@ -277,3 +277,14 @@ end
 fprintf('\n═══════════════════════════════════════════════════════════════\n');
 fprintf('  诊断完成\n');
 fprintf('═══════════════════════════════════════════════════════════════\n');
+
+
+function r = repo_root_dir()
+% 上溯定位含 kbs/run_all_checks.py 的 neuro 目录
+r = getenv('NLM_ROOT');
+if ~isempty(r), return; end
+r = fileparts(mfilename('fullpath'));
+while ~exist(fullfile(r,'kbs','run_all_checks.py'),'file') && ~strcmp(fileparts(r), r)
+    r = fileparts(r);
+end
+end

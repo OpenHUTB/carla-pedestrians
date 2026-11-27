@@ -4,8 +4,8 @@
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2020b+-blue.svg)](https://www.mathworks.com/products/matlab.html)
 [![Python](https://img.shields.io/badge/Python-3.7+-green.svg)](https://www.python.org/)
-[![CARLA](https://img.shields.io/badge/CARLA-0.9.15-orange.svg)](https://carla.org/)
-[![License](https://img.shields.io/badge/License-GPL--3.0-red.svg)](LICENSE)
+[![CARLA](https://img.shields.io/badge/CARLA-0.9.16-orange.svg)](https://carla.org/)
+[![License](https://img.shields.io/badge/License-GPL--3.0-red.svg)](../LICENSE)
 
 A biologically-inspired Simultaneous Localization and Mapping (SLAM) system that mimics the spatial cognition mechanisms of the rat hippocampus, enhanced with state-of-the-art computer vision techniques.
 
@@ -208,7 +208,6 @@ test_imu_visual_slam_hart_cornet
 | **`QUICK_START_VISUAL_GUIDE.md`** | 🚀 Visual quick start guide |
 | **`HART_CORNET_SUMMARY.md`** | 🧠 HART+CORnet feature extractor |
 | **`PATH_USAGE_GUIDE.md`** | 📂 Relative path usage guide |
-| **`START_HERE.md`** | ⭐ Original quick start |
 
 **Start with:** `QUICK_START_VISUAL_GUIDE.md` → `COMPLETE_SYSTEM_GUIDE.md`
 
@@ -361,7 +360,7 @@ Contributions are welcome! Please:
 
 ## 📄 License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](../LICENSE) file for details.
 
 ---
 

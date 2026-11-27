@@ -5,11 +5,25 @@
 % 日期: 2024-12
 
 clear all; close all; clc;
+%% 仓库根目录（NLM_ROOT 优先，否则由本文件位置上溯到含 kbs/run_all_checks.py 的目录）
+rootDir = getenv('NLM_ROOT');
+if isempty(rootDir)
+    rootDir = fileparts(mfilename('fullpath'));
+    while ~exist(fullfile(rootDir,'kbs','run_all_checks.py'),'file') && ...
+            ~strcmp(fileparts(rootDir), rootDir)
+        rootDir = fileparts(rootDir);
+    end
+end
+
 
 fprintf('========== HART+CORnet特征提取器测试 ==========\n\n');
 
 %% 1. 添加路径
-rootDir = '/home/dream/neuro_111111/carla-pedestrians/neuro';
+% 仓库根目录: 优先 NLM_ROOT 环境变量, 否则由本文件位置向上四层推导
+rootDir = getenv('NLM_ROOT');
+if isempty(rootDir)
+    rootDir = fileparts(fileparts(mfilename('fullpath')));  % repo/neuro
+end
 addpath(fullfile(rootDir, '04_visual_template'));
 fprintf('[1/5] 已添加路径\n');
 

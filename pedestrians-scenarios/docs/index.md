@@ -16,9 +16,9 @@ Add a short description here!
 
 ## Contents
 
-* [Overview](readme)
-* [License](license)
-* [Authors](authors)
+* [Overview](readme.md)
+* [License](../LICENSE)
+* [Authors](authors.md)
 * [Changelog](changelog)
 * [Module Reference](api/modules)
 

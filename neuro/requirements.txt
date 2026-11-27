@@ -1,5 +1,5 @@
-# NeuroSLAM — Python 依赖 (一键安装: pip install -r requirements.txt)
-# 如需 CARLA 数据采集，还需要安装 carla wheel:
+# NeuroSLAM — Python dependencies (install with: pip install -r requirements.txt)
+# CARLA data collection additionally needs the carla wheel:
 #   py -3.12 -m pip install <CARLA_DIR>\PythonAPI\carla\dist\carla-*.whl
 
 numpy>=1.19.0
@@ -7,3 +7,6 @@ scipy>=1.5.0
 opencv-python>=4.5.0
 pandas>=1.1.0
 matplotlib>=3.3.0
+
+# the learned components (scale-head training / DINOv2 embeddings) are optional and large:
+#   pip install -r neuro/requirements-learned.txt

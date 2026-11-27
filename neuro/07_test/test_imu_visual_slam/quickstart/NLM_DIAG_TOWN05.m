@@ -1,5 +1,5 @@
 % NLM_DIAG_TOWN05.m — 一次性诊断脚本(Town05, 1000帧快速模式)
-% 运行: cd /home/yangrb/openhutb/neuro/07_test/test_imu_visual_slam/quickstart && matlab -batch NLM_DIAG_TOWN05
+% 运行: cd <checkout>/neuro/07_test/test_imu_visual_slam/quickstart && matlab -batch NLM_DIAG_TOWN05
 clear all; close all; clc;
 
 script_dir = fileparts(mfilename('fullpath'));

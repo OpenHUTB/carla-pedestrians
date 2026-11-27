@@ -9,7 +9,7 @@
 %    3. 如果需要，可以开启多参数联合搜索
 %  
 %  运行方式：
-%    cd('E:\Neuro_end\neuro');
+%    cd('<repo>/neuro');
 %    addpath('07_test/07_test/test_imu_visual_slam/parameter_search');
 %    GRID_SEARCH_IMU_FUSION
 

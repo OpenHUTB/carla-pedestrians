@@ -2,7 +2,7 @@
 %  自动搜索alpha_yaw参数，使ATE改进接近8%
 %
 %  运行方式：
-%    cd('E:\Neuro_end\neuro');
+%    cd('<repo>/neuro');
 %    addpath('07_test/07_test/test_imu_visual_slam/parameter_search');
 %    addpath('09_vestibular/09_vestibular');
 %    TUNE_FOR_8_PERCENT
@@ -14,7 +14,7 @@ fprintf('║     调参脚本 - 目标8%%改进                                 
 fprintf('╚══════════════════════════════════════════════════════════════╝\n\n');
 
 %% 配置
-data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+data_path = '<repo>/neuro/data\Town01Data_IMU_Fusion';
 num_frames = 1500;
 target_improvement = 8.0;  % 目标改进百分比
 

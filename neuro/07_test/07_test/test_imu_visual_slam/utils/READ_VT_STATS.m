@@ -9,12 +9,12 @@ fprintf('========================================\n\n');
 
 % 数据路径
 datasets = {
-    'Town01Data_IMU_Fusion', 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion\slam_results\vt_stats_Town01Data_IMU_Fusion.mat';
-    'Town02Data_IMU_Fusion', 'E:\Neuro_end\neuro\data\Town02Data_IMU_Fusion\slam_results\vt_stats_Town02Data_IMU_Fusion.mat';
-    'Town10Data_IMU_Fusion', 'E:\Neuro_end\neuro\data\Town10Data_IMU_Fusion\slam_results\vt_stats_Town10Data_IMU_Fusion.mat';
-    'KITTI_07', 'E:\Neuro_end\neuro\data\KITTI_07\slam_results\vt_stats_KITTI_07.mat';
-    'MH_01_easy', 'E:\Neuro_end\neuro\data\MH_01_easy\MH_01_easy\slam_results\vt_stats_MH_01_easy.mat';
-    'MH_03_medium', 'E:\Neuro_end\neuro\data\MH_03_medium\MH_03_medium\slam_results\vt_stats_MH_03_medium.mat';
+    'Town01Data_IMU_Fusion', '<repo>/neuro/data\Town01Data_IMU_Fusion\slam_results\vt_stats_Town01Data_IMU_Fusion.mat';
+    'Town02Data_IMU_Fusion', '<repo>/neuro/data\Town02Data_IMU_Fusion\slam_results\vt_stats_Town02Data_IMU_Fusion.mat';
+    'Town10Data_IMU_Fusion', '<repo>/neuro/data\Town10Data_IMU_Fusion\slam_results\vt_stats_Town10Data_IMU_Fusion.mat';
+    'KITTI_07', '<repo>/neuro/data\KITTI_07\slam_results\vt_stats_KITTI_07.mat';
+    'MH_01_easy', '<repo>/neuro/data\MH_01_easy\MH_01_easy\slam_results\vt_stats_MH_01_easy.mat';
+    'MH_03_medium', '<repo>/neuro/data\MH_03_medium\MH_03_medium\slam_results\vt_stats_MH_03_medium.mat';
 };
 
 fprintf('%-20s | %-15s | %-10s | %-15s\n', 'Dataset', 'Total VT', 'Frames', 'File Date');

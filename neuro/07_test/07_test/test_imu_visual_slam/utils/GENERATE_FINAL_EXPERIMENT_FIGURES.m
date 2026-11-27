@@ -28,7 +28,7 @@ LINE_WIDTH_BIO = 2.2;
 LINE_WIDTH_EKF = 2.0;
 LINE_WIDTH_VO = 1.8;
 
-output_dir = 'E:\Neuro_end\neuro\kbs\kbs\NeuroSLAM_KBS_Submission\fig';
+output_dir = '<repo>/neuro/kbs\kbs\NeuroSLAM_KBS_Submission\fig';
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end
@@ -47,12 +47,12 @@ try
     QUICK_GENERATE_TRAJECTORY('MH03');
     
     fprintf('   ✅ 轨迹图已生成\n');
-    fprintf('   📁 Town01: E:\\Neuro_end\\neuro\\data\\Town01Data_IMU_Fusion\\slam_results\\imu_visual_slam_comparison.pdf\n');
-    fprintf('   📁 MH03: E:\\Neuro_end\\neuro\\data\\MH_03_medium\\MH_03_medium\\slam_results\\imu_visual_slam_comparison.pdf\n');
+    fprintf('   📁 Town01: <repo>\\neuro\\data\\Town01Data_IMU_Fusion\\slam_results\\imu_visual_slam_comparison.pdf\n');
+    fprintf('   📁 MH03: <repo>\\neuro\\data\\MH_03_medium\\MH_03_medium\\slam_results\\imu_visual_slam_comparison.pdf\n');
     
     % 复制到论文目录
-    town01_src = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion\slam_results\imu_visual_slam_comparison.pdf';
-    mh03_src = 'E:\Neuro_end\neuro\data\MH_03_medium\MH_03_medium\slam_results\imu_visual_slam_comparison.pdf';
+    town01_src = '<repo>/neuro/data\Town01Data_IMU_Fusion\slam_results\imu_visual_slam_comparison.pdf';
+    mh03_src = '<repo>/neuro/data\MH_03_medium\MH_03_medium\slam_results\imu_visual_slam_comparison.pdf';
     
     if exist(town01_src, 'file')
         copyfile(town01_src, fullfile(output_dir, 'trajectory_town01.pdf'));

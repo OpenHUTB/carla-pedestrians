@@ -15,7 +15,7 @@ FONT_SIZE_LABEL = 11;
 FONT_SIZE_TICK = 10;
 FONT_SIZE_LEGEND = 10;
 
-output_dir = 'E:\Neuro_end\neuro\kbs\kbs\NeuroSLAM_KBS_Submission\fig';
+output_dir = '<repo>/neuro/kbs\kbs\NeuroSLAM_KBS_Submission\fig';
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end

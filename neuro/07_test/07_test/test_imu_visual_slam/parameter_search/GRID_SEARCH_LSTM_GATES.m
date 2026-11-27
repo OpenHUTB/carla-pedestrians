@@ -9,7 +9,7 @@
 %    output_gate: 控制输出信息的强度 (0~1)
 %  
 %  运行方式：
-%    cd('E:\Neuro_end\neuro');
+%    cd('<repo>/neuro');
 %    addpath('07_test/07_test/test_imu_visual_slam/parameter_search');
 %    addpath('07_test/07_test/test_imu_visual_slam/utils');
 %    GRID_SEARCH_LSTM_GATES

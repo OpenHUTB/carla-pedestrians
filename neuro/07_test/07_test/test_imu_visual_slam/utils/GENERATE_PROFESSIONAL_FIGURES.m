@@ -28,7 +28,7 @@ FONT_SIZE_TITLE = 12;
 LINE_WIDTH = 2.5;
 
 % 输出目录
-output_dir = 'E:\Neuro_end\neuro\kbs\kbs_1\fig';
+output_dir = '<repo>/neuro/kbs\kbs_1\fig';
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end

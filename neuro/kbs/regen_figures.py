@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""regen_figures.py — 用 2026-10-13 车流重采 run (slam_results/) 数据重绘论文 4 张图。
+"""regen_figures.py — 重绘论文 4 张图（NLM 轨迹优先 slam_results_scale_nlm/ 全系统，
+缺失时回退 slam_results/ 闭环线并告警；EKF/VO 基线取自 final_metrics.json）。
 背景: MATLAB R2021b 本机不可用 (Settings 错误), 原图由 MATLAB 生成 (A4 页面+trim);
 本脚本直接生成 trim 后的内容尺寸 PDF, tex 中对应 includegraphics 的 trim 参数改为 0。
 
@@ -12,18 +13,54 @@
 口径: 7-DoF (Procrustes, 旋转+平移+均匀尺度) 全轨迹对齐, 与 compute_metrics_with_alignment.m 一致。
 """
 import os
+import sys
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+plt.rcParams.update({'font.family': 'sans-serif',
+                        'font.sans-serif': ['DejaVu Sans'],
+                        'mathtext.fontset': 'dejavusans'})
 from scipy.io import loadmat
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = '../data'
-FIG = '../kbs/fig'
+# 数据根可覆盖（与 se3_metrics.py 同约定），资产包可直接用来重绘：
+#   NLM_DATA_ROOT=<bundle>/datasets NLM_BACKUP_ROOT=<bundle>/_p11_backup_20261014
+DS    = os.environ.get('NLM_DATA_ROOT', os.path.join(_HERE, '..', 'data', '01_NeuroSLAM_Datasets')).rstrip('/')
+KITTI = os.environ.get('NLM_KITTI_DIR', os.path.join(_HERE, '..', 'KITTI_07')).rstrip('/')
+BK    = os.environ.get('NLM_BACKUP_ROOT', os.path.join(_HERE, '..', '_p11_backup_20261014')).rstrip('/')
+if not os.path.isdir(DS):
+    print(f'[ERROR] data root not found: {os.path.abspath(DS)}\n'
+             f'        set NLM_DATA_ROOT=<bundle>/datasets (or a full run tree) and retry')
+    sys.exit(2)
+FIG = os.path.join(_HERE, 'fig')
 
 # ---------------- 论文现值 (Table 1, 2026-10-14 二次重采 final_metrics.json) ----------------
-EKF_RMSE = {'Town05': 44.44, 'Town03': 23.36, 'Town07': 40.64, 'Town10HD': 18.61, 'KITTI07': 22.09}
-VO_RMSE  = {'Town05': 48.26, 'Town03': 49.10, 'Town07': 50.07, 'Town10HD': 35.86, 'KITTI07': 27.84}
+_FALLBACK_EKF = {'Town05': 44.44, 'Town03': 23.36, 'Town07': 40.64, 'Town10HD': 18.61, 'KITTI07': 22.09}
+_FALLBACK_VO  = {'Town05': 48.26, 'Town03': 49.10, 'Town07': 50.07, 'Town10HD': 35.86, 'KITTI07': 27.84}
+
+
+def _short(ds_key):
+    """'Town10HDData_IMU_Fusion' -> 'Town10HD'"""
+    return ds_key.split('Data_')[0] if 'Data_' in ds_key else ds_key
+
+
+def _load_baselines():
+    """EKF/VO 的 RMSE 从 final_metrics.json 取（单一来源），取不到才回退常量。"""
+    import json
+    try:
+        t1 = json.load(open('../kbs/final_metrics.json'))['table1']
+        ekf = {_short(k): v['ekf']['rmse'] for k, v in t1.items() if v.get('ekf')}
+        vo = {_short(k): v['vo']['rmse'] for k, v in t1.items() if v.get('vo')}
+        if ekf and vo:
+            return ekf, vo
+    except Exception as e:
+        print(f'[WARN] final_metrics.json 读取失败 ({e})，EKF/VO 用内置常量', file=sys.stderr)
+    return _FALLBACK_EKF, _FALLBACK_VO
+
+
+EKF_RMSE, VO_RMSE = _load_baselines()
 
 # 配色 (与原图一致: NLM 蓝 / EKF 浅橙 / VO 浅绿)
 C_NLM, C_EKF, C_VO = '#4490C2', '#F4A582', '#92C59B'
@@ -31,11 +68,32 @@ C_GRAY = '#888888'
 
 
 # ---------------- 数据加载 ----------------
-# 2026-10-16 定调: 论文主形态 = NLM 全系统 (EKF+尺度+闭环)。
+# 2026-10-16 定调: 论文主形态 = NLM 全系统 (EKF+scale+闭环)。
 # CARLA 4 集 NLM 轨迹源优先 slam_results_scale_nlm (全系统), 回退 slam_results (闭环线);
 # KITTI07 无全系统 (零样本尺度支路失效), 保持闭环线 slam_results。
 def _nlm_dirs(ds):
     return ('slam_results',) if ds == 'KITTI07' else ('slam_results_scale_nlm', 'slam_results')
+
+
+_FALLBACK_WARNED = set()
+
+
+def _pick(sub, ds, name):
+    """按 _nlm_dirs 顺序取第一个存在的文件；用了回退目录时告警一次。
+
+    资产包只带 slam_results/（闭环线），此时画出来的 NLM 曲线与正文 Table 3 的
+    Ours 列（slam_results_scale_nlm/ 全系统）不是同一条轨迹。
+    """
+    dirs = _nlm_dirs(ds)
+    for i, d in enumerate(dirs):
+        p = f'{sub}/{d}/{name}'
+        if os.path.exists(p):
+            if i > 0 and ds not in _FALLBACK_WARNED:
+                _FALLBACK_WARNED.add(ds)
+                print(f'[WARN] {ds}: {dirs[0]}/ 缺失，改用 {d}/ —— 该图中的 NLM 为闭环线口径，'
+                      f'与正文 Table 3 的 Ours 列不是同一条轨迹', file=sys.stderr)
+            return p
+    return None
 
 
 def load_pos(path, poscols=None):
@@ -75,24 +133,17 @@ def procrustes_7dof(gt, est):
 
 
 def load_ds(ds):
-    sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
+    sub = f'{DS}/{ds}Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
-    nlm_txt = None
-    for d in _nlm_dirs(ds):
-        p = f'{sub}/{d}/exp_trajectory.txt'
-        if os.path.exists(p):
-            nlm_txt = p
-            break
+    nlm_txt = _pick(sub, ds, 'exp_trajectory.txt')
     if nlm_txt is not None:
         nlm = load_pos(nlm_txt)
     else:
         # 新 run 产物为 trajectories.mat (变量 exp_trajectory), P2 定解口径
         nlm = None
-        for d in _nlm_dirs(ds):
-            mp = f'{sub}/{d}/trajectories.mat'
-            if os.path.exists(mp):
-                nlm = np.array(loadmat(mp)['exp_trajectory'], dtype=float)
-                break
+        mp = _pick(sub, ds, 'trajectories.mat')
+        if mp is not None:
+            nlm = np.array(loadmat(mp)['exp_trajectory'], dtype=float)
         if nlm is None:
             raise FileNotFoundError('exp_trajectory.txt / trajectories.mat')
     ekf = load_pos(f'{sub}/fusion_pose.txt')
@@ -100,7 +151,7 @@ def load_ds(ds):
     # VO 口径 = visual_odometry.txt (vo_x/vo_y/vo_z), 与 Table 1 同源 (compute_final_metrics)
     vo_p = f'{sub}/visual_odometry.txt'
     if ds == 'KITTI07' and not os.path.exists(vo_p):
-        vo_p = f'{ROOT}/KITTI_07/visual_odometry_ekf.txt'  # VO 文件在 raw 转换目录
+        vo_p = f'{KITTI}/visual_odometry_ekf.txt'  # VO 文件在 raw 转换目录
     out['vo'] = load_pos(vo_p) if os.path.exists(vo_p) else None
     for name in ('nlm', 'ekf', 'vo'):
         T = out[name]
@@ -153,13 +204,11 @@ def _mat_field(E, name):
 
 
 def load_map(ds):
-    sub = f'{ROOT}/01_NeuroSLAM_Datasets/{ds}Data_IMU_Fusion'
+    sub = f'{DS}/{ds}Data_IMU_Fusion'
     m = None
-    for d in _nlm_dirs(ds):
-        p = f'{sub}/{d}/experiences.mat'
-        if os.path.exists(p):
-            m = loadmat(p)
-            break
+    p = _pick(sub, ds, 'experiences.mat')
+    if p is not None:
+        m = loadmat(p)
     if m is None:
         m = loadmat(_result_file(sub, 'experiences.mat'))
     E = m['EXPERIENCES']
@@ -348,9 +397,9 @@ def fig_ablation(ta, tb, mpa):
 
     # (a) Town05 组件消融 (全系统时代 5 成分, sim3_full 口径)
     ax = axes[0]
-    sub5 = f'{ROOT}/01_NeuroSLAM_Datasets/Town05Data_IMU_Fusion'
+    sub5 = f'{DS}/Town05Data_IMU_Fusion'
     comps = [('Full\n(EKF+scale+loop)', ta['nlm'])]
-    _ekfs = load_pos(f'{ROOT}/_p11_backup_20261014/Town05/fp_head030.txt')  # EKF+尺度 replay (无闭环)
+    _ekfs = load_pos(f'{BK}/Town05/fp_head030.txt')  # EKF+scale replay (无闭环)
     comps += [('w/o loop\n(EKF+scale)', _ekfs),
               ('w/o scale\n(loop only)', load_pos(f'{sub5}/slam_results/exp_trajectory.txt')),
               ('EKF', ta['ekf']), ('VO', ta['vo'])]
@@ -402,7 +451,7 @@ def fig_ablation(ta, tb, mpa):
 
 # ---------------- 图4: KITTI_07_input_output (561 x 327 pt) ----------------
 def fig_kitti_io():
-    sub = f'{ROOT}/01_NeuroSLAM_Datasets/KITTI07Data_IMU_Fusion'
+    sub = f'{DS}/KITTI07Data_IMU_Fusion'
     gt = load_pos(f'{sub}/ground_truth.txt')
     nlm_txt = _result_file(sub, 'exp_trajectory.txt', required=False)
     if nlm_txt is not None:
@@ -522,6 +571,11 @@ def fig_kitti_io():
 if __name__ == '__main__':
     ta, tb, mpa = fig_representative()
     fig_performance_summary(ta, tb, mpa)
-    fig_ablation(ta, tb, mpa)
+    try:
+        fig_ablation(ta, tb, mpa)
+    except FileNotFoundError as e:
+        print(f'[SKIP] ablation_unified.pdf: {e}\n'
+              f'       该图需要 EKF+scale replay (NLM_BACKUP_ROOT/_p11_backup_20261014/<seq>/fp_head030.txt)，'
+              f'资产包不含；先用 export_repro_bundle.py 打包再重绘。', file=sys.stderr)
     fig_kitti_io()
     print('DONE')

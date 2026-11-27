@@ -6,9 +6,10 @@
   - 若"全轨迹7-DoF"≈16.63 → 论文用全轨迹 (代码 align_frames=min_len, 现行)
   - 若"前100帧7-DoF"≈16.63 → 论文用首段锚定 (论文正文 line70 的说法)
 """
-import numpy as np, os
+import numpy as np, os, os
 
-ROOT = '../data/01_NeuroSLAM_Datasets'
+_HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.environ.get('NLM_DATA_ROOT', os.path.join(_HERE, '..', 'data', '01_NeuroSLAM_Datasets')).rstrip('/')
 
 def load_pos(path, poscols=None):
     """poscols=None: 自动探测(首行是表头→列1,2,3; 否则列0,1,2)。"""

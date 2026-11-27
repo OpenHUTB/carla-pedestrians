@@ -4,7 +4,7 @@ function DC_FINAL(ds, mode)
 %   NLM_DC_ENABLE=true, COLLECT_ONLY=false, 逐集 W0/W_PER_M/CMAX 由离线
 %   dc_sweep.py 网格选定(7-DoF Procrustes 口径), 结果写入 dc_final/。
 % 用法: 瘦驱动调用, 如 DC_FINAL_TOWN01.m:  ds = 'Town01'; DC_FINAL(ds);
-%   第二参 'constraint'(2026-10-06, 见 neuro/kbs/NLM_LOOP_DESIGN.md):
+%   第二参 'constraint'(2026-10-06, 设计文档已移出仓库):
 %   叠加闭环约束漂移场 A-fix(NLM_LOOP_CONSTRAINT=1, 输出级零地图反馈),
 %   结果写入 a_final/, 不动 dc_final/ 基线。
 % 数据集: Town01 / Town02 / Town05 / Town10HD / KITTI07

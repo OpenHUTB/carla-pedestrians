@@ -6,7 +6,7 @@ close all;
 fprintf('========== View Comparison Results ==========\n');
 
 % Data path
-data_path = 'E:\Neuro_end\neuro\data\Town01Data_IMU_Fusion';
+data_path = '<repo>/neuro/data\Town01Data_IMU_Fusion';
 result_path = fullfile(data_path, 'comparison_results');
 mat_file = fullfile(result_path, 'comparison_results.mat');
 

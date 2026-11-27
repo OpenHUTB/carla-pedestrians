@@ -1,11 +1,21 @@
 %% 检查fusion_data的详细内容
 
 clear all; close all; clc;
+%% 仓库根目录（NLM_ROOT 优先，否则由本文件位置上溯到含 kbs/run_all_checks.py 的目录）
+rootDir = getenv('NLM_ROOT');
+if isempty(rootDir)
+    rootDir = fileparts(mfilename('fullpath'));
+    while ~exist(fullfile(rootDir,'kbs','run_all_checks.py'),'file') && ...
+            ~strcmp(fileparts(rootDir), rootDir)
+        rootDir = fileparts(rootDir);
+    end
+end
+
 
 fprintf('\n检查fusion_data详细信息...\n\n');
 
 % 加载文件
-data_file = '/home/dream/neuro_111111/carla-pedestrians/neuro/data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/slam_results/trajectories.mat';
+data_file = fullfile(rootDir, 'data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/slam_results/trajectories.mat');
 load(data_file);
 
 fprintf('=== fusion_data 所有字段 ===\n');

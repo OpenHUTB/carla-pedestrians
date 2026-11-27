@@ -1,0 +1,54 @@
+NOTICE — third-party components in this repository
+==================================================
+
+The MIT license in LICENSE covers only the authors' own code under `neuro/`
+(except the vendored class in `neuro/kbs/module/elsarticle/`, which keeps its LPPL terms)
+and the trained weights `neuro/kbs/*.pt`. The directories below are separate
+projects with separate terms. Each list entry states the license file found
+in-tree (or, where none is provided, that none was found).
+
+1. `bip/`
+   License: CC BY-NC 4.0 (Attribution-NonCommercial 4.0 International).
+   Source license file: `bip/LICENSE`.
+   IMPORTANT: this license forbids commercial use of that directory. It is
+   included only because the scenario-generation pipeline depends on it; it is
+   NOT part of the localization method presented in the paper.
+
+2. `bip/scenario_runner/`
+   Part of the CARLA ScenarioRunner distribution, MIT licensed (CARLA team).
+
+3. `pedestrians-video-2-carla/`
+   License: MIT, Copyright (c) 2021 Maciej Wielgosz (`pedestrians-video-2-carla/LICENSE`).
+
+4. `pedestrians-scenarios/`
+   License: MIT, Copyright (c) 2022 Maciej Wielgosz (`pedestrians-scenarios/LICENSE`).
+
+5. `carla-common/`
+   License: MIT, Copyright (c) 2022 wielgosz-info (`carla-common/LICENSE`).
+
+6. `neuro/kbs/module/elsarticle/`
+   License: LaTeX Project Public License 1.3 (`elsarticle.dtx` / `elsarticle.ins`,
+   Elsevier). Vendored copy of the journal class; the build actually uses the
+   TeX Live installation, so this directory is not required to compile.
+
+7. `alphapose/`, `openpose/`, `walker/`
+   No license file is present in this repository. These directories are
+   wrappers/scripts around the upstream AlphaPose and OpenPose projects; consult
+   the upstream terms before redistribution or commercial use.
+
+Model weights and external data
+-------------------------------
+* `neuro/kbs/pr_head.pt`, `neuro/kbs/pr_scale_head.pt`: trained by the authors
+  on simulated data only; covered by LICENSE.
+* DINOv2-S: the visual embeddings are produced at runtime from the upstream
+  release (`facebook/dinov2-small` via HuggingFace) and are NOT redistributed
+  here; the upstream model terms apply when you regenerate them.
+* Monocular depth backbone: likewise downloaded at runtime by the user; the
+  upstream terms apply.
+* CARLA simulator (v0.9.16), KITTI odometry, and EuRoC MAV: external assets,
+  used under their own terms and not redistributed here.
+
+Citation
+--------
+If you use this repository, please cite the accompanying manuscript
+(see README, section "Citation").

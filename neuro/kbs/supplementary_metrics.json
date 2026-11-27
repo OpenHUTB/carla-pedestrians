@@ -1,0 +1,29 @@
+{
+  "_meta": {
+    "purpose": "Numbers quoted in the supplementary material (S.1 KITTI-07 true-VIO replay, S.2 KITTI-09 zero-shot) recorded for traceability against the manuscript.",
+    "source": "Internal true-VIO replay batch (2026-10); the trajectories live outside the released asset bundle.",
+    "reproducible_from_bundle": false,
+    "caliber": "full Sim(3) refit unless the key says se3_",
+    "note": "S.2 is derivable from se3_metrics.json (KITTI09Data_IMU_Fusion row, carried_row). S.1 requires the true-VIO replay, which the bundle does not contain; see REPRODUCE.md."
+  },
+  "S1_kitti07_true_vio": {
+    "gt_len_m": 692.1,
+    "main_text_baseline_sim3_rmse": 22.09,
+    "main_text_baseline_se3_rmse": 30.45,
+    "ekf_true_vio_sim3_rmse": 17.75,
+    "ekf_true_vio_se3_rmse": 44.01,
+    "ekf_with_scale_head_sim3_rmse": 23.13,
+    "loop_line_on_true_vio_sim3_rmse": 23.12,
+    "loop_line_on_true_vio_se3_rmse": 40.99,
+    "loop_line_vs_true_vio_se3_gain_pct": -6.8
+  },
+  "S2_kitti09": {
+    "frames": 1591,
+    "gt_len_m": 1705.1,
+    "loop_line_sim3_rmse": 42.37,
+    "ekf_sim3_rmse": 42.34,
+    "loop_line_se3_rmse": 54.63,
+    "ekf_se3_rmse": 54.77,
+    "source": "se3_metrics.json -> KITTI09Data_IMU_Fusion (carried_row: true)"
+  }
+}

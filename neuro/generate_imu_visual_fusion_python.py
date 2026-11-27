@@ -52,7 +52,7 @@ ax.semilogx(freq, H_fused, 'c-', linewidth=3, label='Fused (Complementary)', alp
 # 标注交叉频率
 ax.axvline(omega_v, color='gray', linestyle='--', linewidth=1.5, alpha=0.6)
 ax.plot(omega_v, 1/np.sqrt(2), 'ro', markersize=10, zorder=5)
-ax.annotate(f'$\omega_c = {omega_v}$ rad/s\n(Crossover frequency)', 
+ax.annotate(rf'$\omega_c = {omega_v}$ rad/s' '\n(Crossover frequency)', 
             xy=(omega_v, 1/np.sqrt(2)), xytext=(25, 0.5),
             fontsize=12, ha='left',
             arrowprops=dict(arrowstyle='->', lw=1.5, color='red'),

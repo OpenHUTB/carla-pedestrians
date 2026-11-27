@@ -12,7 +12,11 @@ vt_ce = [0.10 20;
          0.15 50];
 sweep_root = '/tmp/nlm_sweep_t01';
 if ~isfolder(sweep_root), mkdir(sweep_root); end
-base_dir = '/home/yangrb/openhutb/neuro/data/01_NeuroSLAM_Datasets/Town01Data_IMU_Fusion/slam_results';
+nlmRoot = getenv('NLM_ROOT');
+if isempty(nlmRoot)
+    nlmRoot = fileparts(fileparts(fileparts(fileparts(fileparts(mfilename('fullpath'))))));
+end
+base_dir = fullfile(nlmRoot, 'neuro', 'data', '01_NeuroSLAM_Datasets', 'Town01Data_IMU_Fusion', 'slam_results');
 
 for i = 1:size(vt_ce, 1)
     vt = vt_ce(i, 1); ce = vt_ce(i, 2);

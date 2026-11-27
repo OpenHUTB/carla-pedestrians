@@ -65,7 +65,7 @@ legend({'Bio-inspired (Ours)', 'EKF Baseline', 'VO Baseline'}, ...
 title('Performance Across 6 Datasets (Normalized)', 'FontSize', 16, 'FontWeight', 'bold');
 
 % 保存
-output_dir = 'E:\Neuro_end\neuro\kbs\kbs\NeuroSLAM_KBS_Submission\fig';
+output_dir = '<repo>/neuro/kbs\kbs\NeuroSLAM_KBS_Submission\fig';
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end

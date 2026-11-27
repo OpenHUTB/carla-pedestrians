@@ -370,7 +370,7 @@ if isempty(NLM_DC_COLLECT_ONLY), NLM_DC_COLLECT_ONLY = false; end
 dc_events = zeros(0, 4);      % [frame, dx, dy, dz] 重锚定跳变事件
 dc_prev_exp_id = 0; dc_prev_delta = zeros(1, 3);
 
-% [A-fix] 闭环约束漂移场 (2026-10-06, 设计见 neuro/kbs/NLM_LOOP_DESIGN.md):
+% [A-fix] 闭环约束漂移场 (2026-10-06):
 % NLM_LOOP_CONSTRAINT=1 时 exp_map_iteration 只记录闭环约束事件(不动节点/
 % NLM_LOOP_CORR, 零地图反馈), 轨迹结束后在本脚本输出层注入约束漂移场:
 % [t_old, t_now] 区间预校正消除 t_now 处重锚定阶梯, 之后保持修正(类DC v3结构)。
@@ -384,7 +384,7 @@ global NLM_LOOP_BETA NLM_LOOP_CE_MIN NLM_LOOP_STEP_MAX;
 if isempty(NLM_LOOP_BETA), NLM_LOOP_BETA = 1.0; end
 if isempty(NLM_LOOP_CE_MIN), NLM_LOOP_CE_MIN = 3; end
 if isempty(NLM_LOOP_STEP_MAX), NLM_LOOP_STEP_MAX = 25; end
-global NLM_SIM3_REANCHOR;   % S2: 闭环时全Sim(3)重锚 (默认关; 设计见 NLM_LOOP_DESIGN.md §9)
+global NLM_SIM3_REANCHOR;   % S2: 闭环时全Sim(3)重锚 (默认关)
 if isempty(NLM_SIM3_REANCHOR), NLM_SIM3_REANCHOR = false; end
 global NLM_SIM3_WIN;        % S2: 当前lap拟合窗帧数 (win=250 双口径最优, kb_s2_winsweep_v2 自校准)
 if isempty(NLM_SIM3_WIN), NLM_SIM3_WIN = 250; end
@@ -404,6 +404,14 @@ if isempty(NLM_SIM3_WIN), NLM_SIM3_WIN = 250; end
 global NLM_USE_PR PR_SIM_THRESHOLD PR_LOOP_RADIUS PR_ARC_GAP PR_MIN_GAP ...
        PR_YAW_GATE PR_LOOP_MIN_GAP PR_EMB_FILE PR_STABLE_MIN;
 if isempty(NLM_USE_PR), NLM_USE_PR = false; end
+% [消融] 脑启发模块单关开关(默认全关=false, 不改变已验证行为):
+%   NLM_ABLATE_GC  = true → 跳过3D CAN迭代, 读出退化为EKF航位推算(地图系)
+%   NLM_ABLATE_HDC = true → 跳过HDC迭代, 读出退化为航位推算航向/高度(bin坐标)
+%   NLM_ABLATE_VT  = true → 腹侧模板流关闭(vtId恒0, 经验图不建节点/不匹配)
+global NLM_ABLATE_GC NLM_ABLATE_HDC NLM_ABLATE_VT;
+if isempty(NLM_ABLATE_GC),  NLM_ABLATE_GC = false; end
+if isempty(NLM_ABLATE_HDC), NLM_ABLATE_HDC = false; end
+if isempty(NLM_ABLATE_VT),  NLM_ABLATE_VT = false; end
 if isempty(PR_SIM_THRESHOLD), PR_SIM_THRESHOLD = 0.7; end
 if isempty(PR_LOOP_RADIUS), PR_LOOP_RADIUS = 10; end
 if isempty(PR_ARC_GAP), PR_ARC_GAP = 50; end
@@ -528,8 +536,12 @@ for frame_idx = 1:num_frames
     curr_yaw = odo_yaw * 180 / pi;  % 转换为degrees
     curr_height = odo_z;
     
-    % 使用类脑特征提取
-    vtId = visual_template_neuro_matlab_only(rawImg, curr_x, curr_y, curr_z, curr_yaw, curr_height);
+    % 使用类脑特征提取 (消融 NLM_ABLATE_VT: 腹侧流关闭, vtId恒0)
+    if NLM_ABLATE_VT
+        vtId = 0;
+    else
+        vtId = visual_template_neuro_matlab_only(rawImg, curr_x, curr_y, curr_z, curr_yaw, curr_height);
+    end
 
     % [PR] DINOv2 场景嵌入闭环分支: 多候选 (sim>=tau + 弧长间隔 + 地图直线距离门)
     % 命中 → 重锚定到旧节点 (与 exp_map_iteration 重锚定同动作) + 写 link + 去抖
@@ -648,16 +660,25 @@ for frame_idx = 1:num_frames
         vtRecog = 0;
     end
     
-    % 更新HDC
-    yaw_height_hdc_iteration(vtId, yawRotV * DEGREE_TO_RADIAN, heightV);
-    [curYawTheta, curHeightValue] = get_current_yaw_height_value();
-    
+    % 更新HDC (消融 NLM_ABLATE_HDC: 跳过吸引子迭代, 读出退化为航位推算)
+    if NLM_ABLATE_HDC
+        curYawTheta = odo_yaw / YAW_HEIGHT_HDC_Y_TH_SIZE;       % 连续bin坐标(0-36循环)
+        curHeightValue = odo_z / YAW_HEIGHT_HDC_Y_TH_SIZE;      % 高度层bin(2π/36≈0.17m/层)
+    else
+        yaw_height_hdc_iteration(vtId, yawRotV * DEGREE_TO_RADIAN, heightV);
+        [curYawTheta, curHeightValue] = get_current_yaw_height_value();
+    end
+
     % 转换为弧度用于GC迭代
     curYawThetaInRadian = curYawTheta * YAW_HEIGHT_HDC_Y_TH_SIZE;
     
-    % 更新3D网格细胞
-    gc_iteration(vtId, transV_gc, curYawThetaInRadian, heightV);
-    [gcX, gcY, gcZ] = get_gc_xyz();
+    % 更新3D网格细胞 (消融 NLM_ABLATE_GC: 跳过吸引子迭代, 读出退化为EKF航位推算)
+    if NLM_ABLATE_GC
+        gcX = odo_x - NLM_INIT_EKF_X0; gcY = odo_y - NLM_INIT_EKF_Y0; gcZ = odo_z - NLM_INIT_EKF_Z0;
+    else
+        gc_iteration(vtId, transV_gc, curYawThetaInRadian, heightV);
+        [gcX, gcY, gcZ] = get_gc_xyz();
+    end
     
     % [DC v2] 重锚定快照: exp_map_iteration内部会重置ACCUM_DELTA, 调用前保存
     % (本帧已含帧间EKF运动), 用于调用后判定节点切换并计算纯锚定阶跃
@@ -792,7 +813,7 @@ if NLM_DC_ENABLE && ~NLM_DC_COLLECT_ONLY && ~isempty(dc_events)
             size(dc_events, 1), NLM_DC_W0, NLM_DC_W_PER_M, norm(d_field(end, :) - C_cum(end, :)));
 end
 
-% [A-fix] 闭环约束漂移场注入 (设计见 neuro/kbs/NLM_LOOP_DESIGN.md):
+% [A-fix] 闭环约束漂移场注入:
 % 约束事件 (t_now, t_old, c=-β·clamp(r)): 区间 [t_old, t_now) 输出从0爬坡到c,
 % t_now 处重锚定后原始轨迹已锚到matched节点(残差消失), 之后 L=0。
 % 净效果: t_now 处阶梯被预校正抵消, 且 t_now 之后不引入 -r 持续偏差。
@@ -800,7 +821,7 @@ end
 % S2(NLM_SIM3_REANCHOR=1)时本块照常执行: 离线验证的形态是 "A-fix爬坡 + S2重锚"
 % 叠加(爬坡先抵消 t_now 阶梯, 保证 S2 的400帧拟合窗口无阶梯污染); 单独S2会
 % 因阶梯污染拟合窗口而大量事件被尺度门拒绝(实测 4/16 事件, 103.9m), 劣于叠加
-% (10/16 事件, 61.6m, 见 NLM_LOOP_DESIGN.md §9)。
+% (10/16 事件, 61.6m)。
 if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
     n_lc = num_frames;
     f0v = (1:n_lc)';
@@ -846,7 +867,7 @@ if NLM_LOOP_CONSTRAINT && ~isempty(NLM_LOOP_EVENTS)
             max(sum(L_field.^2, 2)) ^ 0.5);
 end
 
-% [S2] 闭环全Sim(3)重锚 (创新核心升级, 设计见 neuro/kbs/NLM_LOOP_DESIGN.md §9):
+% [S2] 闭环全Sim(3)重锚 (创新核心升级):
 % 当前A-fix只注入平移, 吸收不了长程累积的尺度/旋转漂移(首100帧锚定Sim3口径下
 % 平移A-fix反而 755→861m)。S2在每次闭环把"当前帧之后到下一闭环"整段用
 % 全Sim(3)变换(尺度+旋转+平移, procrustes拟合)拉回首锚坐标系: 消除节点坐标
@@ -1175,8 +1196,10 @@ function traj = nlm_sim3_reanchor(traj, events, win)
 % 锚点窗口 = 首段运动帧(自动跳过静止前导); 段 = 事件帧+1 : 下一事件帧-1。
 % 退化保护: 当前窗口<30帧或段<2帧跳过; 拟合尺度落在[0.05,20]之外跳过
 % win 选定 (kbs/kb_s2_winsweep_v2.m 自校准扫参, 10-09 代 10 事件):
-%   8/10 事件生效区内 win=250 双口径最优 (anch100 44.24 / scale2D 46.63),
+%   8/10 事件生效区内 win=250 双口径最优 (旧批次10事件口径: anch100 44.24 / scale2D 46.63),
 %   优于原 win=400 (113.11 / 58.66); win=200 (40.99) 仅 3/10 生效不可比。
+%   注: 2026-11 折返集重采后, 论文 §4.5 报告 55.92 m vs 842.54 m (36 事件/10000 帧),
+%   与本扫参批次不同口径, 引用时勿混用。
 % 行向量约定与MATLAB procrustes一致: anchor ≈ s*(cur*R) + t。
 % 关键: 拟合与映射都基于【S2输入轨迹 base】(非链式) —— 各段独立拉回首锚坐标
 % 系, 前一事件的重锚不污染后一事件的拟合窗口。链式(读已改轨迹)会使相邻事件
