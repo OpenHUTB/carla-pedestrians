@@ -36,13 +36,6 @@ where $I_t$ denotes the captured monocular RGB image; $\mathbf{a}_t$ and $\bolds
 \end{equation}
 In this formulation, $(x_t, y_t, z_t) \in \mathbb{R}^3$ represent global 3D translational coordinates (unit: meter), and $\psi_t \in [-\pi,\pi)$ denotes horizontal yaw angle (unit: radian), i.e.\ the heading is a circular quantity on $S^1$ represented by its $2\pi$-modular angle rather than an element of the rotation group $\mathrm{SO}(2)$.
 
-3) Unified state evolution mapping function
-\begin{equation}
-    \mathbf{X}_{t+1} = \mathcal{F}\big(\mathbf{X}_t,\, \mathbf{U}_t\big)
-    \label{eq:state_evolution}
-\end{equation}
-The mapping $\mathcal{F}(\cdot)$ encapsulates the complete forward pipeline, including multi-scale visual feature extraction, inertial motion calculation, frequency-domain multimodal fusion and spatial network path integration. Detailed mathematical decomposition of $\mathcal{F}(\cdot)$ is presented in Sections~\ref{sec:visual_cortex}--\ref{sec:fusion} (visual cortex, vestibular system, and complementary fusion) and Sections~\ref{sec:scale_recovery}--\ref{sec:loop_closure} (scale recovery and the spatial memory system).
-
 As visualized in Fig.~\ref{fig:system_overview}, the end-to-end data pipeline consists of five sequential coupled modules:
 1. Hierarchical dual-stream visual front-end: Parallel ventral/dorsal branches are constructed to independently generate scene descriptors and compute pixel-wise ego-motion, eliminating mutual interference between recognition and tracking tasks.
 2. Vestibular IMU processing module: Derives high-frequency transient motion signals from raw inertial data without iterative online bias calibration.
@@ -547,4 +540,4 @@ with $\mathrm{win} = 250$ frames (self-calibrated by an offline window sweep) an
 \begin{equation}
     \hat{\mathbf{p}}(f) = \sigma_{\mathrm{sim}}\,(\mathbf{p}(f)\mathbf{R}_{P}) + \mathbf{t}, \qquad t_{\mathrm{now}} < f < t_{\mathrm{next}},
 \end{equation}
-applied independently per event on the pre-correction trajectory (non-chained, so one event's refit is not polluted by its predecessor's transform). Because each accepted loop is a genuine re-visit of the same physical location, the re-anchoring is a global consistency correction that uses no ground-truth information; on loop-free routes it is a strict no-op. On a dedicated closed-loop benchmark (an urban route crossing the same road segments at widely separated times), this full-Sim(3) re-anchoring recovers $15\times$ more of the accumulated global drift than the EKF baseline (55.92~m vs 842.54~m, anchored-Sim(3) caliber): the dominant global error accumulated between loops is the monocular scale error, which only the full similarity re-fit removes.
+applied independently per event on the pre-correction trajectory (non-chained, so one event's refit is not polluted by its predecessor's transform). Because each accepted loop is a genuine re-visit of the same physical location, the re-anchoring is a global consistency correction that uses no ground-truth information; on loop-free routes it is a strict no-op.
