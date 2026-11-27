@@ -3,6 +3,11 @@ name: Compile LaTeX 2025
 # trigger: push to the main branch, or a pull request
 on: [push, pull_request]
 
+# 仓库自带 elsarticle，必须让 TeX 先找到它，否则会用系统版本、排版静默漂移
+env:
+  TEXINPUTS: "${{ github.workspace }}/neuro/kbs/module/elsarticle//:"
+  BSTINPUTS: "${{ github.workspace }}/neuro/kbs/module/elsarticle//:"
+
 jobs:
   build_latex:
     runs-on: ubuntu-latest # run on the latest Ubuntu runner
@@ -18,9 +23,9 @@ jobs:
           working_directory: neuro/kbs
           root_file: NeuroSLAM_KBS.tex   # main file is NeuroSLAM_KBS.tex
           texlive_version: 2025       # keep the TeX Live version used for the submitted PDF
-          latexmk_use_xelatex: true   # keep XeLaTeX, which handles the wide character set and packages used here
+          latexmk_use_xelatex: false  # 与投稿版一致：pdflatex（xelatex 断行与字体不同，页数会对不上）
           compiler: latexmk     
-          args: -interaction=nonstopmode -file-line-error # do not stop on the first error; print diagnostics and continue
+          args: -pdf -interaction=nonstopmode -file-line-error # do not stop on the first error; print diagnostics and continue
 
       # # step 3: archive the generated PDF as a run artifact
       # # note: this does not commit the PDF into the repository

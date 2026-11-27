@@ -133,7 +133,7 @@ where $\odot$ denotes element-wise Hadamard product, $\mathbf{C}_t$ is the cell 
 
 \textbf{Visual Motion Extraction.} In addition to scene recognition, the visual front-end extracts ego-motion cues from inter-frame feature correspondences, mimicking the dorsal stream processing in area MST (medial superior temporal).
 
-\textbf{Sparse Feature Correspondence.} Let $\mathbf{K}_{\mathrm{cam}}\in\mathbb{R}^{3\times 3}$ be the camera intrinsic matrix. Each frame is described by $N$ ORB keypoints ($N{=}2000$) with rotated-BRIEF descriptors; putative correspondences are established by k-nearest-neighbour matching with the Lowe ratio test ($k{=}2$, ratio $0.7$). Matched points are normalized to camera coordinates:
+\textbf{Sparse Feature Correspondence.} Let $\mathbf{K}_{\mathrm{cam}}\in\mathbb{R}^{3\times 3}$ be the camera intrinsic matrix. Each frame is described by $N$ ORB keypoints ($N{=}2000$) with rotated-BRIEF descriptors; putative correspondences are established by k-nearest-neighbor matching with the Lowe ratio test ($k{=}2$, ratio $0.7$). Matched points are normalized to camera coordinates:
 \begin{equation}
     \tilde{\mathbf{q}}_i^t = \mathbf{K}_{\mathrm{cam}}^{-1}\begin{bmatrix}\mathbf{p}_i^t\\ 1\end{bmatrix},\qquad \mathbf{q}_i^t = \pi(\tilde{\mathbf{q}}_i^t)=\frac{1}{\tilde{q}_{i,3}^t}\begin{bmatrix}\tilde{q}_{i,1}^t\\ \tilde{q}_{i,2}^t\end{bmatrix}
 \end{equation}
@@ -168,7 +168,7 @@ This corresponds to the horizontal semicircular canal cue, adequate for our comp
 \end{align}
 where $g=9.81\,\mathrm{m/s^2}$ is gravitational acceleration, $k_t, k_z$ are constant scaling gains matching our implementation constants, and $\Delta t$ denotes the frame sampling interval. This cue carries no bias or gravity-vector state and provides the high-frequency channel of the reference implementation (Section~\ref{sec:reference_impl}); the deployed filter obtains the same high-frequency information from the IMU propagation of Section~\ref{sec:deployed_filter}, not from this heuristic.
 
-\textbf{Bias Estimation.} The accelerometer and gyroscope biases that enter the kinematic cues are estimated once, in the static start-up window of each sequence (the first 200 samples with the platform at rest), and are then held constant; no online gravity-vector estimation is performed and a constant gravity magnitude is used for specific-force compensation. This keeps the front-end free of extra filter states and is sufficient at the 20\,Hz CARLA cadence (KITTI~07 is processed at its native $\approx$9.6\,Hz, $\Delta t\approx0.104$\,s); the residual effect of a fixed gravity magnitude is analysed as a failure mode in the discussion.
+\textbf{Bias Estimation.} The accelerometer and gyroscope biases that enter the kinematic cues are estimated once, in the static start-up window of each sequence (the first 200 samples with the platform at rest), and are then held constant; no online gravity-vector estimation is performed and a constant gravity magnitude is used for specific-force compensation. This keeps the front-end free of extra filter states and is sufficient at the 20\,Hz CARLA cadence (KITTI~07 is processed at its native $\approx$9.6\,Hz, $\Delta t\approx0.104$\,s); the residual effect of a fixed gravity magnitude is analyzed as a failure mode in the discussion.
 
 \subsection{Vestibular--Visual Fusion: Frequency-Domain Principle and Deployed Filter}
 \label{sec:fusion}
@@ -461,19 +461,20 @@ This loop constraint typically violates graph consistency (due to accumulated dr
 
 \textbf{Step 2: Compute pose residual.} The accumulated pose transition along the loop should ideally close (return to the origin):
 \begin{equation}
-    \mathbf{e}_{loop} = \sum_{k \in \mathcal{P}} \mathbf{T}_{k \to k+1} - \mathbf{T}_{loop}
+    \mathbf{e}_{loop} = \log\!\left(\mathbf{T}_{t \to j}^{-1}\prod_{k \in \mathcal{P}} \mathbf{T}_{k \to k+1}\right)
 \end{equation}
-where $\mathbf{e}_{loop}$ is accumulated pose drift residual around closed trajectory, and $\mathcal{P}$ denotes ordered experience sequence forming the loop.
+where $\mathbf{T}_{t \to j}$ is the loop-closure measurement, $\prod_{k \in \mathcal{P}} \mathbf{T}_{k \to k+1}$ is the transition accumulated along the path, $\log(\cdot)$ maps a pose element to its tangent vector, and $\mathcal{P}$ denotes the ordered sequence of experiences forming the loop. The residual vanishes exactly when the accumulated transitions close the loop.
 \textbf{Step 3: Distribute correction.} Distribute the correction proportionally across the loop experiences:
 \begin{equation}
-    \mathbf{T}_{k \to k+1} \leftarrow \mathbf{T}_{k \to k+1} - \frac{\mathbf{e}_{loop}}{|\mathcal{P}|}
+    \mathbf{T}_{k \to k+1} \leftarrow \exp\!\left(\frac{1}{|\mathcal{P}|}\mathbf{e}_{loop}\right)\mathbf{T}_{k \to k+1}
 \end{equation}
-This uniform distribution assumes drift accumulates at a constant rate, a reasonable first-order approximation.
+Even distribution assumes that drift accumulates at a constant rate, which is a first-order approximation.
 
 \textbf{Step 4: Update experience poses.} Recompute all experience poses by integrating the corrected transitions:
 \begin{equation}
-    (x_{k+1}, y_{k+1}, z_{k+1}, \psi_{k+1}) = (x_k, y_k, z_k, \psi_k) + \mathbf{T}_{k \to k+1}
+    \mathbf{X}_{k+1} = \mathbf{X}_{k} \oplus \mathbf{T}_{k \to k+1}
 \end{equation}
+where $\oplus$ denotes the 4-DoF pose composition of Eq.~\eqref{eq:global_state}.
 
 \textbf{Step 5: Re-anchor spatial cells.} Inject the corrected pose $(\hat{x}, \hat{y}, \hat{z}, \hat{\psi})_{corr}$ back into the spatial cell networks by reinitializing the activity bumps at the corrected locations. This ``resets'' the path integration from the corrected reference, preventing error accumulation in subsequent operation.
 
