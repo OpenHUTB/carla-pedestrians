@@ -3,6 +3,7 @@
 \label{sec:method}
 
 \subsection{Notation and Conventions}
+\label{sec:notation}
 \textbf{Notation Conventions.} Superscripts indicate sensory modality ($^{\text{vis}}$: visual, $^{\text{imu}}$: inertial, $^f$: fused) or cell type ($^g$: grid cells, $^h$: head direction cells). Subscript $t$ denotes time. Bold uppercase letters denote matrices or high-dimensional arrays; bold lowercase denotes vectors; calligraphic fonts denote sets.
 
 \textbf{Scale and Deep-Component Symbols.} $s$ is the global monocular scale factor relating metric units to VO-relative units, carried as the 10th EKF state $\log s$; $s^{*}$ denotes the ground-truth scale (used in training only). $\hat z_t$ is the frozen monocular depth foundation model's (DAv2) metric depth map, and $g_\theta$ the lightweight scale-correction head (Section~\ref{sec:scale_recovery}); $\boldsymbol{e}_t$ denotes the learned global scene embedding consumed by the loop-closure line (Section~\ref{sec:loop_closure}).
@@ -13,10 +14,10 @@
 \begin{figure*}[!htbp]
     \centering
     \includegraphics[trim=0pt 97pt 6pt 82pt, clip, width=0.95\textwidth]{fig/2_framework.pdf}
-    \caption{Self-contained end-to-end data flow of the proposed multimodal visual-inertial framework. Raw inputs are monocular RGB images and IMU measurements. The visual module splits signals into scene recognition and motion estimation branches; the vestibular module outputs high-frequency inertial motion. Two modalities are fused via frequency-domain complementary filtering. The fused kinematics drive the spatial network to update the unified 4-DoF global state $\mathbf{X}_t$ defined in Eq. \eqref{eq:global_state}. The experience graph module performs loop relaxation to eliminate long-term trajectory drift. All submodules share the standardized state-space variables proposed in this section.}
+    \caption{Self-contained end-to-end data flow of the proposed multimodal visual-inertial framework. Raw inputs are monocular RGB images and IMU measurements. The visual module splits signals into scene recognition and motion estimation branches; the vestibular module outputs high-frequency inertial motion. Two modalities are fused with the frequency-domain principle of Section~\ref{sec:principle}, instantiated as a fixed-dimension (10-state) EKF. The fused kinematics drive the spatial network to update the unified 4-DoF global state $\mathbf{X}_t$ defined in Eq. \eqref{eq:global_state}. The experience graph module performs loop relaxation to eliminate long-term trajectory drift. All submodules share the standardized state-space variables proposed in this section.}
     \label{fig:system_overview}
 \end{figure*}
-This work designs a multimodal visual-inertial signal processing system for robot localization, which consists of three tightly coupled functional subsystems: hierarchical multi-scale visual feature operator, vestibular-inertial sensor state estimator, and metric spatial state encoding network. Different from conventional EKF-based loosely coupled frameworks, the proposed system adopts frequency-domain complementary fusion to decouple low-frequency visual observation noise and high-frequency inertial transient noise, and updates the global metric state via a continuous attractor spatial network to suppress long-term trajectory drift.
+This work designs a multimodal visual-inertial signal processing system for robot localization, which consists of three tightly coupled functional subsystems: hierarchical multi-scale visual feature operator, vestibular-inertial sensor state estimator, and metric spatial state encoding network. Unlike tightly coupled visual-inertial estimators that augment the state with feature clones, the proposed system keeps a state of fixed dimension and makes the frequency-domain complementarity of the two modalities explicit: the inertial channel supplies the high-frequency prediction, the visual channel supplies gated low-frequency corrections, and the resulting metric state is integrated by a continuous attractor spatial network that suppresses long-term trajectory drift.
 
 \subsubsection{Global Discrete State-Space Model}
 To provide a unified mathematical foundation for all subsequent submodule derivations, we first define the discrete state-space representation of the system at time $t$.
@@ -30,10 +31,10 @@ where $I_t$ denotes the captured monocular RGB image; $\mathbf{a}_t$ and $\bolds
 
 2) Core 4-DoF global pose state vector
 \begin{equation}
-    \mathbf{X}_t = \left[ x_t,\, y_t,\, z_t,\, \psi_t \right]^\top \in \mathbb{R}^3 \times \mathrm{SO}(2)
+    \mathbf{X}_t = \left[ x_t,\, y_t,\, z_t,\, \psi_t \right]^\top \in \mathbb{R}^3 \times S^1
     \label{eq:global_state}
 \end{equation}
-In this formulation, $(x_t, y_t, z_t) \in \mathbb{R}^3$ represent global 3D translational coordinates (unit: meter), and $\psi_t \in [-\pi,\pi)$ denotes horizontal yaw angle (unit: radian).
+In this formulation, $(x_t, y_t, z_t) \in \mathbb{R}^3$ represent global 3D translational coordinates (unit: meter), and $\psi_t \in [-\pi,\pi)$ denotes horizontal yaw angle (unit: radian), i.e.\ the heading is a circular quantity on $S^1$ represented by its $2\pi$-modular angle rather than an element of the rotation group $\mathrm{SO}(2)$.
 
 3) Unified state evolution mapping function
 \begin{equation}
@@ -61,8 +62,8 @@ The visual front-end --- neuroanatomically, the dual ventral (``what'') and dors
 \textbf{Stage 1: Retinal and LGN Processing.} The initial preprocessing simulates early visual processing in the retina and lateral geniculate nucleus (LGN):
 \begin{align}
      & \text{Luminance channel:}\quad Y_t = \mathcal{G}(I_t) = 0.299R+0.587G+0.114B              \\
-     & \text{Local contrast enhancement:}\quad U_t = \mathcal{C}_\lambda(Y_t),\quad \lambda=0.02 \\
-     & \text{Receptive field simulation:}\quad V_t = U_t * \mathcal{K}_\sigma,\quad \sigma=0.5
+     & \text{Local contrast enhancement:}\quad \bar{U}_t = \mathcal{C}_\lambda(Y_t),\quad \lambda=0.02 \\
+     & \text{Receptive field simulation:}\quad V_t = \bar{U}_t * \mathcal{K}_\sigma,\quad \sigma=0.5
 \end{align}
 where $\mathcal{G}$ is the grayscale conversion operator, $\mathcal{C}_\lambda$ is CLAHE (Contrast Limited Adaptive Histogram Equalization) with clip limit $\lambda$, and $\mathcal{K}_\sigma$ is a Gaussian kernel with standard deviation $\sigma$. CLAHE adaptively enhances local contrast while preventing over-amplification of noise, mimicking the center-surround antagonistic organization of retinal ganglion cells.
 
@@ -91,7 +92,7 @@ A new visual template (VT) is created when the current scene is sufficiently dif
 \end{equation}
 The threshold $\tau_{vt}=0.08$ is significantly lower than the traditional value (0.15 in OpenRatSLAM), enabling finer discrimination between similar scenes. Experimental validation shows this results in up to 39$\times$ increase in template count (from 5 to 195 templates in urban environments), providing much richer place representation.
 
-\textbf{Dual-Stream Architecture and Bio-Inspired Temporal Modeling.} Building upon the hierarchical feature extraction described above, our visual processing incorporates two key bio-inspired innovations: (1) dual-stream architecture mimicking ventral/dorsal path\-ways, and (2) fixed-gate LSTM for temporal coherence without training data requirements.
+\textbf{Dual-Stream Architecture and Bio-Inspired Temporal Modeling.} Building upon the hierarchical feature extraction described above, our visual processing incorporates two key bio-inspired innovations: (1) dual-stream architecture mimicking ventral/dorsal path\-ways, and (2) a fixed-coefficient gated filter for temporal coherence without training data requirements.
 
 \textbf{Dual-Stream Visual Processing.}
 Following the dual-stream theory of biological vision~\cite{Goodale1992, Mishkin1983}, we explicitly model two parallel processing path\-ways from V1 outputs:
@@ -110,14 +111,14 @@ where $\sigma_{\text{local}}$ computes local standard deviation (texture feature
 
 The dual streams are then integrated through a lightweight global-local feature modulation mechanism that approximates self-attention effects using global statistics rather than full Query-Key-Value operations, maintaining $\mathcal{O}(N)$ complexity for real-time per\-for\-mance.
 
-\textbf{Fixed-Gate LSTM for Zero-Shot Temporal Modeling.}
-Unlike conventional data-driven LSTMs that require extensive training on do\-main-spe\-cif\-ic datasets, our temporal module employs manually-tuned fixed gate values inspired by biological ves\-tib\-u\-lar-visual integration principles~\cite{Angelaki2004, Cullen2012}:
+\textbf{Fixed-Coefficient Gated Filter for Zero-Shot Temporal Modeling.}
+Unlike conventional data-driven LSTMs that require extensive training on do\-main-spe\-cif\-ic datasets, our temporal module employs a fixed-coefficient gated recurrent filter with manually tuned coefficients inspired by biological ves\-tib\-u\-lar-visual integration principles~\cite{Angelaki2004, Cullen2012}:
 \begin{align}
     \text{Input gate: }  & i_t = 0.5 \quad \text{(controls new information intake)} \\
     \text{Forget gate: } & f_t = 0.5 \quad \text{(retains 50\% historical context)} \\
     \text{Output gate: } & o_t = 0.9 \quad \text{(emphasizes current perception)}
 \end{align}
-where $i_t$, $f_t$, $o_t$ represent fixed input gate, forget gate, output gate of bio-inspired LSTM module, respectively.
+where $i_t$, $f_t$, $o_t$ represent fixed input gate, forget gate, output gate of the bio-inspired gated filter, respectively.
 
 
 This design offers three critical advantages for SLAM applications:
@@ -128,30 +129,30 @@ This design offers three critical advantages for SLAM applications:
 
 \textbf{(3) Computational efficiency:} Eliminates training overhead (no backpropagation, no gradient computation) while maintaining real-time per\-for\-mance (39--76~FPS, MATLAB reference implementation, CPU). Fixed gates can be directly implemented in hardware (e.g., FPGAs, neuromorphic chips) without weight storage or update logic, enabling deployment on resource-constrained platforms.
 
-The LSTM processes fused gradient-ventral features sequentially, maintaining hidden state $\mathbf{H}_t$ and cell state $\mathbf{C}_t$ across timesteps:
+The filter processes fused gradient-ventral features sequentially, maintaining hidden state $\mathbf{h}_t$ and cell state $\mathbf{C}_t$ across timesteps:
 \begin{align}
     \mathbf{C}_t & = f_t \odot \mathbf{C}_{t-1} + i_t \odot \tanh(\mathbf{F}^{\text{fused}}_t) \\
-    \mathbf{H}_t & = o_t \odot \tanh(\mathbf{C}_t)
+    \mathbf{h}_t & = o_t \odot \tanh(\mathbf{C}_t)
 \end{align}
-where $\odot$ denotes element-wise Hadamard product, $\mathbf{C}_t$ is the LSTM cell state, $\mathbf{H}_t$ is the temporal hidden state, and $\mathbf{F}^{\text{fused}}_t$ integrates the oriented-gradient and ventral appearance features.
+where $\odot$ denotes element-wise Hadamard product, $\mathbf{C}_t$ is the cell state, $\mathbf{h}_t$ is the temporal hidden state, and $\mathbf{F}^{\text{fused}}_t$ integrates the oriented-gradient and ventral appearance features. Because the three coefficients are constants and no input, forget or output weight matrices are learned, this recurrence reduces to a first-order infinite-impulse-response (IIR) filter --- a degenerate special case of the LSTM family in which all gate transformations are constant and the input connections are the identity; we keep the gate terminology to make this correspondence explicit.
 
-\textbf{Comparison with Learning-Based Approaches.} Section~\ref{sec:experiments} demonstrates that our fixed-gate LSTM achieves comparable or superior per\-for\-mance to NeuroSLAM's learned LSTM (55\% improvement in RMSE) while offering zero-shot deployment. This validates that principled bio-inspired design can match or exceed data-driven learning when the underlying task structure aligns with biological mechanisms---in this case, spatial navigation where biological systems have evolved highly optimized solutions over millions of years.
+\textbf{Comparison with Learning-Based Approaches.} Section~\ref{sec:experiments} provides a controlled comparison of the fixed-coefficient gated filter against NeuroSLAM's learned LSTM under the same evaluation protocol while offering zero-shot deployment. This validates that principled bio-inspired design can match or exceed data-driven learning when the underlying task structure aligns with biological mechanisms---in this case, spatial navigation where biological systems have evolved highly optimized solutions over millions of years.
 
 \textbf{Visual Motion Extraction.} In addition to scene recognition, the visual front-end extracts ego-motion cues from inter-frame feature correspondences, mimicking the dorsal stream processing in area MST (medial superior temporal).
 
-\textbf{Sparse Feature Correspondence.} Let $\mathbf{K}\in\mathbb{R}^{3\times 3}$ be the camera intrinsic matrix. Each frame is described by $N$ ORB keypoints ($N{=}2000$) with rotated-BRIEF descriptors; putative correspondences are established by k-nearest-neighbour matching with the Lowe ratio test ($k{=}2$, ratio $0.7$). Matched points are normalized to camera coordinates:
+\textbf{Sparse Feature Correspondence.} Let $\mathbf{K}_{\mathrm{cam}}\in\mathbb{R}^{3\times 3}$ be the camera intrinsic matrix. Each frame is described by $N$ ORB keypoints ($N{=}2000$) with rotated-BRIEF descriptors; putative correspondences are established by k-nearest-neighbour matching with the Lowe ratio test ($k{=}2$, ratio $0.7$). Matched points are normalized to camera coordinates:
 \begin{equation}
-    \tilde{\mathbf{q}}_i^t = \mathbf{K}^{-1}\begin{bmatrix}\mathbf{p}_i^t\\ 1\end{bmatrix},\qquad \mathbf{q}_i^t = \pi(\tilde{\mathbf{q}}_i^t)=\frac{1}{\tilde{q}_{i,3}^t}\begin{bmatrix}\tilde{q}_{i,1}^t\\ \tilde{q}_{i,2}^t\end{bmatrix}
+    \tilde{\mathbf{q}}_i^t = \mathbf{K}_{\mathrm{cam}}^{-1}\begin{bmatrix}\mathbf{p}_i^t\\ 1\end{bmatrix},\qquad \mathbf{q}_i^t = \pi(\tilde{\mathbf{q}}_i^t)=\frac{1}{\tilde{q}_{i,3}^t}\begin{bmatrix}\tilde{q}_{i,1}^t\\ \tilde{q}_{i,2}^t\end{bmatrix}
 \end{equation}
 where $\pi$ is perspective projection.
 
 \textbf{Rotation--Translation Estimation.} The normalized correspondences $\{(\mathbf{q}_i^{t-1},\,\mathbf{q}_i^{t})\}$ satisfy the epipolar constraint
 \begin{equation}
-    {\mathbf{q}_i^{t}}^{\top}\,\mathbf{E}\,\mathbf{q}_i^{t-1}=0,\qquad \mathbf{E}=[\mathbf{t}]_{\times}\mathbf{R},
+    {\mathbf{q}_i^{t}}^{\top}\,\mathbf{E}\,\mathbf{q}_i^{t-1}=0,\qquad \mathbf{E}=[\mathbf{t}]_{\times}\mathbf{R}_{k\to k+1},
 \end{equation}
-where $\mathbf{E}$ is the essential matrix and $[\mathbf{t}]_{\times}$ the skew-symmetric matrix of the translation vector. $\mathbf{E}$ is estimated by a RANSAC-wrapped minimal solver (confidence $0.999$, inlier threshold $1.0$~px) and decomposed via $\mathrm{recoverPose}$ into the inter-frame rotation $\mathbf{R}$ and the translation direction. Robustness is enforced at two levels: descriptor-level uniqueness (Lowe ratio test) and geometric-level consensus (the RANSAC consensus set). The visual yaw rate $r_t^{\mathrm{vis}}$ is extracted from the ZYX Euler decomposition of $\mathbf{R}$ (with a gimbal-lock guard); the translation is returned as a unit-norm direction $\hat{\mathbf{t}}$ --- monocular decomposition determines the direction only, never the magnitude.
+where $\mathbf{E}$ is the essential matrix and $[\mathbf{t}]_{\times}$ the skew-symmetric matrix of the translation vector. $\mathbf{E}$ is estimated by a RANSAC-wrapped minimal solver (confidence $0.999$, inlier threshold $1.0$~px) and decomposed via $\mathrm{recoverPose}$ into the inter-frame rotation $\mathbf{R}_{k\to k+1}$ and the translation direction. Robustness is enforced at two levels: descriptor-level uniqueness (Lowe ratio test) and geometric-level consensus (the RANSAC consensus set). The visual yaw rate $r_t^{\mathrm{vis}}$ is extracted from the ZYX Euler decomposition of $\mathbf{R}_{k\to k+1}$ (with a gimbal-lock guard); the translation is returned as a unit-norm direction $\hat{\mathbf{t}}$ --- monocular decomposition determines the direction only, never the magnitude.
 
-\textbf{Scale Ambiguity and Observation Injection.} Because $\hat{\mathbf{t}}_t$ is unit-norm, the decomposition carries no metric magnitude: the metric displacement over one inter-frame interval is $\Delta\mathbf{p}^{\mathrm{vis}}_t = s_t\,\hat{\mathbf{t}}_t$, where $s_t = \exp(\log s_t)$ is the online scale state maintained by the EKF (Section~\ref{sec:scale_recovery}), expressed in metres per unit VO displacement; a single symbol $s$ is used for this quantity throughout. The EKF converts this displacement into a velocity over the true inter-update interval (Section 4.1). The inlier consensus doubles as a degeneracy gate: below 20 correspondences the frame is treated as degenerate and is not treated as a reliable motion measurement; the zero-displacement placeholder returned by the front-end enters the filter with its observation noise inflated by the same quality factor, so it acts as a no-motion prior rather than as an independent velocity measurement. Otherwise the inlier count maps to a quality factor $q_f$ (interpolating 60 inliers $\to q_f{=}1$ and 20 inliers $\to q_f{=}3$) that inflates the EKF observation covariance, clamped to $[0.008,10]$.
+\textbf{Scale Ambiguity and Observation Injection.} Because $\hat{\mathbf{t}}_t$ is unit-norm, the decomposition carries no metric magnitude: the metric displacement over one inter-frame interval is $\Delta\mathbf{p}^{\mathrm{vis}}_t = s_t\,\hat{\mathbf{t}}_t$, where $s_t = \exp(x_{10,t})$ is the online scale state maintained by the EKF ($x_{10,t}$: the tenth entry of the state of Eq.~\eqref{eq:state}, i.e.\ $\log s$; Section~\ref{sec:scale_recovery}), expressed in metres per unit VO displacement; a single symbol $s$ is used for this quantity throughout. The EKF converts this displacement into a velocity over the true inter-update interval (Section 4.1). The inlier consensus doubles as a degeneracy gate: below 20 correspondences the frame is treated as degenerate and is not treated as a reliable motion measurement; the zero-displacement placeholder returned by the front-end enters the filter with its observation noise inflated by the same quality factor, so it acts as a no-motion prior rather than as an independent velocity measurement. Otherwise the inlier count $n_{\mathrm{inl}}$ maps to a quality factor $q_f=\clip(60/n_{\mathrm{inl}},\,1/3,\,3)$ --- $q_f{=}1$ at 60 inliers, $q_f{=}3$ at 20, and $q_f$ saturating at $1/3$ when the count exceeds 180 --- which multiplies the EKF observation covariance together with a smooth residual factor and is clamped to $[0.008,10]$ (Section~\ref{sec:deployed_filter}).
 
 Beyond this motion stream, the visual front-end also provides the pixel-level metric depth field $\hat z_t$ (frozen DAv2 backbone) and the learned scene embeddings $\boldsymbol{e}_t$ consumed by the two higher-level corrections (Section~\ref{sec:scale_recovery}); the motion pathway above never consumes depth --- $\hat z_t$ and $\boldsymbol{e}_t$ are inferred asynchronously and cached, entering only the scale branch and the loop-closure line, outside the real-time critical path.
 
@@ -160,7 +161,7 @@ Beyond this motion stream, the visual front-end also provides the pixel-level me
 
 The vestibular front-end processes inertial measurements to extract self-motion cues analogous to the mammalian ves\-tib\-u\-lar system. The ves\-tib\-u\-lar apparatus comprises semicircular canals (angular velocity) and otolith organs (linear acceleration).
 
-\textbf{Angular Velocity Extraction.} From the gyroscope measurements $\mathbf{g}_t\in\mathbb{R}^3$ (IMU frame), we directly use the $z$-axis gyro without online bias removal, converting to degrees per second as in our implementation. For 4-DoF lo\-cal\-i\-za\-tion-and-map\-ping under a planar constraint, the yaw (azimuthal) angular velocity is approximated by
+\textbf{Angular Velocity Extraction.} From the gyroscope measurements $\mathbf{g}_t\in\mathbb{R}^3$ (IMU frame), we use the raw $z$-axis gyro. A constant bias is estimated once from the static start-up window and subtracted thereafter (Section~\ref{sec:fusion}); no per-frame bias estimation is performed. For 4-DoF lo\-cal\-i\-za\-tion-and-map\-ping under a planar constraint, the yaw (azimuthal) angular velocity is approximated by
 \begin{equation}
     r_t \approx \mathbf{e}_z^\top\,\boldsymbol{\omega}_t^g,\quad \mathbf{e}_z=(0,0,1)^\top.
 \end{equation}
@@ -172,97 +173,146 @@ This corresponds to the horizontal semicircular canal cue, adequate for our comp
     v^\mathrm{imu}_{trans}(t) & \approx \max\big(0, (\lVert\mathbf{a}_t\rVert - g)\,\Delta t\,k_t\big), \\
     v^\mathrm{imu}_{z}(t)     & \approx (a_{t,z} - g)\,\Delta t\,k_z,
 \end{align}
-where $g=9.81\,\mathrm{m/s^2}$ is gravitational acceleration, $k_t, k_z$ are constant scaling gains matching our implementation constants, and $\Delta t$ denotes the frame sampling interval. This avoids explicit bias/gravity-vector estimation while providing high-frequency motion cues that are subsequently combined with visual odometry via complementary fusion.
+where $g=9.81\,\mathrm{m/s^2}$ is gravitational acceleration, $k_t, k_z$ are constant scaling gains matching our implementation constants, and $\Delta t$ denotes the frame sampling interval. This cue carries no bias or gravity-vector state and provides the high-frequency channel of the reference implementation (Section~\ref{sec:reference_impl}); the deployed filter obtains the same high-frequency information from the IMU propagation of Section~\ref{sec:deployed_filter}, not from this heuristic.
 
-\textbf{Bias Estimation.} The baseline implementation does not perform online bias or gravity-vector estimation. More advanced bias/gravity compensation can be integrated as future work, but is not required for the complementary-fusion results reported here.
+\textbf{Bias Estimation.} The accelerometer and gyroscope biases that enter the kinematic cues are estimated once, in the static start-up window of each sequence (the first 200 samples with the platform at rest), and are then held constant; no online gravity-vector estimation is performed and a constant gravity magnitude is used for specific-force compensation. This keeps the front-end free of extra filter states and is sufficient at the 20\,Hz CARLA cadence (KITTI~07 is processed at its native $\approx$9.6\,Hz, $\Delta t\approx0.104$\,s); the residual effect of a fixed gravity magnitude is analysed as a failure mode in the discussion.
 
-\subsection{Vestibular-Visual Complementary Fusion}
+\subsection{Vestibular--Visual Fusion: Frequency-Domain Principle and Deployed Filter}
 \label{sec:fusion}
 
-Visual and inertial modalities provide complementary information: visual odometry offers accurate low-frequency position estimates but drifts over long horizons, while IMU integration provides reliable high-frequency motion cues but accumulates bias drift. Com\-ple\-men\-tary filtering exploits this frequency-domain separation to achieve robust fusion without requiring tightly-coupled joint nonlinear optimization. This principle is directly realized as a fixed-weight convex combination in the MATLAB reference implementation (Section 4.2); the deployed system instantiates the same principle as a loosely-coupled error-state EKF, described in detail below, and all reported results come from that implementation. Figure~\ref{fig:imu_visual_fusion} illustrates the frequency-domain characteristics of this complementary fusion strategy and its biological analog in ves\-tib\-u\-lar-visual integration.
+\textbf{How NeuroLocMap operates.} The modules of the framework are coupled in one direction only, so the operating chain can be stated before the equations. For every camera frame $t$: (1) the visual front-end returns a relative displacement, a yaw increment and an inlier count; (2) the filter is propagated IMU-step by IMU-step across the inter-frame interval with \eqref{eq:ekf_pred}--\eqref{eq:ekf_cov}; (3) the gated corrections of Table~\ref{tab:gates} are applied in a fixed order --- velocity amplitude, attitude, scale, position --- because each branch supplies a quantity that a later one consumes (the position anchor is expressed in metres through the scale state, and the velocity amplitude is compared in the same units); the heading branch of the table is implemented but disabled in the configuration that produced all reported numbers, and the chain above therefore runs on four active branches; (4) the filtered pose is published and, in EKF-odometry mode, handed to the spatial layer as its motion source; (5) the grid-cell attractor integrates the frame-to-frame displacement into a bump of activity and the head-direction layer carries the yaw (Section~\ref{sec:grid_cells}); (6) when the current visual template and spatial code are novel, an experience node is created and linked to its predecessor (Section~\ref{sec:loop_closure}); (7) an accepted loop-closure event relaxes a drift field over the stored trajectory and re-anchors the path integrator. Steps (1)--(4) constitute the filter; steps (5)--(7) act on its output and never write back into it.
+
+Three design choices make this chain work. First, the frequency split assigns each modality the band in which it is reliable, so the filter never has to arbitrate between two equally trusted absolute observations. Second, the state dimension is fixed at ten, so the cost per update does not grow with the number of tracked features and any single branch can be switched off without perturbing the others (Section~\ref{sec:deployed_filter}). Third, every higher-level correction acts downstream, on the output trajectory, which keeps the ablation of Section~\ref{sec:ablation} causal: a difference between two configurations is attributable to the module that was removed. Sections~\ref{sec:scale_recovery}--\ref{sec:loop_closure} specify steps (3)--(7) of this chain, each in the same order: what enters, what is computed, what leaves.
+
+Visual and inertial modalities provide complementary information: visual odometry yields accurate low-frequency motion estimates but drifts over long horizons, whereas IMU integration provides reliable high-frequency motion cues but accumulates bias drift. Exploiting this frequency-domain separation permits robust fusion without joint nonlinear optimization over visual features. The framework carries this principle in two clearly separated forms. The MATLAB reference implementation realizes it directly, as a fixed-weight convex combination of complementary low- and high-pass channels (Section~\ref{sec:reference_impl}). The deployed system realizes it as a loosely coupled EKF of fixed state dimension, in which the inertial channel supplies the high-frequency prediction and the visual channel supplies low-frequency, gated corrections. All results reported in this paper are produced by the deployed filter; the fixed-weight combination is retained only as an ablation reference and as the object of the per-module runtime measurements. Figure~\ref{fig:imu_visual_fusion} illustrates the frequency-domain characteristics of the principle and its biological analogue in ves\-tib\-u\-lar--visual integration.
 
 \begin{figure*}[!t]
     \centering
     \includegraphics[trim=12pt 107pt 20pt 98pt, clip, width=\textwidth]{fig/imu_visual_complementary_fusion.pdf}
-    \caption{Com\-ple\-men\-tary IMU-visual fusion architecture. (a) Frequency domain analysis showing complementary filter characteristics. (b) Time domain signal comparison. (c) Biological analogy to ves\-tib\-u\-lar-visual integration in the CNS.}
+    \caption{Frequency-domain principle of the vestibular--visual fusion. (a) Frequency-domain analysis of the complementary low- and high-pass characteristics. (b) Time-domain signal comparison. (c) Biological analogy to ves\-tib\-u\-lar--visual integration in the CNS. (a)--(c) illustrate the principle of Section~\ref{sec:principle}; the deployed filter that produces all reported results is specified in Section~\ref{sec:deployed_filter}.}
     \label{fig:imu_visual_fusion}
 \end{figure*}
 
 \subsubsection{Biological Principle and Frequency-Domain Complementarity}
+\label{sec:principle}
 
-\textbf{Filter Design.} Let $\mathcal{L}_\tau$ denote a low-pass filter with time constant $\tau$, and $\mathcal{H}_\tau$ denote the complementary high-pass filter satisfying $\mathcal{L}_\tau + \mathcal{H}_\tau = \mathrm{Id}$ (identity):
-\begin{align}
-    \text{Low-pass: }  & \;L_t = \alpha L_{t-1} + (1-\alpha) x_t,\quad L_0=0 \\
-    \text{High-pass: } & \;H_t = x_t - L_t
-\end{align}
-where $\alpha$ is IIR filter forgetting factor, $L_t$ stores low-frequency smoothed signal, and $H_t$ stores residual high-frequency signal component.
-\textbf{Biological Analogy.} This fusion strategy mirrors multisensory integration in the ves\-tib\-u\-lar nuclei and posterior parietal cortex (area 7a), where visual and ves\-tib\-u\-lar signals are combined to estimate self-motion. Neurons in these regions exhibit weighted combinations of visual and ves\-tib\-u\-lar tuning, with dynamic weighting depending on signal reliability.
+\textbf{Filter Design.} Let $\mathcal{L}_\tau$ denote a low-pass filter with time constant $\tau$, and $\mathcal{H}_\tau$ the complementary high-pass filter satisfying $\mathcal{L}_\tau+\mathcal{H}_\tau=\mathrm{Id}$, with $\mathrm{Id}$ the identity operator. Realized recursively,
+\begin{equation}
+    L_t = \alpha_{\mathrm{iir}} L_{t-1} + (1-\alpha_{\mathrm{iir}}) x_t,\qquad L_0=0 \label{eq:lowpass}
+\end{equation}
+\begin{equation}
+    H_t = x_t - L_t \label{eq:highpass}
+\end{equation}
+where $\alpha_{\mathrm{iir}}$ is the IIR forgetting factor, $L_t$ the low-frequency smoothed signal, and $H_t$ its residual high-frequency component.
 
-\textbf{Discrete-Time Implementation.} With sampling interval $\Delta t$, we implement first-order IIR (infinite impulse response) filters. Choose forgetting factors $\alpha=\exp(-\Delta t/\tau)$ and $\alpha_r=\exp(-\Delta t/\tau_r)$.
+\textbf{Biological Analogy.} This is the discrete counterpart of multisensory integration in the ves\-tib\-u\-lar nuclei and posterior parietal cortex (area~7a), where visual and ves\-tib\-u\-lar signals are combined to estimate self-motion; neurons in these regions exhibit weighted combinations of the two tuning profiles, with dynamic weighting according to signal reliability.
 
-\textbf{Frequency-Domain Transfer Functions.} In the Laplace domain with $s = j\omega$ (frequency variable), the first-order low-pass and high-pass filters have transfer functions:
-\begin{align}
-    H_{LP}(s) & = \frac{1}{1 + \tau s} = \frac{1/\tau}{s + 1/\tau}, \label{eq:h_lp} \\
-    H_{HP}(s) & = \frac{\tau s}{1 + \tau s} = \frac{s}{s + 1/\tau}, \label{eq:h_hp}
-\end{align}
-satisfying $H_{LP}(s) + H_{HP}(s) = 1$ (unity gain at all frequencies). The cutoff frequency $\omega_c = 1/\tau$ separates low- and high-frequency regions: for $\omega \ll \omega_c$, $|H_{LP}| \approx 1$ and $|H_{HP}| \approx 0$ so the visual pathway dominates (drift-free, slower dynamics); whereas for $\omega \gg \omega_c$, $|H_{LP}| \approx 0$ and $|H_{HP}| \approx 1$, so IMU cues dominate (fast but drifting).
+\textbf{Discrete-Time Implementation.} With sampling interval $\Delta t$ we implement first-order IIR filters and set the forgetting factors from the target time constants, $\alpha_{\mathrm{iir}}=\exp(-\Delta t/\tau)$ and $\alpha_{r,\mathrm{iir}}=\exp(-\Delta t/\tau_r)$, so that the analogue cut-off is reproduced at the 20\,Hz cadence used here.
 
-With $\tau = 0.1$s, the cutoff frequency is $\omega_c = 10$ rad/s ($\approx 1.6$ Hz), ensuring IMU handles high-frequency motion ($>$2 Hz, e.g., vibrations, rapid turns) while vision corrects low-frequency drift ($<$1 Hz). This mimics biological ves\-tib\-u\-lar-visual integration where ves\-tib\-u\-lar organs respond to frequencies 0.1-10 Hz and visual motion perception dominates below 0.5 Hz \cite{Angelaki2004}.
+\textbf{Frequency-Domain Transfer Functions.} In the Laplace domain with $s_{\mathrm{lap}}=j\omega$,
+\begin{equation}
+    H_{LP}(s_{\mathrm{lap}}) = \frac{1}{1+\tau s_{\mathrm{lap}}} = \frac{1/\tau}{s_{\mathrm{lap}}+1/\tau}, \label{eq:h_lp}
+\end{equation}
+\begin{equation}
+    H_{HP}(s_{\mathrm{lap}}) = \frac{\tau s_{\mathrm{lap}}}{1+\tau s_{\mathrm{lap}}} = \frac{s_{\mathrm{lap}}}{s_{\mathrm{lap}}+1/\tau}, \label{eq:h_hp}
+\end{equation}
+satisfying $H_{LP}(s_{\mathrm{lap}})+H_{HP}(s_{\mathrm{lap}})=1$ (unity gain at all frequencies). The cut-off $\omega_c=1/\tau$ separates the two regions: for $\omega\ll\omega_c$, $|H_{LP}|\approx1$ and $|H_{HP}|\approx0$, so the visual pathway dominates (drift-free, slower dynamics); for $\omega\gg\omega_c$ the IMU cues dominate (fast but drifting). With $\tau=0.1$\,s the cut-off is $\omega_c=10$\,rad/s ($\approx1.6$\,Hz), so that IMU handles high-frequency motion ($>2$\,Hz: vibration, rapid turns) while vision corrects low-frequency drift ($<1$\,Hz). This mimics ves\-tib\-u\-lar--visual integration, where ves\-tib\-u\-lar organs respond in 0.1--10\,Hz and visual motion perception dominates below 0.5\,Hz~\cite{Angelaki2004}.
 
 \subsubsection{Temporal Alignment}
+\label{sec:alignment}
 
-Before fusion, the camera and IMU streams are temporally aligned. Under the synchronous acquisition mode, both sensors are driven by a single 20~Hz cadence ($\Delta t = 0.05$~s); a lightweight aligner pairs each camera frame with the nearest IMU sample within a $0.02$~s tolerance using greedy one-to-one matching (each IMU sample is consumed at most once). The aligned streams are stored row-level aligned on disk --- 5000 frames at a strict $0.05$~s interval with no dropped frames (verified) --- so the fusion operates on pre-aligned samples and requires no intra-frame interpolation.
+In the CARLA synchronous acquisition setting (20\,Hz, $\Delta t=0.05$\,s) both sensors are driven by a single cadence, and a lightweight aligner pairs each camera frame with the nearest IMU sample within a 0.02\,s tolerance using greedy one-to-one matching (each IMU sample is consumed at most once). Timestamps of the aligned streams were checked frame by frame over all 5000 CARLA frames and the 1101 KITTI~07 frames, with no gaps and no dropped frames, so the fusion operates on pre-aligned samples and requires no intra-frame interpolation.
 
-\subsubsection{Deployed Implementation: Loosely-Coupled Error-State EKF}
+\subsubsection{Deployed Implementation: Total-State EKF with Error-State Covariance}
+\label{sec:deployed_filter}
 
-\textbf{State Vector.} The deployed fusion core is a loosely-coupled error-state EKF whose state
+\textbf{State.} The deployed fusion core is a total-state EKF whose covariance is propagated in error-state form, with state
 \begin{equation}
-    \mathbf{x}_t = \big[x,\ y,\ z,\ v_x,\ v_y,\ v_z,\ \phi,\ \theta,\ \psi,\ \log s_t\big]^{\top}
+    \mathbf{x}_t=\big[x,y,z,\ v_x,v_y,v_z,\ \phi,\theta,\psi,\ \log s_t\big]^{\!\top}
+    \label{eq:state}
 \end{equation}
-comprises position, velocity, Euler attitude, and a tenth state $\log s_t$ --- the online scale factor that links the VO-relative frame to the metric world (cf.\ the notation of Section 3.1; the scale-recovery branch is described in Section~\ref{sec:scale_recovery}).
+i.e.\ position, velocity, Euler attitude and a tenth state $\log s_t$, the online scale that links the VO frame to the metric world (notation of Section~\ref{sec:notation}; the scale branch is detailed in Section~\ref{sec:scale_recovery}). The tenth state is what makes the other nine interpretable in metres: without it the visual channel would only be consistent up to scale.
 
-\textbf{Prediction.} Between observations the state is propagated by IMU kinematics: the gyroscope integrates the attitude (with Euler-angle wrapping), the accelerometer --- gravity-compensated and rotated to the world frame --- integrates the velocity and position, and the covariance is propagated in continuous time, $\mathbf{P} \mathrel{+}= \mathbf{Q}\,\Delta t$. A pure-IMU dead-reckoning copy is maintained in parallel as an ablation baseline, and the gyroscope biases are estimated once from the first 200 initialization samples.
-
-\textbf{Gated Observation Branches.} Five chi-square-gated observation branches update the state, each with independent outlier rejection and a Joseph-form covariance update:
-\begin{enumerate}
-    \item \textbf{Turn-kinematic heading rate}: the lateral-acceleration-to-velocity ratio $a_{\mathrm{lat}}/v$ yields a yaw-rate cue that is immune to gyroscope biases, guarded by hard kinematic consistency checks; gate $\chi^2(1, 0.95) = 3.84$;
-    \item \textbf{Velocity amplitude}: the VO displacement magnitude scaled by the online scale, projected onto the EKF heading; gate $\chi^2(2, 0.99) = 9.21$;
-    \item \textbf{Attitude}: roll and pitch from the vestibular cue (yaw excluded to avoid VO heading drift); gate $\chi^2(2, 0.99)$;
-    \item \textbf{Scale}: a dual-path log-domain observation --- the calibrated depth scale of Section~\ref{sec:scale_recovery} takes precedence, with the kinematic turning cue $a_{\mathrm{lat}}/(\omega v)$ as fallback --- subject to a $0.35$ dead band; gate $\chi^2(1, 0.99) = 6.63$;
-    \item \textbf{Relative position}: a short-window anchor (reset every 30 frames, 1.5~s) bounds VO heading drift; gate $\chi^2(2, 0.999) = 13.82$, complemented by a weak height prior ($R = 25$~m$^2$) acting as a soft constraint.
-\end{enumerate}
-
-\textbf{Quality-Adaptive Noise.} The VO inlier count maps to a quality factor $q_f$ (60 inliers $\to q_f{=}1$; 20 inliers $\to q_f{=}3$) that inflates the observation noise covariance $\mathbf{R}$, clamped to $[0.008, 10]$ --- so degraded frames contribute less, and degenerate frames contribute nothing beyond an inflated no-motion prior.
-
-\textbf{Numerical Stability.} All covariance updates use the Joseph form to preserve symmetry and positive definiteness, with additional covariance regularization and eigenvalue clamping.
-
-\subsubsection{Reference Baseline: Fixed-Weight Convex Combination}
-
-The MATLAB reference implementation realizes the complementary-filter principle directly as a fixed-weight convex combination with binary activity gating: applying the low-pass filters of Section 3.5.1 to the visual channel and the high-pass filters to the IMU channel, the fused cues are
-\begin{align}
-    \mathbf{v}^\mathrm{f}_t & = (1-\eta)\,L^\mathrm{vis}_t + \eta\,H^\mathrm{imu}_t \\
-    r^\mathrm{f}_t          & = (1-\eta_r)\,L^{r,vis}_t + \eta_r\,H^{r}_t
-\end{align}
-where $L^\mathrm{vis}_t$ and $H^\mathrm{imu}_t$ denote the low-pass filtered visual velocity and high-pass filtered IMU velocity, respectively, and similarly for the yaw rates. The IMU-side weights are $\eta_r = 0.7$ (yaw), $\eta = 0.3$ (translation), and $0.5$ (height) --- when the visual channel is active the two cues are blended with these weights; otherwise the more trustworthy channel passes through, with the IMU translation cue derived heuristically ($\max(0, (\lVert\mathbf{a}_t\rVert - g)\,\Delta t\cdot 0.5)$) and velocity clamps bounding extreme estimates. This baseline isolates the contribution of the probabilistic fusion core and serves as the fixed-weight reference of the experiments (the MATLAB reference implementation benchmarked in Table 4); it is not the source of the main results. It is also the lightest component of the pipeline: each fused signal requires only two state variables (the current low-pass filter state $L_t$ and its previous value $L_{t-1}$), involving simple scalar multiplications and additions at $\mathcal{O}(1)$ per update, making it suitable for real-time embedded implementation.
-
-\subsubsection{Framework Extension: Adaptive Weighting}
-
-\textbf{Adaptive Weighting.} While the fixed-weight reference implementation uses constant fusion weights $\eta$ and $\eta_r$, the framework naturally extends to adaptive weighting based on signal reliability. For instance, during aggressive maneuvers or rapid lighting changes, visual odometry may become unreliable, warranting increased reliance on IMU ($\eta \to 1$). Conversely, during slow motion where IMU integration accumulates bias, visual odometry should dominate ($\eta \to 0$). Adaptive schemes can be implemented by:
+\textbf{Prediction.} Between observations the state is propagated by IMU kinematics,
 \begin{equation}
-    \eta_t = f(\sigma^\mathrm{vis}_t, \sigma^\mathrm{imu}_t),\quad \text{e.g.} \quad \eta_t = \frac{\sigma^\mathrm{vis}_t}{\sigma^\mathrm{vis}_t + \sigma^\mathrm{imu}_t}
+\begin{aligned}
+    \mathbf{a}^{w}_t &= R(\boldsymbol{\Theta}_t)\big(\mathbf{a}_t-\mathbf{b}_a\big)+\mathbf{g}_w,\qquad \mathbf{g}_w=[0,0,-g]^{\top},\\
+    \boldsymbol{\Theta}_{t+1} &= \wrap\big(\boldsymbol{\Theta}_t+(\boldsymbol{\omega}_t-\mathbf{b}_g)\Delta t\big),\\
+    \big(v^{x}_{t+1},v^{y}_{t+1}\big) &= \big(v^{x}_t,v^{y}_t\big)+\big(a^{w,x}_t,a^{w,y}_t\big)\Delta t,\qquad v^{z}_{t+1}=0,\\
+    \big(p^{x}_{t+1},p^{y}_{t+1}\big) &= \big(p^{x}_t,p^{y}_t\big)+\big(v^{x}_t,v^{y}_t\big)\Delta t,\qquad z_{t+1}=z_t,
+\end{aligned}
+    \label{eq:ekf_pred}
 \end{equation}
-where $\sigma_t^\mathrm{vis}$ and $\sigma_t^\mathrm{imu}$ are real-time uncertainty estimations of visual and inertial measurements, and $\eta_t$ is time-varying fusion weight. This adaptive extension is \emph{not enabled} in the reported experiments: all results use the fixed-weight convex combination with activity gating.
+with $R(\cdot)$ the body-to-world rotation, $\wrap(\cdot)$ mapping an angle to $(-\pi,\pi]$, $g$ constant, and $\mathbf{b}_a,\mathbf{b}_g$ fixed from the static start (Section~\ref{sec:vestibular}). Three properties of this form are deliberate rather than incidental. (i) The vertical channel is \emph{frozen}: the vertical velocity is clamped to zero after every prediction and the altitude is held at its initial value, so the filter propagates exactly the planar 4-DoF motion model assumed in Section~\ref{sec:framework_arch} --- this clamp is the implementation of the 4-DoF assumption, and it is what keeps the planar VO increments and the tenth scale state mutually consistent. (ii) Integration is explicit in the current velocity; no $\tfrac12\mathbf{a}\Delta t^{2}$ term is used, so the position Jacobian contains only $\partial p^{x}/\partial v^{x}=\partial p^{y}/\partial v^{y}=\Delta t$ and the attitude block of $\mathbf{F}$ is the identity, which keeps the Jacobian sparse and cheap to form. (iii) The attitude is propagated with the gyroscope only; the visual attitude branch of Table~\ref{tab:gates} corrects it downstream. The covariance follows
+\begin{equation}
+    \mathbf{P}_{t+1}=\mathbf{F}_t\mathbf{P}_t\mathbf{F}_t^{\top}+\mathbf{Q}_c\,\Delta t,
+    \label{eq:ekf_cov}
+\end{equation}
+with process noise and initial covariance fixed once for all sequences,
+\begin{equation}
+\begin{aligned}
+    \mathbf{Q}_c&=\mathrm{diag}\big(0.18,0.18,0.09,\ 0.72,0.72,0.36,\\
+    &\qquad\qquad 7.2\mathrm{e}{-3},7.2\mathrm{e}{-3},1.8\mathrm{e}{-2},\ 2.0\mathrm{e}{-5}\big),\\
+    \mathbf{P}_0&=\mathrm{diag}\big(2,2,0.5,\ 2,2,1,\ 0.05,0.05,0.05,\ 0.64\big),
+\end{aligned}
+\end{equation}
+ordered as $(p,v,\Theta,\log s)$: the entries of $\mathbf{Q}_c$ carry the units $\mathrm{m^2\,s^{-1}}$, $\mathrm{m^2\,s^{-3}}$, $\mathrm{rad^2\,s^{-1}}$ and $\mathrm{s^{-1}}$ (the tenth state is $\log s$, dimensionless, so its noise density is per second), and those of $\mathbf{P}_0$ the units $\mathrm{m^2}$, $\mathrm{m^2\,s^{-2}}$, $\mathrm{rad^2}$ and $1$; the scale variance $0.64$ corresponds to the $\sigma_0=0.8$ log prior, and $\log s$ starts at $0$ (unit scale). A pure-IMU dead-reckoning copy is maintained in parallel for diagnostic purposes; it is not used as a comparison row in the experiments.
 
-The online scale update is realized inside the EKF as a log-domain, chi-square-gated observation of the scale state (Section~\ref{sec:scale_recovery}); the exponential-recursion formulation of an earlier draft is superseded by that mechanism and is no longer used in any reported experiment.
+\textbf{Gated Observation Update.} Each branch produces an innovation $\mathbf{y}=\mathbf{z}-h(\hat{\mathbf{x}})$ with $\mathbf{S}=\mathbf{H}\mathbf{P}\mathbf{H}^{\top}+\mathbf{R}_{\mathrm{obs}}$, accepted only if
+\begin{equation}
+    \mathbf{y}^{\top}\mathbf{S}^{-1}\mathbf{y}<\chi^2(d;\alpha_\chi),
+    \label{eq:gate}
+\end{equation}
+and applied in the Joseph form, which preserves symmetry and positive definiteness:
+\begin{equation}
+    \mathbf{P}^{+}=(\mathbf{I}-\mathbf{K}_{\mathrm{kal}}\mathbf{H})\mathbf{P}(\mathbf{I}-\mathbf{K}_{\mathrm{kal}}\mathbf{H})^{\top}+\mathbf{K}_{\mathrm{kal}}\mathbf{R}_{\mathrm{obs}}\mathbf{K}_{\mathrm{kal}}^{\top},
+    \quad \mathbf{K}_{\mathrm{kal}}=\mathbf{P}\mathbf{H}^{\top}\mathbf{S}^{-1}.
+    \label{eq:joseph}
+\end{equation}
 
-\subsubsection{Computational Efficiency}
+The branches, their models and the deployed thresholds are listed in Table~\ref{tab:gates}, and they are applied in the order of the table for the dependency reason given above. Branch~1 (disabled in the deployed runs, Table~\ref{tab:gates}) would recover yaw from turn kinematics: on frames with mean speed $>3$\,m/s, $|a_\perp|>0.3$\,m/s$^2$ and $|\omega_z|<1.2$\,rad/s, the ratio $a_\perp/|v|$ is integrated onto a heading base that is independent of both the gyroscope and the current heading estimate, giving a yaw-angle observation with a per-frame step limit of 0.26\,rad ($\approx15^{\circ}$). Branch~4 is a dual-path, log-domain scale observation: the calibrated depth scale of Section~\ref{sec:scale_recovery} takes precedence and is frozen inside a 0.30 dead band in the log domain ($\approx1.35\times$; used for all reported runs and set as the released-code default); the kinematic cue $|a_\perp|/(|\omega|v)$ is used whenever the depth path is unavailable, skipped or gated out. Each active branch carries its own observation model, gate threshold and residual window, and no branch observes a quantity from the same signal that it later corrects, which is why the four active gates are tested separately within one frame rather than jointly.
 
-The deployed filter carries a fixed $10 \times 10$ covariance, so the per-update cost is a constant-size matrix operation ($\mathcal{O}(n^3)$ with $n{=}10$), independent of the number of visual features---a stark contrast to the $\mathcal{O}(N \cdot n^3)$ cost of tightly-coupled visual-inertial estimators (e.g., MSCKF, VINS-Mono), where the filter state grows with the number of tracked features.
+\begin{table}[!htbp]
+    \centering
+    \caption{Observation branches of the 10-state fusion core. Branches~2--5 are applied in this order and are those used in all reported runs; branch~1 is implemented but disabled in that configuration (see the table note).}
+    \label{tab:gates}
+    \footnotesize
+    \begin{tabularx}{\textwidth}{@{}c >{\RaggedRight\arraybackslash}X c c c c@{}}
+        \toprule
+        \# & Observation $\mathbf{z}$ (dim) & $h(\hat{\mathbf{x}})$ & $\chi^2(d;\alpha_\chi)$ & $\mathbf{R}_{\mathrm{obs}}$ \\
+        \midrule
+        1$^{\dagger}$ & yaw from $\int a_\perp/|v|\,\mathrm{d}t$ (turn frames), (1) & $\psi$ & 3.84 (1;0.95) & $0.05$ \\
+        2 & VO displacement over $\Delta t_{\mathrm{eff}}$, scaled by $s$, on heading, (1) & $\lVert\mathbf{v}\rVert$ & 9.21 (2;0.99) & $0.20$ \\
+        3 & roll/pitch from vestibular cue, (2) & $(\phi,\theta)$ & 9.21 (2;0.99) & diag$(0.05,0.50)$ \\
+        4 & log-scale: depth median or $|a_\perp|/(|\omega|v)$, (1) & $\log s$ & 6.63 (1;0.99) & $0.05$ (depth) / $0.02$ (kin.) \\
+        5 & re-anchored VO increment $\times s$, 30 frames, (2) & $(x,y)$ & 13.82 (2;0.999) & diag$(0.06,0.06)$ \\
+        \bottomrule
+    \end{tabularx}
+
+    \vspace{2pt}
+    {\footnotesize $\Delta t_{\mathrm{eff}}$ denotes the measured inter-frame interval actually spanned by the VO increment (not a nominal frame period). Branch~1$^{\dagger}$ is implemented and documented for completeness, but its flag is off in the configuration that produced \emph{every} reported number, so the deployed filter runs branches~2--5 only; it is included in the table because the released code contains it, not because it contributes to the results. Branch~5 is accompanied by a weak height prior ($R=25$\,m$^2$). Branch~2 applies the 2-dof threshold to a scalar residual (deliberately permissive). Each $\mathbf{R}_{\mathrm{obs}}$ is scaled by the quality factor of Section~\ref{sec:deployed_filter}; thresholds and covariances were fixed before the ablation runs and are identical across the five sequences.}
+\end{table}
+
+\textbf{Quality-Adaptive Noise.} The VO inlier count $n_{\mathrm{inl}}$ gives $q_f=\operatorname{clip}(60/n_{\mathrm{inl}},\tfrac13,3)$, and the smooth residual factor comes from the mean of that branch's last 10 Mahalanobis distances, $\rho=\operatorname{clip}\big(q_f[\,0.05+(d/5d_{\mathrm{of}})^{1.5}\,],0.008,10\big)$; the nominal covariance of Table~\ref{tab:gates} is multiplied by $\rho$. Degraded frames thus contribute less and degenerate frames contribute nothing beyond an inflated no-motion prior.
+
+\textbf{Numerical Stability and Ablation Integrity.} All updates use \eqref{eq:joseph} with post-update regularisation (symmetrisation plus a minimum-eigenvalue clamp), so the covariance stays positive definite over the 5000-frame CARLA collection runs (KITTI~07 is 1101 frames) without reinitialisation. Because each branch is an independent gated term with its own observation model, gate threshold and residual window, disabling one leaves the other branches' formulations untouched; the single coupling runs through the tenth state, which the scale-branch ablation isolates by construction. This is what makes the ablation matrix of Section~\ref{sec:ablation} interpretable rather than merely descriptive.
+
+\subsubsection{Computational Cost}
+\label{sec:cost}
+
+The deployed filter carries a fixed $10\times10$ covariance, so each update is a constant-size operation, $\mathcal{O}(10^{3})$, independent of the number of visual features---in contrast to the $\mathcal{O}(Nn^{3})$ cost of filters that augment the state with feature clones (MSCKF, VINS-Mono); per-module timings on the MATLAB front-end are reported in Table~\ref{tab:runtime}.
+
+\subsubsection{Reference Implementation: Fixed-Weight Combination (Ablation Only)}
+\label{sec:reference_impl}
+
+The MATLAB reference implementation realizes the principle of Section~\ref{sec:principle} directly as a fixed-weight convex combination with binary activity gating, using $\eta=0.3$ for translation, $\eta_r=0.7$ for yaw and $0.5$ for height, with the fallback cue taken from the gravity-compensated specific-force magnitude when the visual channel is inactive. The weights and clamps were fixed once and kept identical across all sequences, with no per-sequence tuning. This component serves as the fixed-weight reference in the ablation and as the object of the runtime measurements, and is not the source of the main results. Its per-update cost is $\mathcal{O}(1)$ with two scalar states per fused channel, which makes it the lightest element of the pipeline.
 
 \subsection{Monocular Scale Recovery Branch}
 \label{sec:scale_recovery}
 
-\textbf{Problem.} The 10th EKF state $\log s$ converges online from turn kinematics, which are observable only in turning frames (294/1101 frames on KITTI~07) and, by construction, recover only the \emph{VO-relative} scale --- the absolute scale between the visual frame and the metric world remains unrecoverable from inertial motion alone. Monocular metric-depth networks offer an independent cue, but their zero-shot predictions carry a scene-dependent bias (a preliminary study showed the raw depth scale to be unreliable across scenes), so raw depth cannot serve directly as a scale observation. Rather than trusting the depth network, we learn a lightweight \emph{calibration} that maps depth-statistics features to the true global scale: trained once on simulation, frozen at deployment.
+\textbf{Problem.} The tenth state $\log s$ is driven by two cues: turn kinematics, observable only in turning frames (294/1101 frames on KITTI~07) and, by construction, recovering only the \emph{VO-relative} scale, and, in the deployed configuration, the calibrated depth path of this section, which takes precedence whenever it is available (Section~\ref{sec:deployed_filter}). Neither cue determines the absolute scale between the visual frame and the metric world on its own. Monocular metric-depth networks offer an independent cue, but their zero-shot predictions carry a scene-dependent bias (a preliminary study showed the raw depth scale to be unreliable across scenes), so raw depth cannot serve directly as a scale observation. Rather than trusting the depth network, we learn a lightweight \emph{calibration} that maps depth-statistics features to the true global scale: trained once on simulation, frozen at deployment.
+
+\textbf{Operation.} The branch runs per inter-frame interval, not per IMU step. For each interval the frozen depth model emits one metric depth map; eight depth statistics are formed from it and median-smoothed over $W{=}50$ intervals; the head returns a single log-scale prediction, and a sliding median of those predictions is compared with the filter state. Only outside the 0.30 dead band of Section~\ref{sec:deployed_filter} does the result enter branch~4 of Table~\ref{tab:gates}. The head is therefore never a pose estimator: it contributes one scalar at a small fraction of the frame rate, cannot move the trajectory by itself, and is bypassed whenever it is unavailable or its innovation is gated out.
 
 \textbf{Structure.} For each frame $t$, let $\hat z_t$ denote the metric depth map predicted by a frozen monocular depth foundation model (Depth-Anything-V2, outdoor head). We summarize it into an 8-dimensional feature vector
 \begin{align}
@@ -289,6 +339,7 @@ where $\mathbf{p}^{*}$ are ground-truth metric positions (available in simulatio
 \textbf{Zero-Shot Behavior and Honest Limits.} Within the simulation domain the learned mapping generalizes across scenes --- including the held-out town --- and outperforms an ordinary-least-squares calibration baseline on all five evaluation sequences. Across the sim-to-real boundary, however, the mapping does not transfer: on KITTI~07 the head predicts a scale correction in the wrong direction ($s\approx0.3$ where the route requires $\approx1.8$), and deploying it degrades the EKF (Supplementary Section~S.1 quantifies this failure). All real-world results in this paper therefore run without the scale branch --- an honest limitation we return to in the experiments. The head's computational cost is negligible: ${\sim}4.8$k parameters and sub-millisecond CPU inference per frame, outside the real-time critical path; the frozen depth backbone is evaluated asynchronously and cached.
 
 \subsection{Entorhinal Cortex: Grid Cells and Head Direction Cells}
+\label{sec:grid_cells}
 
 The spatial representation module --- neuroanatomically, the entorhinal cortex, whose grid cells and head-direction cells provide the brain's metric coordinate system --- encodes the robot's 4-DoF pose through bio-inspired neural coordinate systems using conjunctive pose cells. The 3D location $(x, y, z)$ is represented by grid cells using a 3D multi-dimensional continuous attractor network (MD-CAN), while orientation $\psi$ (yaw) is encoded by multilayered head direction cells. These representations enable stable, noise-tolerant path integration through attractor dynamics.
 
@@ -350,7 +401,7 @@ We note that in the final system configuration, this template-level injection pa
 
 \textbf{Multilayered Head Direction Cells.} The multilayered head direction cell (HDC) network represents the robot's orientation using a 2D MD-CAN with dimensions $N_\psi \times N_h$ (azimuth bins by height layers). Different height layers allow representation of heading at various vertical positions, supporting 3D operation where orientation may vary with altitude.
 
-\textbf{Network Architecture.} The multilayer head-direction network has activity $\mathbf{A}^\mathrm{h} \in \mathbb{R}^{N_\psi \times N_h}$ (typically $N_\psi = 360$ azimuth bins and $N_h = 5$ height layers). Each cell $(u, h)$ is tuned to azimuth angle $\theta_u = 2\pi u / N_\psi$ and height layer $h$.
+\textbf{Network Architecture.} The multilayer head-direction network has activity $\mathbf{A}^\mathrm{h} \in \mathbb{R}^{N_\psi \times N_h}$ ($N_\psi = 36$ azimuth bins and $N_h = 36$ height layers in the released configuration, i.e.\ a $10^{\circ}$ azimuth bin). Each cell $(u, h)$ is tuned to azimuth angle $\theta_u = 2\pi u / N_\psi$ and height layer $h$.
 
 \textbf{Attractor Dynamics.} Similar to the grid cell network, the HDC network employs local excitation, global inhibition, and path integration. With a Gaussian kernel $\mathcal{K}^\mathrm{h}$:
 \begin{equation}
@@ -364,13 +415,32 @@ Path integration shifts the activity bump according to yaw rate $r^f$ and vertic
 \begin{equation}
     \Delta\psi=\lfloor \gamma_\psi r^f \Delta t\rfloor,\quad \Delta h=\lfloor \gamma_h v^f_z \Delta t\rfloor
 \end{equation}
-where $\gamma_\psi$ converts angular velocity to azimuth bins, and $\gamma_h$ maps vertical velocity to height layer shifts.
+where $\gamma_\psi$ converts angular velocity to azimuth bins, and $\gamma_h$ maps vertical velocity to height layer shifts. The gains follow directly from the cell sizes of the released implementation (Table~\ref{tab:gains}): with the toroidal network wrapping every $2\pi$ in the angular axes, one azimuth bin corresponds to $10^{\circ}$ and the height-layer and grid-$z$ spacings are $2\pi/36\approx0.17$~m; the planar grid axes are metric at $1$~m per cell (a 36-cell toroidal period).
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Path-integration gains and cell sizes of the spatial layers (values from the released implementation; the height channels are nominal because the deployed filter freezes the vertical channel).}
+    \label{tab:gains}
+    \footnotesize
+    \begin{tabular}{@{}llll@{}}
+        \toprule
+        Axis & Gain & Cell size & Toroidal period \\
+        \midrule
+        Grid $x,y$ & $\gamma_x=\gamma_y=1$ cell/m & 1 m & 36 m \\
+        Grid $z$ & $\gamma_z=36/(2\pi)\approx5.73$ cells/m & $\approx0.17$ m & $\approx6.3$ m \\
+        HD azimuth & $\gamma_\psi=36/(2\pi)\approx5.73$ bins/rad & $10^{\circ}$ & $360^{\circ}$ \\
+        HD height & $\gamma_h=36/(2\pi)\approx5.73$ layers/m & $\approx0.17$ m & $\approx6.3$ m \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 \textbf{Pose Readout.} The metric pose estimate is decoded from the spatial cell activities via center-of-mass computation (population vector decoding):
 \begin{align}
     \hat{\mathbf{p}}_t & = ({\hat x}_t, {\hat y}_t, {\hat z}_t) = \frac{\sum_{i,j,k} \mathbf{c}_{i,j,k} A^\mathrm{g}_{i,j,k,t}}{\sum_{i,j,k} A^\mathrm{g}_{i,j,k,t}}, \quad \mathbf{c}_{i,j,k} = (x_i, y_j, z_k) \\
     \hat{\psi}_t       & = \mathrm{\mathrm{atan2}}\left(\sum_{u,h} A^\mathrm{h}_{u,h,t} \sin\theta_u, \sum_{u,h} A^\mathrm{h}_{u,h,t} \cos\theta_u\right), \quad \theta_u = 2\pi u / N_\psi
 \end{align}
 This decoding naturally handles the circular topology of orientation (using $\mathrm{\mathrm{atan2}}$ to avoid angle wrapping issues) and provides sub-bin resolution for position through the weighted average.
+
+\textbf{Where the Spatial Layer Sits.} The grid-cell and head-direction layers are not a second estimator. They consume the filtered pose --- frame-to-frame displacement and yaw in EKF-odometry mode --- integrate it into a bump of activity, and expose the resulting spatial code for experience creation, with the head-direction layer supplying the yaw channel of the 4-DoF code. Decoding the bump returns a pose that is used to gate novelty and to define loop constraints, not to correct the filter; the attractor dynamics therefore stabilise the representation rather than revise the estimate. This directionality --- filter, spatial code, constraints, output trajectory --- keeps the layer biologically interpretable without turning it into a competing estimator.
 
 \subsection{Hippocampal Experience Map and Loop Closure}
 \label{sec:loop_closure}
@@ -402,7 +472,7 @@ These edges form the primary topological structure of the experience map graph $
                                                       & |t - t_j| > T_{min}
     \end{aligned}
 \end{equation}
-where $\tau_{loop} = 0.05$ (stricter than the template creation threshold to reduce false positives) and $T_{min} = 50$ frames (approximately 5 seconds at 10 Hz).
+where $\tau_{loop} = 0.05$ (stricter than the template creation threshold to reduce false positives) and $T_{min} = 50$ frames (2.5\,s at the 20\,Hz CARLA cadence of Section~\ref{sec:alignment}; 5.2\,s at the 9.6\,Hz KITTI~07 rate).
 
 Upon detecting a loop closure, a loop edge is added to the graph with the pose residual:
 \begin{equation}
@@ -434,7 +504,7 @@ This uniform distribution assumes drift accumulates at a constant rate, a reason
 
 This relaxation procedure runs iteratively until convergence or a maximum number of iterations, ensuring the experience map remains globally consistent while preserving local metric accuracy.
 
-\textbf{Deployed Loop-Closure Line: Frame-Based Candidates.} The reported system instantiates loop-closure detection over \emph{frames} rather than experience nodes: every frame is described by a frozen DINOv2-S global scene embedding $\mathbf{e}_t$, refined by a fine-tuned head trained under the same train-once protocol as the scale branch (simulation data only). A candidate match for the current frame is the historical frame $j^{*} = \arg\max_{j} \cos(\mathbf{e}_t, \mathbf{e}_j)$ restricted to frames whose EKF-odometry arc-length separation exceeds $\mathrm{arc}_{\min}$ (50~m), which removes trivial self-matches while keeping the search exhaustive over the plausible far-history. This frame-level candidate stage decouples loop detection from experience-node creation and provides dense per-frame evidence to the gate chain.
+\textbf{Deployed Loop-Closure Line: Frame-Based Candidates.} The formulation above describes the node-level reference map; every loop result reported in this paper comes from the frame-level line specified here, which instantiates loop-closure detection over \emph{frames} rather than experience nodes: every frame is described by a frozen DINOv2-S global scene embedding $\mathbf{e}_t$, refined by a fine-tuned head trained under the same train-once protocol as the scale branch (simulation data only). A candidate match for the current frame is the historical frame $j^{*} = \arg\max_{j} \cos(\mathbf{e}_t, \mathbf{e}_j)$ restricted to frames whose EKF-odometry arc-length separation exceeds $\mathrm{arc}_{\min}$ (50~m) --- an arc-length criterion replacing the $T_{\min}$ frame gap of the node-level formulation --- which removes trivial self-matches while keeping the search exhaustive over the plausible far-history. This frame-level candidate stage decouples loop detection from experience-node creation and provides dense per-frame evidence to the gate chain.
 
 \textbf{Four-Gate Chain.} A candidate becomes an accepted loop event only if it passes four fixed gates (all thresholds set once across all five scenarios):
 \begin{align}
@@ -445,7 +515,7 @@ This relaxation procedure runs iteratively until convergence or a maximum number
     \;\wedge\; \lVert \mathbf{c}_{t j^{*}} \rVert \le 25\,\mathrm{m},
     \label{eq:pr_gates}
 \end{align}
-with a cumulative correction budget $\sum_i \lVert \mathbf{c}_i \rVert \le 35$~m across the trajectory and deduplication of historical anchors (each past frame anchors at most once). The \emph{similarity gate} ($\tau = 0.94$) is calibrated by a five-scenario sweep: observed false candidates score 0.907--0.935 while strong genuine revisits score $\ge 0.949$. The \emph{persistence gate} ($\ge 15$ consecutive candidate frames, $\pm 10$ tolerance) exploits a structural property of genuine revisits: a vehicle traversing the same street produces a sustained streak of high-similarity frames, whereas perceptual aliasing produces single-frame or short-burst excursions --- this gate is scale-free and transfers across domains unchanged. The \emph{orientation gate} ($60^{\circ}$ heading difference) admits same-direction and reversed re-visits while rejecting geometrically implausible matches. The correction budget bounds the damage of any single wrong acceptance. The chain is deliberately conservative: on KITTI~09 its sole genuine loop lies in the final two frames, where the streak can reach only $2 < 15$ and the gate correctly declines --- releasing it in hindsight would change the error by merely $-0.12$~m --- while the orientation gate rejects that sequence's two high-similarity but geometrically inconsistent candidates (Supplementary Section~S.3). Prefer silence to a wrong re-anchor.
+with a cumulative correction budget $\sum_i \lVert \mathbf{c}_i \rVert \le 35$~m across the trajectory and deduplication of historical anchors (each past frame anchors at most once). The \emph{similarity gate} ($\tau = 0.94$) is calibrated by a five-scenario sweep: observed false candidates score 0.907--0.935 while strong genuine revisits score $\ge 0.949$. The \emph{persistence gate} ($\ge 15$ consecutive candidate frames, $\pm 10$ tolerance) exploits a structural property of genuine revisits: a vehicle traversing the same street produces a sustained streak of high-similarity frames, whereas perceptual aliasing produces single-frame or short-burst excursions --- this gate is scale-free and transfers across domains unchanged. The \emph{orientation gate} ($60^{\circ}$ heading difference) admits same-direction and moderately oblique re-visits while rejecting reversed trajectories and geometrically implausible matches. The correction budget bounds the damage of any single wrong acceptance. The chain is deliberately conservative: on KITTI~09 its sole genuine loop lies in the final two frames, where the streak can reach only $2 < 15$ and the gate correctly declines --- releasing it in hindsight would change the error by merely $-0.12$~m --- while the orientation gate rejects that sequence's two high-similarity but geometrically inconsistent candidates (Supplementary Section~S.3). Prefer silence to a wrong re-anchor.
 
 \textbf{Injection.} An accepted event injects a one-shot translation correction $\mathbf{c}_{t j^{*}}$ (step size $\beta = 1.0$) that pulls the current segment toward the matched node's map pose, writes a link edge into the experience graph, and hands the event to the full-Sim(3) re-anchoring operator described below; the corrected segment then enters the drift-field relaxation above.
 
@@ -463,7 +533,7 @@ and the corrected trajectory is
 \end{equation}
 so each correction persists (the held level $\mathbf{c}_i$ is retained after the ramp) but its onset is smoothed over $W_i$ frames, and the staircase $\mathbf{C}_{\mathrm{cum}}$ is exactly replaced by the continuous field. Three design choices, validated by offline parameter sweeps on all five outdoor sequences, shape the field:
 \begin{itemize}
-    \item \textbf{Adaptive relaxation time.} $W_i = \mathrm{clip}(W_0 + W_{\perp}\,\lVert\mathbf{c}_i\rVert,\; W_0,\; W_{\max})$: larger jumps relax more slowly, analogous to the slower re-consolidation of stronger spatial memories and to the longer time constants of grid-cell drift correction.
+    \item \textbf{Adaptive relaxation time.} $W_i = \mathrm{clip}(W_0 + W_{\perp}\,\lVert\mathbf{c}_i\rVert,\; W_0,\; W_{\max})$: larger jumps relax more slowly, analogous to the slower re-consolidation of stronger spatial memories and to the longer time constants of grid-cell drift correction. Released values (closed-loop benchmark configuration): $W_0 = 100$ frames, $W_{\perp} = 0$ frames/m, $W_{\max} = 4000$ frames, $C_{\max} = 2.0$~m; the per-sequence sweep of Section~\ref{sec:experiments} varies $W_0 \in [100, 2400]$ frames, $W_{\perp} \in [0, 80]$ frames/m and $C_{\max} \in [2, 6]$~m.
     \item \textbf{Tail completion.} Each ramp is truncated at the trajectory end ($W_i \leftarrow \min(W_i, f_{\mathrm{end}}-f_i+1)$) so that the drift field is fully relaxed by the final frame, avoiding a half-relaxed ramp that would leave terminal bias.
     \item \textbf{Amplitude gating.} Jumps with $\lVert\mathbf{c}_i\rVert > C_{\max}$ are applied instantaneously and excluded from the field: large corrections correspond to distant true loop closures whose early node positions are trustworthy, whereas small corrections (nearby re-visits, hash collisions) are uncertain and benefit from slow relaxation. Sweeps show that flattening \emph{all} steps degrades accuracy (e.g., Town01: +0.64\% RMSE), while gating yields per-frame RMSE improvements over both the un-relaxed baseline and the EKF front-end on all five sequences.
 \end{itemize}
@@ -471,10 +541,10 @@ With the EKF-odometry mode ($\mathrm{NLM\_USE\_EKF\_ODO}$) the experience map co
 
 \textbf{Closed-Loop Full-Sim(3) Re-Anchoring.} Each re-anchoring pulse above translates the subsequent trajectory but does not change its global scale or orientation, so the monocular scale ambiguity keeps accumulating between loops. We therefore complement it with a loop-triggered operator: at every accepted loop-closure event at frame $t_{\mathrm{now}}$, a full similarity transform is fitted between the \emph{anchor window} $\mathbf{A}$ (the first $\mathrm{win}$ moving frames of the trajectory, after the static prelude) and the \emph{current window} $\mathbf{C}$ (the $\mathrm{win}$ frames ending at $t_{\mathrm{now}}$, capped by the next event) by a Procrustes fit
 \begin{equation}
-    \mathbf{A} \approx s\,(\mathbf{C}\mathbf{R}) + \mathbf{t}, \qquad s \in [0.05,\,20],
+    \mathbf{A} \approx \sigma_{\mathrm{sim}}\,(\mathbf{C}\mathbf{R}_{P}) + \mathbf{t}, \qquad \sigma_{\mathrm{sim}} \in [0.05,\,20],
 \end{equation}
 with $\mathrm{win} = 250$ frames (self-calibrated by an offline window sweep) and the scale gate rejecting degenerate fits. The entire segment after $t_{\mathrm{now}}$ (up to the next event) is then pulled back into the anchor frame,
 \begin{equation}
-    \hat{\mathbf{p}}(f) = s\,(\mathbf{p}(f)\mathbf{R}) + \mathbf{t}, \qquad t_{\mathrm{now}} < f < t_{\mathrm{next}},
+    \hat{\mathbf{p}}(f) = \sigma_{\mathrm{sim}}\,(\mathbf{p}(f)\mathbf{R}_{P}) + \mathbf{t}, \qquad t_{\mathrm{now}} < f < t_{\mathrm{next}},
 \end{equation}
-applied independently per event on the pre-correction trajectory (non-chained, so one event's refit is not polluted by its predecessor's transform). Because each accepted loop is a genuine re-visit of the same physical location, the re-anchoring is a global consistency correction that uses no ground-truth information; on loop-free routes it is a strict no-op. On a dedicated closed-loop benchmark (an urban route crossing the same road segments at widely separated times), this full-Sim(3) re-anchoring recovers $9\times$ more of the accumulated global drift than the EKF baseline (44.24~m vs 398.05~m, anchored-Sim(3) caliber): the dominant global error accumulated between loops is the monocular scale error, which only the full similarity re-fit removes.
+applied independently per event on the pre-correction trajectory (non-chained, so one event's refit is not polluted by its predecessor's transform). Because each accepted loop is a genuine re-visit of the same physical location, the re-anchoring is a global consistency correction that uses no ground-truth information; on loop-free routes it is a strict no-op. On a dedicated closed-loop benchmark (an urban route crossing the same road segments at widely separated times), this full-Sim(3) re-anchoring recovers $15\times$ more of the accumulated global drift than the EKF baseline (55.92~m vs 842.54~m, anchored-Sim(3) caliber): the dominant global error accumulated between loops is the monocular scale error, which only the full similarity re-fit removes.
